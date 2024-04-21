@@ -18,22 +18,18 @@
 
 body {
   color: rgb(var(--foreground-rgb));
+  max-width: 1024px;
+  margin: auto;
+  background-color: cadetblue;
+}
+
+main {
+  padding: 1em;
+  background-color: white;
 }
 
 @layer utilities {
   .text-balance {
     text-wrap: balance;
   }
-}
-
-h1 {
-  @apply text-center font-bold p-3;
-}
-
-h2 {
-  @apply text-left text-lg font-bold py-3
-}
-
-p {
-  @apply pb-4
 }
