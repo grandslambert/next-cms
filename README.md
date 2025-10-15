@@ -2,17 +2,24 @@
 
 A complete Content Management System built with Next.js 14, Tailwind CSS, and MySQL - similar to WordPress.
 
-## Current Version: 1.0.1
+## Current Version: 1.0.2
 
 See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
 
 ## Features
 
 - 📝 **Posts & Pages Management** - Create and manage blog posts and static pages
-- 🖼️ **Media Library** - Upload and organize images and files
-- ✏️ **Rich Text Editor** - Full-featured WYSIWYG editor powered by Quill
+- 🏷️ **Categories** - Organize posts with categories and inline category creation
+- 🖼️ **Advanced Media Library** 
+  - WordPress-style automatic image resizing with multiple size variants
+  - Image metadata (title and alt text) for SEO and accessibility
+  - Regenerate image sizes when settings change
+  - Date-based folder organization (YYYY/MM)
+  - Customizable image sizes with crop styles (cover, inside, contain, fill)
+- ✏️ **Rich Text Editor** - Full-featured WYSIWYG editor (react-simple-wysiwyg)
 - 🔐 **Authentication** - Secure login system with NextAuth.js
 - 👥 **User Management** - Create and manage users with Admin, Editor, and Author roles
+- ⚙️ **Settings System** - Configurable site name, tagline, and media settings
 - 🎨 **Beautiful UI** - Modern, responsive interface with Tailwind CSS
 - ⚡ **Fast & SEO-Friendly** - Server-side rendering with Next.js 14
 - 🗄️ **MySQL Database** - Robust relational database for content storage
@@ -213,6 +220,19 @@ npm start
 - **DigitalOcean** - Full control with App Platform
 - **AWS** - Elastic Beanstalk or ECS
 
+## Documentation
+
+Comprehensive guides for various features:
+
+- [IMAGE_SYSTEM.md](IMAGE_SYSTEM.md) - WordPress-style image handling and sizing
+- [IMAGE_CROP_STYLES.md](IMAGE_CROP_STYLES.md) - Image crop and fit strategies
+- [IMAGE_REGENERATION.md](IMAGE_REGENERATION.md) - Regenerating image sizes
+- [MEDIA_METADATA.md](MEDIA_METADATA.md) - Managing titles and alt text
+- [MEDIA_SAFETY.md](MEDIA_SAFETY.md) - Safe media deletion with usage tracking
+- [SETTINGS.md](SETTINGS.md) - Configuring site and media settings
+- [VERSIONING.md](VERSIONING.md) - Semantic versioning guide
+- [TROUBLESHOOTING.md](TROUBLESHOOTING.md) - Common issues and solutions
+
 ## Security Considerations
 
 1. Change default admin credentials
@@ -225,16 +245,17 @@ npm start
 
 ## Future Enhancements
 
-- [ ] Category management UI
 - [ ] Tags system
 - [ ] Comments system
-- [ ] SEO metadata editor
+- [ ] SEO metadata editor per post/page
 - [ ] Multi-language support
-- [ ] Advanced media editing
+- [ ] AI-generated alt text suggestions
 - [ ] Analytics dashboard
 - [ ] Email notifications
 - [ ] Custom themes
 - [ ] Plugin system
+- [ ] Revision history
+- [ ] Scheduled publishing
 
 ## Contributing
 

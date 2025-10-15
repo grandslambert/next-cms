@@ -25,6 +25,7 @@ export default function MediaSettingsPage() {
   const [newSizeWidth, setNewSizeWidth] = useState('');
   const [newSizeHeight, setNewSizeHeight] = useState('');
   const [newSizeCrop, setNewSizeCrop] = useState<'cover' | 'contain' | 'fill' | 'inside'>('inside');
+  const [regenerating, setRegenerating] = useState(false);
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
@@ -112,6 +113,32 @@ export default function MediaSettingsPage() {
     const { [sizeName]: removed, ...rest } = imageSizes;
     setImageSizes(rest);
     toast.success('Image size removed');
+  };
+
+  const handleRegenerateAll = async () => {
+    if (!confirm('Regenerate ALL image sizes?\n\nThis will recreate all size variants for every image based on the current settings above. This may take a while for large libraries.\n\nMake sure you have saved your settings first!\n\nAre you sure you want to continue?')) {
+      return;
+    }
+
+    setRegenerating(true);
+    const loadingToast = toast.loading('Regenerating all images...');
+
+    try {
+      const res = await axios.post('/api/media/regenerate', { mediaId: null });
+      queryClient.invalidateQueries({ queryKey: ['media'] });
+      toast.dismiss(loadingToast);
+      
+      if (res.data.failed > 0) {
+        toast.error(`Regenerated ${res.data.success} images, ${res.data.failed} failed`, { duration: 5000 });
+      } else {
+        toast.success(`Successfully regenerated ${res.data.success} images!`, { duration: 5000 });
+      }
+    } catch (error) {
+      toast.dismiss(loadingToast);
+      toast.error('Failed to regenerate images');
+    } finally {
+      setRegenerating(false);
+    }
   };
 
   if (isLoading) {
@@ -269,17 +296,30 @@ export default function MediaSettingsPage() {
           </div>
 
           <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <p className="text-sm text-blue-800">
-              <strong>Note:</strong> Custom image sizes only apply to newly uploaded images. 
-              Existing images will not be regenerated.
-            </p>
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                <p className="text-sm text-blue-800">
+                  <strong>Note:</strong> Size changes only apply to newly uploaded images. 
+                  To apply new settings to existing images, use the "Regenerate All Images" button.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleRegenerateAll}
+                disabled={regenerating || updateMutation.isPending}
+                className="ml-4 px-4 py-2 border border-orange-300 text-orange-700 bg-white rounded-lg hover:bg-orange-50 transition-colors disabled:opacity-50 whitespace-nowrap flex-shrink-0"
+                title="Apply current size settings to all existing images"
+              >
+                {regenerating ? '⏳ Regenerating...' : '🔄 Regenerate All Images'}
+              </button>
+            </div>
           </div>
         </div>
 
         <div className="flex justify-between items-center">
           <button
             type="submit"
-            disabled={updateMutation.isPending}
+            disabled={updateMutation.isPending || regenerating}
             className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
           >
             {updateMutation.isPending ? 'Saving...' : 'Save Media Settings'}

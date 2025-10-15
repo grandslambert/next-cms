@@ -65,6 +65,8 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData();
     const file = formData.get('file') as File;
+    const title = formData.get('title') as string || '';
+    const altText = formData.get('alt_text') as string || '';
 
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
@@ -145,9 +147,9 @@ export async function POST(request: NextRequest) {
       const filename = `${baseFilename}${ext}`;
 
       const [result] = await db.query<ResultSetHeader>(
-        `INSERT INTO media (filename, original_name, mime_type, size, url, sizes, uploaded_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [filename, file.name, file.type, file.size, url, JSON.stringify(sizes), userId]
+        `INSERT INTO media (filename, original_name, title, alt_text, mime_type, size, url, sizes, uploaded_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [filename, file.name, title, altText, file.type, file.size, url, JSON.stringify(sizes), userId]
       );
 
       const [newMedia] = await db.query<RowDataPacket[]>(
@@ -165,9 +167,9 @@ export async function POST(request: NextRequest) {
       const url = `/uploads/${folderPath}/${filename}`;
 
       const [result] = await db.query<ResultSetHeader>(
-        `INSERT INTO media (filename, original_name, mime_type, size, url, uploaded_by)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [filename, file.name, file.type, file.size, url, userId]
+        `INSERT INTO media (filename, original_name, title, alt_text, mime_type, size, url, uploaded_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [filename, file.name, title, altText, file.type, file.size, url, userId]
       );
 
       const [newMedia] = await db.query<RowDataPacket[]>(
