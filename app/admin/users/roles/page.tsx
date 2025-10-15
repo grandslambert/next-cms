@@ -13,6 +13,7 @@ const CORE_PERMISSIONS = [
   { key: 'can_publish', label: 'Publish Posts', description: 'Publish and unpublish posts (without this, can only submit for review)', category: 'General' },
   { key: 'can_delete', label: 'Delete Own Posts', description: 'Delete own posts', category: 'General' },
   { key: 'can_delete_others', label: 'Delete Others\' Posts', description: 'Delete posts by other users', category: 'General' },
+  { key: 'can_reassign', label: 'Reassign Author', description: 'Change the author of posts', category: 'General' },
   { key: 'manage_media', label: 'Manage Media', description: 'Upload and manage media files', category: 'General' },
   { key: 'manage_taxonomies', label: 'Manage Taxonomies', description: 'Manage categories, tags, and terms', category: 'General' },
   { key: 'manage_users', label: 'Manage Users', description: 'Create, edit, and delete users', category: 'Administration' },

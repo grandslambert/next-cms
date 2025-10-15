@@ -37,6 +37,10 @@ export async function GET(request: NextRequest) {
     if (status && status !== 'all') {
       query += ' AND p.status = ?';
       params.push(status);
+    } else if (!status || status === 'all') {
+      // Exclude trash from default queries
+      query += ' AND p.status != ?';
+      params.push('trash');
     }
 
     query += ' ORDER BY p.created_at DESC LIMIT ? OFFSET ?';
@@ -57,6 +61,10 @@ export async function GET(request: NextRequest) {
     if (status && status !== 'all') {
       countQuery += ' AND status = ?';
       countParams.push(status);
+    } else if (!status || status === 'all') {
+      // Exclude trash from default counts
+      countQuery += ' AND status != ?';
+      countParams.push('trash');
     }
 
     const [countRows] = await db.query<RowDataPacket[]>(countQuery, countParams);

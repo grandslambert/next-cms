@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSession } from 'next-auth/react';
@@ -72,6 +73,7 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
   const [content, setContent] = useState('');
   const [excerpt, setExcerpt] = useState('');
   const [status, setStatus] = useState('draft');
+  const [authorId, setAuthorId] = useState<number | null>(null);
   const [parentId, setParentId] = useState<number | null>(null);
   const [menuOrder, setMenuOrder] = useState(0);
   const [selectedTerms, setSelectedTerms] = useState<{[taxonomyId: number]: number[]}>({});
@@ -146,6 +148,16 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
     enabled: !!postTypeTaxonomiesData?.taxonomies && postTypeTaxonomiesData.taxonomies.length > 0,
   });
 
+  // Fetch users for author reassignment
+  const { data: usersData } = useQuery({
+    queryKey: ['users'],
+    queryFn: async () => {
+      const res = await axios.get('/api/users');
+      return res.data;
+    },
+    enabled: permissions.can_reassign === true,
+  });
+
   // Fetch terms for this post (edit mode only)
   const { data: postTermsData } = useQuery({
     queryKey: ['post-terms', postId],
@@ -189,6 +201,7 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
       setContent(data.post.content || '');
       setExcerpt(data.post.excerpt || '');
       setStatus(data.post.status || 'draft');
+      setAuthorId(data.post.author_id || null);
       setParentId(data.post.parent_id || null);
       setMenuOrder(data.post.menu_order || 0);
       setFeaturedImageId(data.post.featured_image_id || null);
@@ -328,6 +341,7 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
         setContent(data.post.content || '');
         setExcerpt(data.post.excerpt || '');
         setStatus(data.post.status || 'draft');
+        setAuthorId(data.post.author_id || null);
         setParentId(data.post.parent_id || null);
         setMenuOrder(data.post.menu_order || 0);
         setFeaturedImageId(data.post.featured_image_id || null);
@@ -364,6 +378,11 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
     if (postTypeData?.hierarchical) {
       data.parent_id = parentId;
       data.menu_order = menuOrder;
+    }
+    
+    // Include author_id if it's being changed
+    if (authorId && permissions.can_reassign) {
+      data.author_id = authorId;
     }
 
     if (isEdit) {
@@ -469,10 +488,18 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
         </div>
       )}
 
-      <div className="mb-8">
+      <div className="mb-8 flex justify-between items-center">
         <h1 className="text-3xl font-bold text-gray-900">
           {isEdit ? `Edit ${postTypeData.singular_label}` : `Create New ${postTypeData.singular_label}`}
         </h1>
+        {isEdit && (
+          <Link
+            href={`/admin/post-type/${postTypeSlug}/new`}
+            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+          >
+            + Add New {postTypeData.singular_label}
+          </Link>
+        )}
       </div>
 
       <form onSubmit={(e) => handleSubmit(e)} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -692,47 +719,71 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
             </div>
           </div>
 
-          {!!postTypeData?.hierarchical && (
+          {(!!postTypeData?.hierarchical || permissions.can_reassign) && (
             <div className="bg-white rounded-lg shadow p-6">
               <h3 className="font-semibold text-gray-900 mb-4">Page Attributes</h3>
               
-              <div className="mb-4">
-                <label htmlFor="post-parent" className="block text-sm font-medium text-gray-700 mb-2">
-                  Parent
-                </label>
-                <select
-                  id="post-parent"
-                  value={parentId || ''}
-                  onChange={(e) => setParentId(e.target.value ? parseInt(e.target.value) : null)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                >
-                  <option value="">No Parent (Top Level)</option>
-                  {allPostsData?.posts
-                    ?.filter((post: any) => !isEdit || post.id !== parseInt(postId || '0'))
-                    .map((post: any) => (
-                      <option key={post.id} value={post.id}>
-                        {post.title}
+              {permissions.can_reassign && isEdit && (
+                <div className="mb-4">
+                  <label htmlFor="post-author" className="block text-sm font-medium text-gray-700 mb-2">
+                    Author
+                  </label>
+                  <select
+                    id="post-author"
+                    value={authorId || ''}
+                    onChange={(e) => setAuthorId(e.target.value ? parseInt(e.target.value) : null)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    {usersData?.users?.map((user: any) => (
+                      <option key={user.id} value={user.id}>
+                        {user.first_name} {user.last_name} ({user.email})
                       </option>
                     ))}
-                </select>
-              </div>
+                  </select>
+                </div>
+              )}
 
-              <div>
-                <label htmlFor="post-order" className="block text-sm font-medium text-gray-700 mb-2">
-                  Order
-                </label>
-                <input
-                  id="post-order"
-                  type="number"
-                  value={menuOrder}
-                  onChange={(e) => setMenuOrder(parseInt(e.target.value) || 0)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  min="0"
-                />
-                <p className="mt-1 text-xs text-gray-500">
-                  Lower numbers appear first
-                </p>
-              </div>
+              {!!postTypeData?.hierarchical && (
+                <>
+                  <div className="mb-4">
+                    <label htmlFor="post-parent" className="block text-sm font-medium text-gray-700 mb-2">
+                      Parent
+                    </label>
+                    <select
+                      id="post-parent"
+                      value={parentId || ''}
+                      onChange={(e) => setParentId(e.target.value ? parseInt(e.target.value) : null)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    >
+                      <option value="">No Parent (Top Level)</option>
+                      {allPostsData?.posts
+                        ?.filter((post: any) => !isEdit || post.id !== parseInt(postId || '0'))
+                        .map((post: any) => (
+                          <option key={post.id} value={post.id}>
+                            {post.title}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label htmlFor="post-order" className="block text-sm font-medium text-gray-700 mb-2">
+                      Order
+                    </label>
+                    <input
+                      id="post-order"
+                      type="number"
+                      value={menuOrder}
+                      onChange={(e) => setMenuOrder(parseInt(e.target.value) || 0)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      min="0"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                      Lower numbers appear first
+                    </p>
+                  </div>
+                </>
+              )}
             </div>
           )}
 

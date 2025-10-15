@@ -14,3 +14,4 @@ export default function ContentTypesPage() {
   return null;
 }
 
+

@@ -64,7 +64,7 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { title, slug: customSlug, content, excerpt, featured_image_id, status, parent_id, menu_order } = body;
+    const { title, slug: customSlug, content, excerpt, featured_image_id, status, parent_id, menu_order, author_id } = body;
 
     if (!title) {
       return NextResponse.json({ error: 'Title is required' }, { status: 400 });
@@ -75,15 +75,32 @@ export async function PUT(
       return NextResponse.json({ error: 'You do not have permission to publish posts' }, { status: 403 });
     }
 
+    // Check if user can reassign author
+    if (author_id && author_id !== post.author_id) {
+      if (!permissions.can_reassign) {
+        return NextResponse.json({ error: 'You do not have permission to reassign posts' }, { status: 403 });
+      }
+    }
+
     // Use custom slug if provided, otherwise generate from title
     const slug = customSlug || slugify(title);
     const publishedAt = status === 'published' ? new Date() : null;
 
+    // Build dynamic update query
+    const updateFields = ['title = ?', 'slug = ?', 'content = ?', 'excerpt = ?', 'featured_image_id = ?', 'parent_id = ?', 'menu_order = ?', 'status = ?', 'published_at = ?'];
+    const updateValues: any[] = [title, slug, content || '', excerpt || '', featured_image_id || null, parent_id || null, menu_order || 0, status || 'draft', publishedAt];
+
+    // Add author_id to update if provided and user has permission
+    if (author_id && permissions.can_reassign) {
+      updateFields.push('author_id = ?');
+      updateValues.push(author_id);
+    }
+
+    updateValues.push(params.id); // Add the post ID for WHERE clause
+
     await db.query<ResultSetHeader>(
-      `UPDATE posts 
-       SET title = ?, slug = ?, content = ?, excerpt = ?, featured_image_id = ?, parent_id = ?, menu_order = ?, status = ?, published_at = ?
-       WHERE id = ?`,
-      [title, slug, content || '', excerpt || '', featured_image_id || null, parent_id || null, menu_order || 0, status || 'draft', publishedAt, params.id]
+      `UPDATE posts SET ${updateFields.join(', ')} WHERE id = ?`,
+      updateValues
     );
 
     const [updatedPost] = await db.query<RowDataPacket[]>(
@@ -138,9 +155,13 @@ export async function DELETE(
       return NextResponse.json({ error: 'You do not have permission to delete others\' posts' }, { status: 403 });
     }
 
-    await db.query<ResultSetHeader>('DELETE FROM posts WHERE id = ?', [params.id]);
+    // Move post to trash instead of permanently deleting
+    await db.query<ResultSetHeader>(
+      'UPDATE posts SET status = ? WHERE id = ?',
+      ['trash', params.id]
+    );
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, message: 'Post moved to trash' });
   } catch (error) {
     console.error('Error deleting post:', error);
     return NextResponse.json({ error: 'Failed to delete post' }, { status: 500 });
