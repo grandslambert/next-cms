@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-gray-200;
+  }
+  body {
+    @apply bg-gray-50 text-gray-900;
+  }
+}
+
+/* WYSIWYG Editor Styles */
+.wysiwyg-editor [role="toolbar"] {
+  @apply bg-gray-50 border-b border-gray-300 p-2 rounded-t-lg;
+}
+
+.wysiwyg-editor button {
+  @apply px-2 py-1 hover:bg-gray-200 rounded transition-colors;
+}
+
+.wysiwyg-editor [contenteditable] {
+  @apply p-4 min-h-[400px] focus:outline-none;
+}
+
+.wysiwyg-editor [contenteditable]:focus {
+  @apply ring-2 ring-primary-500 ring-opacity-50;
+}
+
