@@ -4,6 +4,23 @@ import { RowDataPacket } from 'mysql2';
 import { formatDate, truncate } from '@/lib/utils';
 import { getImageUrl } from '@/lib/image-utils';
 
+async function getSettings() {
+  try {
+    const [rows] = await db.query<RowDataPacket[]>('SELECT * FROM settings');
+    const settings: any = {};
+    rows.forEach((row: any) => {
+      settings[row.setting_key] = row.setting_value;
+    });
+    return settings;
+  } catch (error) {
+    console.error('Error fetching settings:', error);
+    return {
+      site_name: 'Next CMS',
+      site_tagline: 'A powerful content management system',
+    };
+  }
+}
+
 async function getRecentPosts() {
   try {
     const [rows] = await db.query<RowDataPacket[]>(
@@ -25,6 +42,7 @@ async function getRecentPosts() {
 
 export default async function HomePage() {
   const posts = await getRecentPosts();
+  const settings = await getSettings();
 
   return (
     <div>
@@ -32,9 +50,9 @@ export default async function HomePage() {
       <section className="bg-gradient-to-r from-primary-600 to-primary-800 text-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24">
           <div className="text-center">
-            <h1 className="text-5xl font-bold mb-6">Welcome to Next CMS</h1>
+            <h1 className="text-5xl font-bold mb-6">Welcome to {settings.site_name || 'Next CMS'}</h1>
             <p className="text-xl mb-8 text-primary-100">
-              A powerful content management system built with Next.js, Tailwind CSS, and MySQL
+              {settings.site_tagline || 'A powerful content management system built with Next.js, Tailwind CSS, and MySQL'}
             </p>
             <div className="flex justify-center space-x-4">
               <Link

@@ -94,8 +94,27 @@ CREATE TABLE IF NOT EXISTS post_categories (
   FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
 );
 
+-- Settings table
+CREATE TABLE IF NOT EXISTS settings (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  setting_key VARCHAR(255) UNIQUE NOT NULL,
+  setting_value TEXT,
+  setting_type ENUM('string', 'number', 'boolean', 'json') DEFAULT 'string',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_key (setting_key)
+);
+
 -- Insert default admin user (password: admin123)
 INSERT INTO users (username, first_name, last_name, email, password, role) 
 VALUES ('admin', 'Admin', 'User', 'admin@example.com', '$2a$10$1llDVX4S7vKlcibiDrrZuespn.U1vHjrhrktHt7fnYSaLqp1cb.Yu', 'admin')
 ON DUPLICATE KEY UPDATE email = email;
+
+-- Insert default settings
+INSERT INTO settings (setting_key, setting_value, setting_type) VALUES
+('site_name', 'Next CMS', 'string'),
+('site_tagline', 'A powerful content management system', 'string'),
+('site_description', 'Built with Next.js, Tailwind CSS, and MySQL', 'string'),
+('image_sizes', '{"thumbnail":{"width":150,"height":150,"crop":"cover"},"medium":{"width":300,"height":300,"crop":"inside"},"large":{"width":1024,"height":1024,"crop":"inside"}}', 'json')
+ON DUPLICATE KEY UPDATE setting_key = setting_key;
 

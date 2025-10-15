@@ -21,11 +21,28 @@ export default function MediaPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
-      await axios.delete(`/api/media/${id}`);
+      const res = await axios.delete(`/api/media/${id}`);
+      return res.data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['media'] });
-      toast.success('Media deleted successfully');
+      
+      // Invalidate related queries if image was used
+      if (data.cleared_references && data.cleared_references.total > 0) {
+        queryClient.invalidateQueries({ queryKey: ['posts'] });
+        queryClient.invalidateQueries({ queryKey: ['pages'] });
+        queryClient.invalidateQueries({ queryKey: ['categories'] });
+      }
+      
+      let message = 'Media deleted successfully';
+      if (data.cleared_references && data.cleared_references.total > 0) {
+        const { posts, pages, categories, total } = data.cleared_references;
+        message += ` (cleared from ${total} location`;
+        if (total > 1) message += 's';
+        message += `: ${posts} posts, ${pages} pages, ${categories} categories)`;
+      }
+      
+      toast.success(message, { duration: 5000 });
     },
     onError: () => {
       toast.error('Failed to delete media');
@@ -64,8 +81,52 @@ export default function MediaPage() {
   };
 
   const handleDelete = async (id: number, filename: string) => {
-    if (confirm(`Are you sure you want to delete "${filename}"?`)) {
-      deleteMutation.mutate(id);
+    try {
+      // Check where the image is used
+      const usageRes = await axios.get(`/api/media/${id}/usage`);
+      const usage = usageRes.data.usage;
+
+      let confirmMessage = `Are you sure you want to delete "${filename}"?`;
+
+      if (usage.total > 0) {
+        confirmMessage = `⚠️ WARNING: This image is currently being used in:\n\n`;
+        
+        if (usage.posts.length > 0) {
+          confirmMessage += `📝 ${usage.posts.length} Post(s):\n`;
+          usage.posts.forEach((post: any) => {
+            confirmMessage += `   - ${post.title}\n`;
+          });
+          confirmMessage += '\n';
+        }
+        
+        if (usage.pages.length > 0) {
+          confirmMessage += `📄 ${usage.pages.length} Page(s):\n`;
+          usage.pages.forEach((page: any) => {
+            confirmMessage += `   - ${page.title}\n`;
+          });
+          confirmMessage += '\n';
+        }
+        
+        if (usage.categories.length > 0) {
+          confirmMessage += `🏷️ ${usage.categories.length} Categories:\n`;
+          usage.categories.forEach((cat: any) => {
+            confirmMessage += `   - ${cat.name}\n`;
+          });
+          confirmMessage += '\n';
+        }
+
+        confirmMessage += `If you delete this image, it will be removed from all these locations.\n\nAre you sure you want to continue?`;
+      }
+
+      if (confirm(confirmMessage)) {
+        deleteMutation.mutate(id);
+      }
+    } catch (error) {
+      console.error('Error checking usage:', error);
+      // Fallback to simple confirmation
+      if (confirm(`Are you sure you want to delete "${filename}"?`)) {
+        deleteMutation.mutate(id);
+      }
     }
   };
 

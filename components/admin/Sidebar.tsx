@@ -12,6 +12,7 @@ const menuItems = [
   { name: 'Categories', href: '/admin/categories', icon: '🏷️' },
   { name: 'Media', href: '/admin/media', icon: '🖼️' },
   { name: 'Users', href: '/admin/users', icon: '👥' },
+  { name: 'Settings', href: '/admin/settings', icon: '⚙️' },
   { name: 'View Site', href: '/', icon: '🌐', external: true },
 ];
 
@@ -61,7 +62,7 @@ export default function Sidebar() {
           <span>Logout</span>
         </button>
         <div className="text-center text-xs text-gray-500 mt-2">
-          Next CMS v1.0.0
+          Next CMS v1.0.1
         </div>
       </div>
     </aside>

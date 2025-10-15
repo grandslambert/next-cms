@@ -5,6 +5,44 @@ All notable changes to Next CMS will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2025-10-15
+
+### Added
+- **Settings System** with database-driven configuration
+  - General settings (site name, tagline, description)
+  - Media settings (customizable image sizes)
+  - Settings API endpoints
+  - Admin UI with sub-menu tabs
+  - Dynamic site branding on frontend
+- **Custom Image Sizes** - Add unlimited image size presets via settings
+  - Configurable crop styles: Cover, Fit Inside, Contain, Fill
+  - Per-size crop style configuration
+  - Visual explanations in UI
+  - Sharp-powered intelligent resizing
+- **Media Usage Tracking** - Shows where images are used before deletion
+  - API endpoint to check usage: `/api/media/:id/usage`
+  - Warning dialog with detailed usage list
+  - Automatic reference cleanup on deletion
+  - Success message shows cleared locations
+- Settings documentation (SETTINGS.md)
+- Image crop styles documentation (IMAGE_CROP_STYLES.md)
+- Media deletion safety documentation (MEDIA_SAFETY.md)
+- Database architecture documentation (DATABASE_ARCHITECTURE.md)
+
+### Changed
+- Site name/tagline now pulled from database settings
+- Image sizes now configurable instead of hardcoded
+- Homepage, navbar, and footer use dynamic settings
+- Media deletion now checks and reports usage
+- Image resizing now supports multiple crop/fit styles per size
+- Default thumbnail uses "cover" crop for square images
+- Default medium/large use "inside" fit for flexible sizing
+
+### Improved
+- Foreign key constraints automatically clear image references
+- Cache invalidation when images with references deleted
+- Better user feedback on media deletion
+
 ## [1.0.0] - 2025-10-15
 
 ### Initial Release

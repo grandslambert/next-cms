@@ -7,13 +7,29 @@ import path from 'path';
 import sharp from 'sharp';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 
-// Image size configurations (like WordPress)
-const IMAGE_SIZES = {
-  thumbnail: { width: 150, height: 150 },
-  medium: { width: 300, height: 300 },
-  large: { width: 1024, height: 1024 },
-  full: null, // Original size
-};
+// Get image sizes from settings
+async function getImageSizes() {
+  try {
+    const [rows] = await db.query<RowDataPacket[]>(
+      "SELECT setting_value FROM settings WHERE setting_key = 'image_sizes'"
+    );
+    
+    if (rows.length > 0 && rows[0].setting_value) {
+      const sizes = JSON.parse(rows[0].setting_value);
+      return { ...sizes, full: null }; // Always include full (original)
+    }
+  } catch (error) {
+    console.error('Error loading image sizes from settings:', error);
+  }
+  
+  // Fallback to defaults
+  return {
+    thumbnail: { width: 150, height: 150 },
+    medium: { width: 300, height: 300 },
+    large: { width: 1024, height: 1024 },
+    full: null,
+  };
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -80,6 +96,9 @@ export async function POST(request: NextRequest) {
       const image = sharp(buffer);
       const metadata = await image.metadata();
 
+      // Get image sizes from settings
+      const IMAGE_SIZES = await getImageSizes();
+
       // Generate different sizes
       for (const [sizeName, dimensions] of Object.entries(IMAGE_SIZES)) {
         if (sizeName === 'full') {
@@ -93,14 +112,18 @@ export async function POST(request: NextRequest) {
             height: metadata.height,
           };
         } else {
-          // Resize and save
+          // Resize and save with specified crop style
           const filename = `${baseFilename}-${sizeName}${ext}`;
           const filepath = path.join(uploadDir, filename);
           
+          // Get crop style from dimensions (default to 'inside')
+          const cropStyle = (dimensions as any).crop || 'inside';
+          
           const resized = await image
             .resize(dimensions!.width, dimensions!.height, {
-              fit: 'inside',
-              withoutEnlargement: true,
+              fit: cropStyle, // Use configured crop style
+              withoutEnlargement: cropStyle === 'inside', // Only for 'inside' fit
+              position: 'centre', // Center the crop
             })
             .toBuffer();
           

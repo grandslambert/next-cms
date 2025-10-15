@@ -28,6 +28,26 @@ export async function DELETE(
 
     const media = rows[0];
 
+    // Check usage before deletion (for logging)
+    const [postCount] = await db.query<RowDataPacket[]>(
+      'SELECT COUNT(*) as count FROM posts WHERE featured_image_id = ?',
+      [params.id]
+    );
+    const [pageCount] = await db.query<RowDataPacket[]>(
+      'SELECT COUNT(*) as count FROM pages WHERE featured_image_id = ?',
+      [params.id]
+    );
+    const [categoryCount] = await db.query<RowDataPacket[]>(
+      'SELECT COUNT(*) as count FROM categories WHERE image_id = ?',
+      [params.id]
+    );
+
+    const totalUsage = postCount[0].count + pageCount[0].count + categoryCount[0].count;
+    
+    if (totalUsage > 0) {
+      console.log(`Media ${params.id} was used in ${totalUsage} location(s) - references will be cleared`);
+    }
+
     // Delete all file sizes from filesystem
     if (media.sizes) {
       try {
@@ -54,10 +74,18 @@ export async function DELETE(
       }
     }
 
-    // Delete from database
+    // Delete from database (foreign keys will automatically clear references)
     await db.query<ResultSetHeader>('DELETE FROM media WHERE id = ?', [params.id]);
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ 
+      success: true,
+      cleared_references: totalUsage > 0 ? {
+        posts: postCount[0].count,
+        pages: pageCount[0].count,
+        categories: categoryCount[0].count,
+        total: totalUsage,
+      } : null
+    });
   } catch (error) {
     console.error('Error deleting media:', error);
     return NextResponse.json({ error: 'Failed to delete media' }, { status: 500 });
