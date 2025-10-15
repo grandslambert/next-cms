@@ -1,6 +1,6 @@
 {
   "name": "next-cms",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "A complete WordPress-like CMS built with Next.js, Tailwind CSS, and MySQL",
   "private": true,
   "scripts": {

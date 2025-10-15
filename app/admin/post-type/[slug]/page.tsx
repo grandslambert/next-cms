@@ -11,10 +11,52 @@ interface Post {
   id: number;
   post_type: string;
   title: string;
+  slug: string;
   status: string;
   author_name: string;
   created_at: string;
   updated_at: string;
+  published_at: string | null;
+  parent_id: number | null;
+  menu_order: number;
+}
+
+// Build hierarchical URL for a post
+function buildHierarchicalUrl(post: Post, allPosts: Post[], postType: any): string {
+  const baseSlug = postType?.slug || '';
+  const basePath = baseSlug ? `/${baseSlug}` : '';
+  
+  // Build slug path including parents
+  const slugPath: string[] = [post.slug];
+  let currentParentId = post.parent_id;
+  let iterations = 0;
+  
+  while (currentParentId && iterations < 10) {
+    const parent = allPosts.find((p: Post) => p.id === currentParentId);
+    if (!parent) break;
+    slugPath.unshift(parent.slug);
+    currentParentId = parent.parent_id;
+    iterations++;
+  }
+  
+  // Add date components if needed
+  if (post.published_at && postType?.url_structure !== 'default') {
+    const date = new Date(post.published_at);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    
+    switch (postType.url_structure) {
+      case 'year':
+        return `${basePath}/${year}/${slugPath.join('/')}`;
+      case 'year_month':
+        return `${basePath}/${year}/${month}/${slugPath.join('/')}`;
+      case 'year_month_day':
+        return `${basePath}/${year}/${month}/${day}/${slugPath.join('/')}`;
+    }
+  }
+  
+  return basePath ? `${basePath}/${slugPath.join('/')}` : `/${slugPath.join('/')}`;
 }
 
 export default function PostTypePage() {
@@ -133,22 +175,22 @@ export default function PostTypePage() {
               {displayPosts.map((post: any) => (
                 <tr key={post.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3">
-                    <Link
-                      href={`/admin/post-type/${postTypeSlug}/${post.id}`}
-                      className="text-primary-600 hover:text-primary-900"
-                    >
-                      Edit
-                    </Link>
-                    {post.status === 'published' && (
-                      <Link
-                        href={postTypeSlug === 'post' ? `/blog/${post.slug}` : `/${post.slug}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-green-600 hover:text-green-900"
-                      >
-                        View
-                      </Link>
-                    )}
+                                <Link
+                                  href={`/admin/post-type/${postTypeSlug}/${post.id}`}
+                                  className="text-primary-600 hover:text-primary-900"
+                                >
+                                  Edit
+                                </Link>
+                                {post.status === 'published' && post.slug && (
+                                  <a
+                                    href={buildHierarchicalUrl(post, data.posts, postTypeData)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-green-600 hover:text-green-900"
+                                  >
+                                    View
+                                  </a>
+                                )}
                     <button
                       onClick={() => handleDelete(post.id, post.title)}
                       className="text-red-600 hover:text-red-900"

@@ -5,6 +5,100 @@ All notable changes to Next CMS will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2025-10-15
+
+### Added
+- Two-button publish system in post editor
+  - "Save as Draft" button - saves with draft status
+  - "Publish" button - automatically publishes post
+  - Status display shows current state (Published/Draft)
+- Editable slug field in post editor with URL preview
+  - Shows post type prefix based on post type's slug setting
+  - Auto-generates from title by default
+  - Can be manually customized for SEO
+  - Real-time validation (lowercase, hyphens only)
+  - Preview button (🌐) opens published post in new window
+  - Works with all post types (posts, pages, custom)
+- Hierarchical URL support for pages and custom hierarchical types
+  - Child pages/posts include parent slugs in URL path
+  - Example: Parent "Services" + Child "Web Design" → `/services/web-design`
+  - Works with date-based URLs too: `/2025/10/parent/child`
+  - Frontend validates full hierarchical path matches
+- Post type slug and URL structure in Settings → Post Types
+  - Define URL prefix for each post type
+  - Example: slug "portfolio" → items at `/portfolio/item-slug`
+  - Leave empty for root level (like pages at `/slug`)
+  - Built-in post types (Posts, Pages) have protected slugs
+  - URL Structure options (WordPress-style permalinks):
+    - **Default**: `/slug/post-title` or `/post-title` (root)
+    - **Year**: `/slug/2025/post-title`
+    - **Year/Month**: `/slug/2025/10/post-title`
+    - **Year/Month/Day**: `/slug/2025/10/15/post-title`
+- Post editor now integrates with new taxonomy system
+  - Dynamically displays all taxonomies assigned to post type
+  - Supports multiple taxonomies simultaneously
+  - Scrollable term selection for each taxonomy
+  - Inline term creation within post editor
+  - Auto-selects newly created terms
+- Enhanced admin notifications
+  - Prominent top-center toast notifications
+  - Success messages (green) and error messages (red)
+  - Messages persist across page reloads using sessionStorage
+  - Contextual messages based on action (published vs. saved as draft)
+  - Different durations for success (3-4s) and errors (5s)
+- Loading overlay during save operations
+  - Full-screen semi-transparent overlay prevents interaction
+  - Large spinner with contextual text (Creating/Saving/Updating/Deleting)
+  - Applied to post editor and taxonomy term management
+  - Automatic cleanup when operation completes
+
+### Changed
+- Post editor workflow improvements
+  - After creating a post, redirects to edit page (shows success message)
+  - After updating a post, uses AJAX to refresh data (no page reload)
+  - Allows continuous editing without leaving the editor
+  - All form data updates instantly via TanStack Query invalidation
+- Frontend dynamic routes for all post types and URL structures
+  - **Default structure routes:**
+    - `/blog/[slug]` - Blog posts with default structure
+    - `/[slug]` - Pages and custom types with empty slug (root level)
+    - `/[postTypeSlug]/[slug]` - Custom post types with slug prefix
+  - **Date-based structure routes (all post types):**
+    - `/blog/[year]/[slug]` or `/[postTypeSlug]/[year]/[slug]`
+    - `/blog/[year]/[month]/[slug]` or `/[postTypeSlug]/[year]/[month]/[slug]`
+    - `/blog/[year]/[month]/[day]/[slug]` or `/[postTypeSlug]/[year]/[month]/[day]/[slug]`
+  - Validates URL structure and published date match
+  - Displays author and date metadata
+  - Examples:
+    - Posts (default): `/blog/my-article`
+    - Posts (year/month/day): `/blog/2025/10/15/my-article`
+    - Portfolio (default): `/portfolio/my-project`
+    - Portfolio (year): `/portfolio/2025/my-project`
+    - Pages (always root): `/about`
+- Removed old category system from post editor
+  - No longer uses CategorySelector component
+  - Replaced with dynamic taxonomy support
+- Removed "categories" from post type supports field
+  - Taxonomies now assigned separately in post type settings
+- Toast notifications moved to top-center with enhanced styling
+  - Larger, more prominent design
+  - Better color contrast for success/error states
+- Taxonomy term management redesigned with side-by-side layout
+  - Add/Edit form on left (sticky position)
+  - Terms list on right (2/3 width)
+  - All updates via AJAX (no page reloads)
+  - Click "Edit" to populate form, "Cancel" to clear
+  - Form shows "Add New" or "Update" based on state
+
+### Fixed
+- All form labels now properly associated with inputs (accessibility)
+- PostTypeForm props marked as readonly
+- Admin notifications now visible after page reloads
+- Fixed extra "0" displaying in taxonomy term form for non-hierarchical taxonomies
+- Taxonomy terms table now has dedicated Image column with icon placeholder for terms without images
+- Description column width limited to prevent pushing Created date off screen
+- All created/updated timestamps now display date AND time in 12-hour format (e.g., "Oct 15, 2025, 3:45 PM")
+
 ## [1.2.0] - 2025-10-15
 
 ### Added

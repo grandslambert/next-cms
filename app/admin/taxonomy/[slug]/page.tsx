@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
@@ -14,7 +14,6 @@ export default function TaxonomyTermsPage() {
   const queryClient = useQueryClient();
 
   const [editingTerm, setEditingTerm] = useState<any>(null);
-  const [isCreating, setIsCreating] = useState(false);
   const [showMediaModal, setShowMediaModal] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
@@ -49,13 +48,13 @@ export default function TaxonomyTermsPage() {
       const res = await axios.post('/api/terms', { ...data, taxonomy_id: taxonomyData?.id });
       return res.data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['terms', taxonomySlug] });
-      toast.success(`${taxonomyData?.singular_label} created successfully`);
-      handleCancel();
+      toast.success(`${taxonomyData?.singular_label} "${data.term.name}" created successfully`, { duration: 3000 });
+      resetForm();
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.error || `Failed to create ${taxonomyData?.singular_label?.toLowerCase()}`);
+      toast.error(error.response?.data?.error || `Failed to create ${taxonomyData?.singular_label?.toLowerCase()}`, { duration: 4000 });
     },
   });
 
@@ -64,13 +63,13 @@ export default function TaxonomyTermsPage() {
       const res = await axios.put(`/api/terms/${id}`, data);
       return res.data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['terms', taxonomySlug] });
-      toast.success(`${taxonomyData?.singular_label} updated successfully`);
-      handleCancel();
+      toast.success(`${taxonomyData?.singular_label} "${data.term.name}" updated successfully`, { duration: 3000 });
+      resetForm();
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.error || `Failed to update ${taxonomyData?.singular_label?.toLowerCase()}`);
+      toast.error(error.response?.data?.error || `Failed to update ${taxonomyData?.singular_label?.toLowerCase()}`, { duration: 4000 });
     },
   });
 
@@ -80,10 +79,14 @@ export default function TaxonomyTermsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['terms', taxonomySlug] });
-      toast.success(`${taxonomyData?.singular_label} deleted successfully`);
+      toast.success(`${taxonomyData?.singular_label} deleted successfully`, { duration: 3000 });
+      // Clear form if we were editing the deleted term
+      if (editingTerm) {
+        resetForm();
+      }
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.error || `Failed to delete ${taxonomyData?.singular_label?.toLowerCase()}`);
+      toast.error(error.response?.data?.error || `Failed to delete ${taxonomyData?.singular_label?.toLowerCase()}`, { duration: 4000 });
     },
   });
 
@@ -95,6 +98,7 @@ export default function TaxonomyTermsPage() {
       parent_id: null,
     });
     setImageUrl('');
+    setEditingTerm(null);
   };
 
   const handleEdit = (term: any) => {
@@ -106,19 +110,6 @@ export default function TaxonomyTermsPage() {
       parent_id: term.parent_id || null,
     });
     setImageUrl(term.image_url || '');
-    setIsCreating(false);
-  };
-
-  const handleCreate = () => {
-    setIsCreating(true);
-    setEditingTerm(null);
-    resetForm();
-  };
-
-  const handleCancel = () => {
-    setIsCreating(false);
-    setEditingTerm(null);
-    resetForm();
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -165,31 +156,39 @@ export default function TaxonomyTermsPage() {
     );
   }
 
+  const isSaving = createMutation.isPending || updateMutation.isPending || deleteMutation.isPending;
+
   return (
-    <div>
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">{taxonomyData.label}</h1>
-          <p className="text-gray-600 mt-2">{taxonomyData.description}</p>
+    <div className="relative">
+      {/* Loading Overlay */}
+      {isSaving && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-lg p-8 shadow-2xl">
+            <div className="flex flex-col items-center space-y-4">
+              <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-primary-600"></div>
+              <p className="text-lg font-medium text-gray-900">
+                {createMutation.isPending ? 'Creating...' : updateMutation.isPending ? 'Updating...' : 'Deleting...'}
+              </p>
+              <p className="text-sm text-gray-500">Please wait</p>
+            </div>
+          </div>
         </div>
-        {!isCreating && !editingTerm && (
-          <button
-            onClick={handleCreate}
-            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-          >
-            + Add {taxonomyData.singular_label}
-          </button>
-        )}
+      )}
+
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900">{taxonomyData.label}</h1>
+        <p className="text-gray-600 mt-2">{taxonomyData.description}</p>
       </div>
 
-      {/* Create/Edit Form */}
-      {(isCreating || editingTerm) && (
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">
-            {editingTerm ? `Edit ${taxonomyData.singular_label}` : `Create New ${taxonomyData.singular_label}`}
-          </h2>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left: Add/Edit Form */}
+        <div className="lg:col-span-1">
+          <div className="bg-white rounded-lg shadow p-6 sticky top-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">
+              {editingTerm ? `Edit ${taxonomyData.singular_label}` : `Add New ${taxonomyData.singular_label}`}
+            </h2>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Name <span className="text-red-500">*</span>
@@ -217,7 +216,7 @@ export default function TaxonomyTermsPage() {
               />
             </div>
 
-            {taxonomyData.hierarchical && (
+            {!!taxonomyData.hierarchical && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Parent {taxonomyData.singular_label}
@@ -270,32 +269,32 @@ export default function TaxonomyTermsPage() {
               )}
             </div>
 
-            <div className="flex space-x-3 pt-4">
-              <button
-                type="submit"
-                disabled={createMutation.isPending || updateMutation.isPending}
-                className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
-              >
-                {createMutation.isPending || updateMutation.isPending
-                  ? 'Saving...'
-                  : editingTerm
-                  ? `Update ${taxonomyData.singular_label}`
-                  : `Create ${taxonomyData.singular_label}`}
-              </button>
-              <button
-                type="button"
-                onClick={handleCancel}
-                className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
+              <div className="flex space-x-3 pt-4">
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
+                >
+                  {editingTerm ? 'Update' : 'Add New'}
+                </button>
+                {editingTerm && (
+                  <button
+                    type="button"
+                    onClick={resetForm}
+                    disabled={isSaving}
+                    className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
+            </form>
+          </div>
         </div>
-      )}
 
-      {/* Terms List */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+        {/* Right: Terms List */}
+        <div className="lg:col-span-2">
+          <div className="bg-white rounded-lg shadow overflow-hidden">
         {isLoading ? (
           <div className="p-8 text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
@@ -306,6 +305,9 @@ export default function TaxonomyTermsPage() {
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Image
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Name
@@ -338,6 +340,19 @@ export default function TaxonomyTermsPage() {
                       Delete
                     </button>
                   </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {term.image_url ? (
+                      <img
+                        src={term.image_url}
+                        alt={term.name}
+                        className="w-12 h-12 object-cover rounded"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 bg-gray-100 rounded flex items-center justify-center text-gray-400 text-2xl">
+                        🖼️
+                      </div>
+                    )}
+                  </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center">
                       {!!taxonomyData.hierarchical && term.level > 0 && (
@@ -345,18 +360,11 @@ export default function TaxonomyTermsPage() {
                           {'—'.repeat(term.level)} 
                         </span>
                       )}
-                      {term.image_url && (
-                        <img
-                          src={term.image_url}
-                          alt={term.name}
-                          className="w-8 h-8 object-cover rounded mr-2"
-                        />
-                      )}
                       <span className="text-sm font-medium text-gray-900">{term.name}</span>
                     </div>
                   </td>
-                  <td className="px-6 py-4">
-                    <div className="text-sm text-gray-500 max-w-md truncate">
+                  <td className="px-6 py-4 max-w-xs">
+                    <div className="text-sm text-gray-500 truncate">
                       {term.description || '—'}
                     </div>
                   </td>
@@ -370,17 +378,15 @@ export default function TaxonomyTermsPage() {
               ))}
             </tbody>
           </table>
-        ) : (
-          <div className="p-8 text-center text-gray-500">
-            <p className="mb-4">No {taxonomyData.label.toLowerCase()} yet</p>
-            <button
-              onClick={handleCreate}
-              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-            >
-              + Create First {taxonomyData.singular_label}
-            </button>
+          ) : (
+            <div className="p-8 text-center text-gray-500">
+              <div className="text-6xl mb-4">📝</div>
+              <p className="text-lg mb-2">No {taxonomyData.label.toLowerCase()} yet</p>
+              <p className="text-sm">Use the form on the left to create your first {taxonomyData.singular_label.toLowerCase()}</p>
+            </div>
+          )}
           </div>
-        )}
+        </div>
       </div>
 
       <MediaSelector

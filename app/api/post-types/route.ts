@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, label, singular_label, description, icon, supports, menu_position, show_in_dashboard, hierarchical } = body;
+    const { name, slug, label, singular_label, description, icon, url_structure, supports, menu_position, show_in_dashboard, hierarchical } = body;
 
     if (!name || !label || !singular_label) {
       return NextResponse.json({ error: 'Name, label, and singular label are required' }, { status: 400 });
@@ -44,15 +44,20 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
+    // Use slug or default to name
+    const postTypeSlug = slug || name;
+
     const [result] = await db.query<ResultSetHeader>(
-      `INSERT INTO post_types (name, label, singular_label, description, icon, supports, show_in_dashboard, hierarchical, menu_position)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO post_types (name, slug, label, singular_label, description, icon, url_structure, supports, show_in_dashboard, hierarchical, menu_position)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         name,
+        postTypeSlug,
         label,
         singular_label,
         description || '',
         icon || '📄',
+        url_structure || 'default',
         JSON.stringify(supports || {}),
         show_in_dashboard !== false,
         hierarchical || false,

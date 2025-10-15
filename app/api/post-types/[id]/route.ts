@@ -41,9 +41,9 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { label, singular_label, description, icon, supports, menu_position, show_in_dashboard, hierarchical } = body;
+    const { slug, label, singular_label, description, icon, url_structure, supports, menu_position, show_in_dashboard, hierarchical } = body;
 
-    // Don't allow changing the default 'post' type name
+    // Check if it's a built-in type
     const [currentType] = await db.query<RowDataPacket[]>(
       'SELECT name FROM post_types WHERE id = ?',
       [params.id]
@@ -53,22 +53,34 @@ export async function PUT(
       return NextResponse.json({ error: 'Post type not found' }, { status: 404 });
     }
 
-    await db.query<ResultSetHeader>(
-      `UPDATE post_types 
-       SET label = ?, singular_label = ?, description = ?, icon = ?, supports = ?, show_in_dashboard = ?, hierarchical = ?, menu_position = ?
-       WHERE id = ?`,
-      [
-        label,
-        singular_label,
-        description || '',
-        icon || '📄',
-        JSON.stringify(supports || {}),
-        show_in_dashboard !== false,
-        hierarchical || false,
-        menu_position || 5,
-        params.id
-      ]
-    );
+    const isBuiltIn = currentType[0].name === 'post' || currentType[0].name === 'page';
+
+    // Build update query
+    let updateQuery = `UPDATE post_types 
+       SET label = ?, singular_label = ?, description = ?, icon = ?, url_structure = ?, supports = ?, show_in_dashboard = ?, hierarchical = ?, menu_position = ?`;
+    let updateParams: any[] = [
+      label,
+      singular_label,
+      description || '',
+      icon || '📄',
+      url_structure || 'default',
+      JSON.stringify(supports || {}),
+      show_in_dashboard !== false,
+      hierarchical || false,
+      menu_position || 5,
+    ];
+
+    // Only allow slug changes for non-built-in types
+    if (slug !== undefined && !isBuiltIn) {
+      updateQuery = `UPDATE post_types 
+         SET slug = ?, label = ?, singular_label = ?, description = ?, icon = ?, url_structure = ?, supports = ?, show_in_dashboard = ?, hierarchical = ?, menu_position = ?`;
+      updateParams = [slug, ...updateParams];
+    }
+
+    updateQuery += ' WHERE id = ?';
+    updateParams.push(params.id);
+
+    await db.query<ResultSetHeader>(updateQuery, updateParams);
 
     const [updated] = await db.query<RowDataPacket[]>(
       'SELECT * FROM post_types WHERE id = ?',

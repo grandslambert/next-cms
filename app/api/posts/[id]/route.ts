@@ -42,13 +42,14 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { title, content, excerpt, featured_image_id, status, parent_id, menu_order } = body;
+    const { title, slug: customSlug, content, excerpt, featured_image_id, status, parent_id, menu_order } = body;
 
     if (!title) {
       return NextResponse.json({ error: 'Title is required' }, { status: 400 });
     }
 
-    const slug = slugify(title);
+    // Use custom slug if provided, otherwise generate from title
+    const slug = customSlug || slugify(title);
     const publishedAt = status === 'published' ? new Date() : null;
 
     await db.query<ResultSetHeader>(

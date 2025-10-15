@@ -18,10 +18,12 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS post_types (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(100) UNIQUE NOT NULL,
+  slug VARCHAR(100) UNIQUE NOT NULL,
   label VARCHAR(255) NOT NULL,
   singular_label VARCHAR(255) NOT NULL,
   description TEXT,
   icon VARCHAR(50),
+  url_structure ENUM('default', 'year', 'year_month', 'year_month_day') DEFAULT 'default',
   supports JSON,
   public BOOLEAN DEFAULT TRUE,
   show_in_dashboard BOOLEAN DEFAULT TRUE,
@@ -29,7 +31,8 @@ CREATE TABLE IF NOT EXISTS post_types (
   menu_position INT DEFAULT 5,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  INDEX idx_name (name)
+  INDEX idx_name (name),
+  INDEX idx_slug (slug)
 );
 
 -- Posts table (unified for all post types including pages)
@@ -153,17 +156,19 @@ VALUES ('admin', 'Admin', 'User', 'admin@example.com', '$2a$10$1llDVX4S7vKlcibiD
 ON DUPLICATE KEY UPDATE email = email;
 
 -- Insert default post types
-INSERT INTO post_types (name, label, singular_label, description, icon, supports, show_in_dashboard, hierarchical, menu_position) 
+INSERT INTO post_types (name, slug, label, singular_label, description, icon, url_structure, supports, show_in_dashboard, hierarchical, menu_position) 
 VALUES 
-  ('post', 'Posts', 'Post', 'Regular blog posts', '📝', 
+  ('post', 'blog', 'Posts', 'Post', 'Regular blog posts', '📝', 'default',
    '{"title": true, "content": true, "excerpt": true, "featured_image": true}',
    TRUE, FALSE, 5),
-  ('page', 'Pages', 'Page', 'Static pages', '📄',
+  ('page', '', 'Pages', 'Page', 'Static pages', '📄', 'default',
    '{"title": true, "content": true, "featured_image": true}',
    TRUE, TRUE, 10)
 ON DUPLICATE KEY UPDATE 
   label = VALUES(label),
-  hierarchical = VALUES(hierarchical);
+  hierarchical = VALUES(hierarchical),
+  slug = VALUES(slug),
+  url_structure = VALUES(url_structure);
 
 -- Insert default taxonomies
 INSERT INTO taxonomies (name, label, singular_label, description, hierarchical, show_in_menu, menu_position)

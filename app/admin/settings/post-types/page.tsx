@@ -26,10 +26,12 @@ export default function PostTypesSettings() {
   const [isCreating, setIsCreating] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
+    slug: '',
     label: '',
     singular_label: '',
     description: '',
     icon: '📄',
+    url_structure: 'default' as 'default' | 'date_based',
     menu_position: 5,
     show_in_dashboard: true,
     hierarchical: false,
@@ -125,10 +127,12 @@ export default function PostTypesSettings() {
     setIsCreating(false);
     setFormData({
       name: '',
+      slug: '',
       label: '',
       singular_label: '',
       description: '',
       icon: '📄',
+      url_structure: 'default' as 'default' | 'date_based',
       menu_position: 5,
       show_in_dashboard: true,
       hierarchical: false,
@@ -137,7 +141,6 @@ export default function PostTypesSettings() {
         content: true,
         excerpt: true,
         featured_image: true,
-        categories: true,
       },
     });
     setSelectedTaxonomies([]);
@@ -156,10 +159,12 @@ export default function PostTypesSettings() {
     setEditingPostType(postType);
     setFormData({
       name: postType.name,
+      slug: postType.slug || '',
       label: postType.label,
       singular_label: postType.singular_label,
       description: postType.description || '',
       icon: postType.icon || '📄',
+      url_structure: postType.url_structure || 'default',
       menu_position: postType.menu_position || 5,
       show_in_dashboard: postType.show_in_dashboard !== false,
       hierarchical: postType.hierarchical || false,
@@ -168,6 +173,8 @@ export default function PostTypesSettings() {
     setIsCreating(false);
     // Taxonomies will be loaded by the query
   };
+
+  const isBuiltIn = (name: string) => name === 'post' || name === 'page';
 
   // Update selectedTaxonomies when assignedTaxonomies changes
   React.useEffect(() => {
@@ -292,7 +299,7 @@ export default function PostTypesSettings() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Name (slug) *
+                  Name *
                 </label>
                 <input
                   type="text"
@@ -304,7 +311,43 @@ export default function PostTypesSettings() {
                   disabled={!!editingPostType}
                 />
                 <p className="mt-1 text-xs text-gray-500">
-                  Lowercase, alphanumeric with underscores only. Cannot be changed after creation.
+                  Internal identifier. Lowercase, alphanumeric with underscores. Cannot be changed after creation.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  URL Slug {isBuiltIn(formData.name) && <span className="text-xs text-gray-500">(Built-in, cannot change)</span>}
+                </label>
+                <input
+                  type="text"
+                  value={formData.slug}
+                  onChange={(e) => setFormData({ ...formData, slug: e.target.value.toLowerCase().replace(/[^\w-]/g, '-').replace(/-+/g, '-') })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono disabled:bg-gray-100"
+                  placeholder="portfolio (leave empty for root)"
+                  disabled={editingPostType && isBuiltIn(editingPostType.name)}
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  URL prefix for this post type. Example: "portfolio" → <code>/portfolio/item-slug</code>. Leave empty for root level like pages.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  URL Structure
+                </label>
+                <select
+                  value={formData.url_structure}
+                  onChange={(e) => setFormData({ ...formData, url_structure: e.target.value as any })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="default">Default (/{formData.slug || 'slug'}/post-title)</option>
+                  <option value="year">Year (/{formData.slug || 'slug'}/2025/post-title)</option>
+                  <option value="year_month">Year/Month (/{formData.slug || 'slug'}/2025/10/post-title)</option>
+                  <option value="year_month_day">Year/Month/Day (/{formData.slug || 'slug'}/2025/10/15/post-title)</option>
+                </select>
+                <p className="mt-1 text-xs text-gray-500">
+                  How URLs are structured. Date options use the post's published date.
                 </p>
               </div>
 
