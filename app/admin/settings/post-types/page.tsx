@@ -144,8 +144,8 @@ export default function PostTypesSettings() {
   };
 
   const handleDelete = (postType: PostType) => {
-    if (postType.name === 'post') {
-      toast.error('Cannot delete the default "post" post type');
+    if (postType.name === 'post' || postType.name === 'page') {
+      toast.error(`Cannot delete the built-in "${postType.label}" post type`);
       return;
     }
 
@@ -201,7 +201,14 @@ export default function PostTypesSettings() {
                     <div className="flex items-start space-x-3">
                       <span className="text-2xl">{postType.icon}</span>
                       <div>
-                        <h4 className="font-semibold text-gray-900">{postType.label}</h4>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-semibold text-gray-900">{postType.label}</h4>
+                          {(postType.name === 'post' || postType.name === 'page') && (
+                            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded font-medium">
+                              Built-in
+                            </span>
+                          )}
+                        </div>
                         <p className="text-sm text-gray-500">Name: {postType.name}</p>
                         {postType.description && (
                           <p className="text-sm text-gray-600 mt-1">{postType.description}</p>
@@ -224,7 +231,7 @@ export default function PostTypesSettings() {
                       >
                         Edit
                       </button>
-                      {postType.name !== 'post' && (
+                      {postType.name !== 'post' && postType.name !== 'page' && (
                         <button
                           onClick={() => handleDelete(postType)}
                           className="px-3 py-1 text-sm border border-red-300 text-red-700 rounded hover:bg-red-50"

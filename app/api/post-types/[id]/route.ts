@@ -97,7 +97,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized - Admin only' }, { status: 401 });
     }
 
-    // Check if it's the default 'post' type
+    // Check if it's a built-in post type
     const [postType] = await db.query<RowDataPacket[]>(
       'SELECT name FROM post_types WHERE id = ?',
       [params.id]
@@ -107,9 +107,9 @@ export async function DELETE(
       return NextResponse.json({ error: 'Post type not found' }, { status: 404 });
     }
 
-    if (postType[0].name === 'post') {
+    if (postType[0].name === 'post' || postType[0].name === 'page') {
       return NextResponse.json({ 
-        error: 'Cannot delete the default "post" post type' 
+        error: `Cannot delete the built-in "${postType[0].name}" post type` 
       }, { status: 400 });
     }
 

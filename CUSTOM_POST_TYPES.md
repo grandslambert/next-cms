@@ -174,9 +174,10 @@ When enabled, items can have parent/child relationships:
 3. Confirm deletion
 
 **Restrictions:**
-- Cannot delete the default "post" post type
+- Cannot delete built-in post types ("post" and "page")
 - Cannot delete post types that have existing content
 - Delete all content first, then delete the post type
+- Delete button is hidden for built-in types
 
 ## Menu Positioning
 

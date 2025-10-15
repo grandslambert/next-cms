@@ -5,6 +5,14 @@ All notable changes to Next CMS will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2025-10-15
+
+### Fixed
+- Built-in post types (Posts and Pages) are now protected from deletion in both UI and API
+- Delete button hidden for built-in post types in Settings → Post Types
+- Visual "Built-in" badge added to Posts and Pages in settings list
+- API returns error when attempting to delete built-in post types
+
 ## [1.1.0] - 2025-10-15
 
 ### Added
@@ -21,7 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Post type-specific create and edit interfaces
   - API endpoints for post type CRUD operations
   - Database migration script for existing installations
-  - Cannot delete default "post" type or types with existing content
+  - Cannot delete built-in post types ("post" and "page") or types with existing content
   - Slug validation (lowercase, alphanumeric, underscores only)
   - UTF8MB4 charset support for emoji icons
 

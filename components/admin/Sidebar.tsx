@@ -88,7 +88,7 @@ export default function Sidebar() {
           <span>Logout</span>
         </button>
         <div className="text-center text-xs text-gray-500 mt-2">
-          Next CMS v1.1.0
+          Next CMS v1.1.1
         </div>
       </div>
     </aside>
