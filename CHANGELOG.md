@@ -7,11 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.1.1] - 2025-10-15
 
+### Added
+- "View" action in post type lists for published items (opens in new window)
+- Clickable titles in post type lists that link to edit screen
+- Smart public URL routing (posts → /blog/slug, pages/custom → /slug)
+- Shared PostTypeForm component for all post type edit/new interfaces
+
+### Changed
+- Actions column moved to first position in post type tables for easier access
+- Featured Image box moved to top of sidebar for better visual hierarchy
+- **Code Refactoring**: Unified all post edit/new pages to use shared PostTypeForm component
+  - Reduced code from ~1,160 lines to ~418 lines (740 lines eliminated)
+  - All post types (posts, pages, custom) now use same interface
+  - Single source of truth for post editing logic
+- **Removed `/admin/posts` routes** - Posts now accessed via `/admin/post-type/post`
+  - Consistent routing for all post types
+  - Sidebar automatically links to correct routes
+
 ### Fixed
 - Built-in post types (Posts and Pages) are now protected from deletion in both UI and API
 - Delete button hidden for built-in post types in Settings → Post Types
 - Visual "Built-in" badge added to Posts and Pages in settings list
 - API returns error when attempting to delete built-in post types
+- Fixed extra "0" appearing in non-hierarchical post type lists
+- Fixed multiple React boolean rendering issues (MySQL BOOLEAN as tinyint)
 
 ## [1.1.0] - 2025-10-15
 

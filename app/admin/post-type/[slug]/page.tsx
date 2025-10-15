@@ -113,6 +113,9 @@ export default function PostTypePage() {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Actions
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Title
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -124,23 +127,47 @@ export default function PostTypePage() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Date
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {displayPosts.map((post: any) => (
                 <tr key={post.id} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3">
+                    <Link
+                      href={`/admin/post-type/${postTypeSlug}/${post.id}`}
+                      className="text-primary-600 hover:text-primary-900"
+                    >
+                      Edit
+                    </Link>
+                    {post.status === 'published' && (
+                      <Link
+                        href={postTypeSlug === 'post' ? `/blog/${post.slug}` : `/${post.slug}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-green-600 hover:text-green-900"
+                      >
+                        View
+                      </Link>
+                    )}
+                    <button
+                      onClick={() => handleDelete(post.id, post.title)}
+                      className="text-red-600 hover:text-red-900"
+                    >
+                      Delete
+                    </button>
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900 flex items-center">
-                      {postTypeData.hierarchical && post.level > 0 && (
+                    <Link
+                      href={`/admin/post-type/${postTypeSlug}/${post.id}`}
+                      className="text-sm font-medium text-gray-900 hover:text-primary-600 flex items-center"
+                    >
+                      {!!postTypeData.hierarchical && post.level > 0 && (
                         <span className="text-gray-400 mr-2">
                           {'—'.repeat(post.level)} 
                         </span>
                       )}
                       <span>{post.title}</span>
-                    </div>
+                    </Link>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-500">{post.author_name}</div>
@@ -160,20 +187,6 @@ export default function PostTypePage() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {formatDate(post.updated_at)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-3">
-                    <Link
-                      href={`/admin/post-type/${postTypeSlug}/${post.id}`}
-                      className="text-primary-600 hover:text-primary-900"
-                    >
-                      Edit
-                    </Link>
-                    <button
-                      onClick={() => handleDelete(post.id, post.title)}
-                      className="text-red-600 hover:text-red-900"
-                    >
-                      Delete
-                    </button>
                   </td>
                 </tr>
               ))}
