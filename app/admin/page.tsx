@@ -21,6 +21,19 @@ const ContentSummarySkeleton = () => (
   </div>
 );
 
+// Component to fetch and display count for a specific post type
+const PostTypeCount = ({ postType }: { postType: string }) => {
+  const { data } = useQuery({
+    queryKey: ['posts', postType, 'count'],
+    queryFn: async () => {
+      const res = await axios.get(`/api/posts?post_type=${postType}&limit=1`);
+      return res.data;
+    },
+  });
+
+  return <p className="text-2xl font-bold text-gray-900">{data?.total || 0}</p>;
+};
+
 export default function AdminDashboard() {
   const { data: session } = useSession();
 
@@ -28,14 +41,6 @@ export default function AdminDashboard() {
     queryKey: ['posts'],
     queryFn: async () => {
       const res = await axios.get('/api/posts?limit=5');
-      return res.data;
-    },
-  });
-
-  const { data: pagesData, isLoading: pagesLoading } = useQuery({
-    queryKey: ['pages'],
-    queryFn: async () => {
-      const res = await axios.get('/api/pages');
       return res.data;
     },
   });
@@ -64,7 +69,18 @@ export default function AdminDashboard() {
     },
   });
 
-  const isContentLoading = postsLoading || pagesLoading || mediaLoading || categoriesLoading || usersLoading;
+  const { data: postTypesData, isLoading: postTypesLoading } = useQuery({
+    queryKey: ['post-types'],
+    queryFn: async () => {
+      const res = await axios.get('/api/post-types');
+      return res.data;
+    },
+  });
+
+  // Filter post types to show in dashboard
+  const dashboardPostTypes = postTypesData?.postTypes?.filter((pt: any) => pt.show_in_dashboard) || [];
+
+  const isContentLoading = postsLoading || mediaLoading || categoriesLoading || usersLoading || postTypesLoading;
 
   return (
     <div>
@@ -90,21 +106,16 @@ export default function AdminDashboard() {
               </div>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
-                <Link href="/admin/posts" className="group">
-                  <div className="text-center p-4 rounded-lg transition-colors hover:bg-gray-50">
-                    <div className="text-4xl mb-2">📝</div>
-                    <p className="text-sm font-medium text-gray-600 mb-1 group-hover:text-primary-600">Posts</p>
-                    <p className="text-2xl font-bold text-gray-900">{postsData?.total || 0}</p>
-                  </div>
-                </Link>
-
-                <Link href="/admin/pages" className="group">
-                  <div className="text-center p-4 rounded-lg transition-colors hover:bg-gray-50">
-                    <div className="text-4xl mb-2">📄</div>
-                    <p className="text-sm font-medium text-gray-600 mb-1 group-hover:text-primary-600">Pages</p>
-                    <p className="text-2xl font-bold text-gray-900">{pagesData?.pages?.length || 0}</p>
-                  </div>
-                </Link>
+                {/* Dynamic Post Types (filtered by show_in_dashboard) */}
+                {dashboardPostTypes.map((postType: any) => (
+                  <Link key={postType.name} href={`/admin/post-type/${postType.name}`} className="group">
+                    <div className="text-center p-4 rounded-lg transition-colors hover:bg-gray-50">
+                      <div className="text-4xl mb-2">{postType.icon}</div>
+                      <p className="text-sm font-medium text-gray-600 mb-1 group-hover:text-primary-600">{postType.label}</p>
+                      <PostTypeCount postType={postType.name} />
+                    </div>
+                  </Link>
+                ))}
 
                 <Link href="/admin/media" className="group">
                   <div className="text-center p-4 rounded-lg transition-colors hover:bg-gray-50">
@@ -127,14 +138,6 @@ export default function AdminDashboard() {
                     <div className="text-4xl mb-2">👥</div>
                     <p className="text-sm font-medium text-gray-600 mb-1 group-hover:text-primary-600">Users</p>
                     <p className="text-2xl font-bold text-gray-900">{usersData?.users?.length || 0}</p>
-                  </div>
-                </Link>
-
-                <Link href="/admin/settings" className="group">
-                  <div className="text-center p-4 rounded-lg transition-colors hover:bg-gray-50">
-                    <div className="text-4xl mb-2">⚙️</div>
-                    <p className="text-sm font-medium text-gray-600 mb-1 group-hover:text-primary-600">Settings</p>
-                    <p className="text-2xl font-bold text-gray-900">—</p>
                   </div>
                 </Link>
               </div>

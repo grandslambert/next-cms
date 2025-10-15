@@ -9,6 +9,7 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const status = searchParams.get('status');
+    const postType = searchParams.get('post_type') || 'post';
     const limit = parseInt(searchParams.get('limit') || '10');
     const offset = parseInt(searchParams.get('offset') || '0');
 
@@ -18,11 +19,12 @@ export async function GET(request: NextRequest) {
       FROM posts p 
       LEFT JOIN users u ON p.author_id = u.id
       LEFT JOIN media m ON p.featured_image_id = m.id
+      WHERE p.post_type = ?
     `;
-    const params: any[] = [];
+    const params: any[] = [postType];
 
     if (status && status !== 'all') {
-      query += ' WHERE p.status = ?';
+      query += ' AND p.status = ?';
       params.push(status);
     }
 
@@ -32,11 +34,11 @@ export async function GET(request: NextRequest) {
     const [rows] = await db.query<RowDataPacket[]>(query, params);
 
     // Get total count
-    let countQuery = 'SELECT COUNT(*) as total FROM posts';
-    const countParams: any[] = [];
+    let countQuery = 'SELECT COUNT(*) as total FROM posts WHERE post_type = ?';
+    const countParams: any[] = [postType];
     
     if (status && status !== 'all') {
-      countQuery += ' WHERE status = ?';
+      countQuery += ' AND status = ?';
       countParams.push(status);
     }
 
@@ -58,7 +60,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { title, content, excerpt, featured_image_id, status } = body;
+    const { title, content, excerpt, featured_image_id, status, post_type, parent_id, menu_order } = body;
 
     if (!title) {
       return NextResponse.json({ error: 'Title is required' }, { status: 400 });
@@ -69,9 +71,9 @@ export async function POST(request: NextRequest) {
     const publishedAt = status === 'published' ? new Date() : null;
 
     const [result] = await db.query<ResultSetHeader>(
-      `INSERT INTO posts (title, slug, content, excerpt, featured_image_id, status, author_id, published_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [title, slug, content || '', excerpt || '', featured_image_id || null, status || 'draft', userId, publishedAt]
+      `INSERT INTO posts (post_type, title, slug, content, excerpt, featured_image_id, parent_id, menu_order, status, author_id, published_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [post_type || 'post', title, slug, content || '', excerpt || '', featured_image_id || null, parent_id || null, menu_order || 0, status || 'draft', userId, publishedAt]
     );
 
     const [newPost] = await db.query<RowDataPacket[]>(

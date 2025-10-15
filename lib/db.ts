@@ -8,6 +8,7 @@ const dbConfig = {
   user: process.env.DB_USER || 'root',
   password: process.env.DB_PASSWORD || '',
   database: process.env.DB_NAME || 'nextcms',
+  charset: 'utf8mb4',
 };
 
 // Wrapper that creates a connection, runs the query, and closes it

@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 const settingsTabs = [
   { name: 'General', href: '/admin/settings', exact: true },
   { name: 'Media', href: '/admin/settings/media' },
+  { name: 'Post Types', href: '/admin/settings/post-types' },
 ];
 
 export default function SettingsLayout({

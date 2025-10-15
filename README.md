@@ -2,13 +2,17 @@
 
 A complete Content Management System built with Next.js 14, Tailwind CSS, and MySQL - similar to WordPress.
 
-## Current Version: 1.0.2
+## Current Version: 1.1.0
 
 See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
 
 ## Features
 
-- 📝 **Posts & Pages Management** - Create and manage blog posts and static pages
+- 📝 **Unified Content System** 
+  - Custom post types (posts, pages, portfolios, products, events, etc.)
+  - Hierarchical support for parent/child relationships
+  - Configurable features per post type (title, content, excerpt, featured image, categories)
+  - Built-in post types: Posts (blog) and Pages (static content)
 - 🏷️ **Categories** - Organize posts with categories and inline category creation
 - 🖼️ **Advanced Media Library** 
   - WordPress-style automatic image resizing with multiple size variants
@@ -224,6 +228,8 @@ npm start
 
 Comprehensive guides for various features:
 
+- [CUSTOM_POST_TYPES.md](CUSTOM_POST_TYPES.md) - Creating and managing custom post types
+- [MIGRATION_GUIDE.md](MIGRATION_GUIDE.md) - Migrating from v1.0.2 to v1.0.3 (Pages to Post Types)
 - [IMAGE_SYSTEM.md](IMAGE_SYSTEM.md) - WordPress-style image handling and sizing
 - [IMAGE_CROP_STYLES.md](IMAGE_CROP_STYLES.md) - Image crop and fit strategies
 - [IMAGE_REGENERATION.md](IMAGE_REGENERATION.md) - Regenerating image sizes

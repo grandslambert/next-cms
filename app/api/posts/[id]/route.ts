@@ -42,7 +42,7 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { title, content, excerpt, featured_image_id, status } = body;
+    const { title, content, excerpt, featured_image_id, status, parent_id, menu_order } = body;
 
     if (!title) {
       return NextResponse.json({ error: 'Title is required' }, { status: 400 });
@@ -53,9 +53,9 @@ export async function PUT(
 
     await db.query<ResultSetHeader>(
       `UPDATE posts 
-       SET title = ?, slug = ?, content = ?, excerpt = ?, featured_image_id = ?, status = ?, published_at = ?
+       SET title = ?, slug = ?, content = ?, excerpt = ?, featured_image_id = ?, parent_id = ?, menu_order = ?, status = ?, published_at = ?
        WHERE id = ?`,
-      [title, slug, content || '', excerpt || '', featured_image_id || null, status || 'draft', publishedAt, params.id]
+      [title, slug, content || '', excerpt || '', featured_image_id || null, parent_id || null, menu_order || 0, status || 'draft', publishedAt, params.id]
     );
 
     const [updatedPost] = await db.query<RowDataPacket[]>(

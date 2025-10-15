@@ -15,14 +15,35 @@ CREATE TABLE IF NOT EXISTS users (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
--- Posts table
+-- Post Types table
+CREATE TABLE IF NOT EXISTS post_types (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(100) UNIQUE NOT NULL,
+  label VARCHAR(255) NOT NULL,
+  singular_label VARCHAR(255) NOT NULL,
+  description TEXT,
+  icon VARCHAR(50),
+  supports JSON,
+  public BOOLEAN DEFAULT TRUE,
+  show_in_dashboard BOOLEAN DEFAULT TRUE,
+  hierarchical BOOLEAN DEFAULT FALSE,
+  menu_position INT DEFAULT 5,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_name (name)
+);
+
+-- Posts table (unified for all post types including pages)
 CREATE TABLE IF NOT EXISTS posts (
   id INT AUTO_INCREMENT PRIMARY KEY,
+  post_type VARCHAR(100) DEFAULT 'post',
   title VARCHAR(255) NOT NULL,
   slug VARCHAR(255) UNIQUE NOT NULL,
   content TEXT,
   excerpt TEXT,
   featured_image_id INT,
+  parent_id INT NULL,
+  menu_order INT DEFAULT 0,
   status ENUM('draft', 'published', 'trash') DEFAULT 'draft',
   author_id INT NOT NULL,
   published_at TIMESTAMP NULL,
@@ -30,31 +51,17 @@ CREATE TABLE IF NOT EXISTS posts (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY (featured_image_id) REFERENCES media(id) ON DELETE SET NULL,
+  FOREIGN KEY (parent_id) REFERENCES posts(id) ON DELETE SET NULL,
   INDEX idx_slug (slug),
   INDEX idx_status (status),
+  INDEX idx_post_type (post_type),
+  INDEX idx_parent_id (parent_id),
   INDEX idx_published_at (published_at)
 );
 
--- Pages table
-CREATE TABLE IF NOT EXISTS pages (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  title VARCHAR(255) NOT NULL,
-  slug VARCHAR(255) UNIQUE NOT NULL,
-  content TEXT,
-  featured_image_id INT,
-  status ENUM('draft', 'published', 'trash') DEFAULT 'draft',
-  author_id INT NOT NULL,
-  parent_id INT NULL,
-  menu_order INT DEFAULT 0,
-  published_at TIMESTAMP NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE CASCADE,
-  FOREIGN KEY (parent_id) REFERENCES pages(id) ON DELETE SET NULL,
-  FOREIGN KEY (featured_image_id) REFERENCES media(id) ON DELETE SET NULL,
-  INDEX idx_slug (slug),
-  INDEX idx_status (status)
-);
+-- Pages table (DEPRECATED - Pages are now managed as post_type='page' in posts table)
+-- This table can be dropped after migration:
+-- DROP TABLE IF EXISTS pages;
 
 -- Media table
 CREATE TABLE IF NOT EXISTS media (
@@ -111,6 +118,19 @@ CREATE TABLE IF NOT EXISTS settings (
 INSERT INTO users (username, first_name, last_name, email, password, role) 
 VALUES ('admin', 'Admin', 'User', 'admin@example.com', '$2a$10$1llDVX4S7vKlcibiDrrZuespn.U1vHjrhrktHt7fnYSaLqp1cb.Yu', 'admin')
 ON DUPLICATE KEY UPDATE email = email;
+
+-- Insert default post types
+INSERT INTO post_types (name, label, singular_label, description, icon, supports, show_in_dashboard, hierarchical, menu_position) 
+VALUES 
+  ('post', 'Posts', 'Post', 'Regular blog posts', '📝', 
+   '{"title": true, "content": true, "excerpt": true, "featured_image": true, "categories": true}',
+   TRUE, FALSE, 5),
+  ('page', 'Pages', 'Page', 'Static pages', '📄',
+   '{"title": true, "content": true, "featured_image": true, "categories": false}',
+   TRUE, TRUE, 10)
+ON DUPLICATE KEY UPDATE 
+  label = VALUES(label),
+  hierarchical = VALUES(hierarchical);
 
 -- Insert default settings
 INSERT INTO settings (setting_key, setting_value, setting_type) VALUES

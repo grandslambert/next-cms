@@ -5,6 +5,41 @@ All notable changes to Next CMS will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2025-10-15
+
+### Added
+- **Custom Post Types** (WordPress-style)
+  - Create custom content types (portfolios, products, events, testimonials, etc.)
+  - Settings → Post Types management interface
+  - Configure post type labels, icons, and menu positions
+  - Toggle features per post type (title, content, excerpt, featured image, categories)
+  - Option to show/hide post types in dashboard content summary
+  - **Hierarchical support** for parent/child relationships (like WordPress Pages)
+  - Parent selector and menu order for hierarchical post types
+  - Dynamic admin sidebar menu items based on registered post types
+  - Separate admin pages for each custom post type
+  - Post type-specific create and edit interfaces
+  - API endpoints for post type CRUD operations
+  - Database migration script for existing installations
+  - Cannot delete default "post" type or types with existing content
+  - Slug validation (lowercase, alphanumeric, underscores only)
+  - UTF8MB4 charset support for emoji icons
+
+### Changed
+- **Unified Content System**
+  - Pages are now a custom post type (`post_type = 'page'`) instead of separate table
+  - All content (posts, pages, custom types) managed through unified posts table
+  - Removed hardcoded "Pages" menu item - now handled as custom post type
+  - Migrated existing pages to posts table with post_type = 'page'
+  - Pages post type is hierarchical by default
+  - Removed legacy `/admin/pages` and `/api/pages` routes
+
+### Breaking Changes
+- **Pages Table Deprecated**: Pages are now in the posts table with `post_type = 'page'`
+- **API Changes**: Use `/api/posts?post_type=page` instead of `/api/pages`
+- **Migration Required**: Run `scripts/migrate-pages-to-posts.js` for existing installations
+- **Pages Table**: Can be dropped after confirming migration success: `DROP TABLE pages;`
+
 ## [1.0.2] - 2025-10-15
 
 ### Added

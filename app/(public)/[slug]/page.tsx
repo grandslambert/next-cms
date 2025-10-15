@@ -9,10 +9,10 @@ async function getPage(slug: string) {
     const [rows] = await db.query<RowDataPacket[]>(
       `SELECT p.*, CONCAT(u.first_name, ' ', u.last_name) as author_name,
               m.url as featured_image, m.sizes as featured_image_sizes
-       FROM pages p 
+       FROM posts p 
        LEFT JOIN users u ON p.author_id = u.id
        LEFT JOIN media m ON p.featured_image_id = m.id
-       WHERE p.slug = ? AND p.status = 'published'`,
+       WHERE p.slug = ? AND p.post_type = 'page' AND p.status = 'published'`,
       [slug]
     );
     return rows[0] || null;
