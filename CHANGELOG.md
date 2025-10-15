@@ -5,6 +5,49 @@ All notable changes to Next CMS will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2025-10-15
+
+### Added
+- **Custom Taxonomies System** (WordPress-style)
+  - Create custom taxonomy types (hierarchical or flat)
+  - Built-in taxonomies: Categories (hierarchical), Tags (flat)
+  - Assign taxonomies to specific post types
+  - Complete term management with images and hierarchy
+  - Dynamic sidebar integration for taxonomies
+  - Settings → Taxonomies page for taxonomy type management
+  - Individual taxonomy term management pages (`/admin/taxonomy/[slug]`)
+  - Term relationships with usage counts
+  - Support for parent/child term relationships (hierarchical)
+  - Media selector for taxonomy term images
+- **Database Schema**
+  - New `taxonomies` table for taxonomy definitions
+  - New `terms` table for taxonomy terms (replaces categories)
+  - New `term_relationships` table for post-term associations
+  - New `post_type_taxonomies` table for post type-taxonomy assignments
+- **API Routes**
+  - `/api/taxonomies` - CRUD for taxonomy types
+  - `/api/taxonomies/[id]` - Individual taxonomy operations
+  - `/api/terms` - CRUD for terms with taxonomy filtering
+  - `/api/terms/[id]` - Individual term operations
+  - `/api/posts/[id]/terms` - Manage post-term relationships
+  - `/api/post-types/[id]/taxonomies` - Assign taxonomies to post types
+- **WYSIWYG Content Styling**
+  - Comprehensive `.content-body` CSS class for public pages
+  - Proper heading styles (h1-h6) with appropriate sizes
+  - Styled paragraphs, lists, blockquotes, code blocks, tables
+  - Link hover effects and inline formatting
+  - Responsive images with rounded corners
+
+### Changed
+- Categories system moved to taxonomy framework
+- Sidebar now dynamically loads taxonomies based on `show_in_menu` setting
+- Removed hardcoded "Categories" menu item (now loaded from taxonomies)
+- Post types can now select which taxonomies they support
+- Taxonomy menu items get automatic icons (🏷️ hierarchical, 🔖 flat)
+
+### Fixed
+- Public pages now properly display formatted content from WYSIWYG editor
+
 ## [1.1.2] - 2025-10-15
 
 ### Added

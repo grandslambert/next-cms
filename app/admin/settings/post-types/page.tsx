@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import toast from 'react-hot-toast';
@@ -17,7 +17,6 @@ interface PostType {
     content?: boolean;
     excerpt?: boolean;
     featured_image?: boolean;
-    categories?: boolean;
   };
   menu_position: number;
 }
@@ -39,9 +38,9 @@ export default function PostTypesSettings() {
       content: true,
       excerpt: true,
       featured_image: true,
-      categories: true,
     },
   });
+  const [selectedTaxonomies, setSelectedTaxonomies] = useState<number[]>([]);
 
   const queryClient = useQueryClient();
 
@@ -51,6 +50,25 @@ export default function PostTypesSettings() {
       const res = await axios.get('/api/post-types');
       return res.data;
     },
+  });
+
+  const { data: taxonomiesData } = useQuery({
+    queryKey: ['taxonomies'],
+    queryFn: async () => {
+      const res = await axios.get('/api/taxonomies');
+      return res.data;
+    },
+  });
+
+  // Fetch assigned taxonomies when editing
+  const { data: assignedTaxonomies } = useQuery({
+    queryKey: ['post-type-taxonomies', editingPostType?.id],
+    queryFn: async () => {
+      if (!editingPostType?.id) return { taxonomies: [] };
+      const res = await axios.get(`/api/post-types/${editingPostType.id}/taxonomies`);
+      return res.data;
+    },
+    enabled: !!editingPostType?.id,
   });
 
   const createMutation = useMutation({
@@ -69,14 +87,20 @@ export default function PostTypesSettings() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, ...data }: any) => {
+    mutationFn: async ({ id, taxonomies, ...data }: any) => {
       const res = await axios.put(`/api/post-types/${id}`, data);
+      // Also update taxonomies
+      if (taxonomies !== undefined) {
+        await axios.put(`/api/post-types/${id}/taxonomies`, { taxonomy_ids: taxonomies });
+      }
       return res.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['post-types'] });
+      queryClient.invalidateQueries({ queryKey: ['post-type-taxonomies'] });
       toast.success('Post type updated successfully');
       setEditingPostType(null);
+      setSelectedTaxonomies([]);
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.error || 'Failed to update post type');
@@ -116,12 +140,13 @@ export default function PostTypesSettings() {
         categories: true,
       },
     });
+    setSelectedTaxonomies([]);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (editingPostType) {
-      updateMutation.mutate({ id: editingPostType.id, ...formData });
+      updateMutation.mutate({ id: editingPostType.id, ...formData, taxonomies: selectedTaxonomies });
     } else {
       createMutation.mutate(formData);
     }
@@ -141,7 +166,15 @@ export default function PostTypesSettings() {
       supports: postType.supports || {},
     });
     setIsCreating(false);
+    // Taxonomies will be loaded by the query
   };
+
+  // Update selectedTaxonomies when assignedTaxonomies changes
+  React.useEffect(() => {
+    if (assignedTaxonomies?.taxonomies) {
+      setSelectedTaxonomies(assignedTaxonomies.taxonomies.map((t: any) => t.id));
+    }
+  }, [assignedTaxonomies]);
 
   const handleDelete = (postType: PostType) => {
     if (postType.name === 'post' || postType.name === 'page') {
@@ -386,7 +419,7 @@ export default function PostTypesSettings() {
                   Supports
                 </label>
                 <div className="space-y-2">
-                  {['title', 'content', 'excerpt', 'featured_image', 'categories'].map((feature) => (
+                  {['title', 'content', 'excerpt', 'featured_image'].map((feature) => (
                     <label key={feature} className="flex items-center">
                       <input
                         type="checkbox"
@@ -407,6 +440,38 @@ export default function PostTypesSettings() {
                   ))}
                 </div>
               </div>
+
+              {editingPostType && taxonomiesData?.taxonomies && taxonomiesData.taxonomies.length > 0 && (
+                <div className="border-t pt-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    Taxonomies
+                  </label>
+                  <div className="space-y-2 max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-3 bg-gray-50">
+                    {taxonomiesData.taxonomies.map((taxonomy: any) => (
+                      <label key={taxonomy.id} className="flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedTaxonomies.includes(taxonomy.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedTaxonomies([...selectedTaxonomies, taxonomy.id]);
+                            } else {
+                              setSelectedTaxonomies(selectedTaxonomies.filter(id => id !== taxonomy.id));
+                            }
+                          }}
+                          className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                        />
+                        <span className="ml-2 text-sm text-gray-700">
+                          {taxonomy.label} <span className="text-gray-500 text-xs">({taxonomy.hierarchical ? 'Hierarchical' : 'Flat'})</span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-xs text-gray-500">
+                    Select which taxonomies can be assigned to this post type
+                  </p>
+                </div>
+              )}
 
               <div className="flex space-x-3 pt-4">
                 <button

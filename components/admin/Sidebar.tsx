@@ -9,7 +9,6 @@ import { cn } from '@/lib/utils';
 
 const staticMenuItems = [
   { name: 'Dashboard', href: '/admin', icon: '📊', position: 0 },
-  { name: 'Categories', href: '/admin/categories', icon: '🏷️', position: 15 },
   { name: 'Media', href: '/admin/media', icon: '🖼️', position: 20 },
   { name: 'Users', href: '/admin/users', icon: '👥', position: 25 },
   { name: 'Settings', href: '/admin/settings', icon: '⚙️', position: 30 },
@@ -28,7 +27,16 @@ export default function Sidebar() {
     },
   });
 
-  // Build menu items including custom post types
+  // Fetch taxonomies
+  const { data: taxonomiesData } = useQuery({
+    queryKey: ['taxonomies'],
+    queryFn: async () => {
+      const res = await axios.get('/api/taxonomies');
+      return res.data;
+    },
+  });
+
+  // Build menu items including custom post types and taxonomies
   const menuItems = [...staticMenuItems];
   
   if (postTypesData?.postTypes) {
@@ -39,6 +47,19 @@ export default function Sidebar() {
         icon: postType.icon || '📄',
         position: postType.menu_position || 5,
       });
+    });
+  }
+
+  if (taxonomiesData?.taxonomies) {
+    taxonomiesData.taxonomies.forEach((taxonomy: any) => {
+      if (taxonomy.show_in_menu) {
+        menuItems.push({
+          name: taxonomy.label,
+          href: `/admin/taxonomy/${taxonomy.name}`,
+          icon: taxonomy.hierarchical ? '🏷️' : '🔖',
+          position: taxonomy.menu_position || 15,
+        });
+      }
     });
   }
 
@@ -88,7 +109,7 @@ export default function Sidebar() {
           <span>Logout</span>
         </button>
                     <div className="text-center text-xs text-gray-500 mt-2">
-                      Next CMS v1.1.2
+                      Next CMS v1.2.0
                     </div>
       </div>
     </aside>

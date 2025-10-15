@@ -8,6 +8,7 @@ const settingsTabs = [
   { name: 'General', href: '/admin/settings', exact: true },
   { name: 'Media', href: '/admin/settings/media' },
   { name: 'Post Types', href: '/admin/settings/post-types' },
+  { name: 'Taxonomies', href: '/admin/settings/taxonomies' },
 ];
 
 export default function SettingsLayout({
