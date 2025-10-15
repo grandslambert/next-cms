@@ -52,7 +52,7 @@ export default async function PostPage({ params }: { params: { slug: string } })
       </header>
 
       <div 
-        className="prose prose-lg max-w-none"
+        className="content-body prose-lg max-w-none"
         dangerouslySetInnerHTML={{ __html: post.content }}
       />
     </article>

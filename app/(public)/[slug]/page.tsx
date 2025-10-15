@@ -47,7 +47,7 @@ export default async function PageView({ params }: { params: { slug: string } })
       </header>
 
       <div 
-        className="prose prose-lg max-w-none"
+        className="content-body prose-lg max-w-none"
         dangerouslySetInnerHTML={{ __html: page.content }}
       />
     </article>
