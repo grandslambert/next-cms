@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const status = searchParams.get('status');
     const postType = searchParams.get('post_type') || 'post';
+    const search = searchParams.get('search');
     const limit = parseInt(searchParams.get('limit') || '10');
     const offset = parseInt(searchParams.get('offset') || '0');
 
@@ -43,6 +44,13 @@ export async function GET(request: NextRequest) {
       params.push('trash');
     }
 
+    // Add search filter
+    if (search && search.trim() !== '') {
+      query += ' AND (p.title LIKE ? OR p.content LIKE ?)';
+      const searchTerm = `%${search.trim()}%`;
+      params.push(searchTerm, searchTerm);
+    }
+
     query += ' ORDER BY p.created_at DESC LIMIT ? OFFSET ?';
     params.push(limit, offset);
 
@@ -67,6 +75,13 @@ export async function GET(request: NextRequest) {
       countParams.push('trash');
     }
 
+    // Add search filter to count query
+    if (search && search.trim() !== '') {
+      countQuery += ' AND (title LIKE ? OR content LIKE ?)';
+      const searchTerm = `%${search.trim()}%`;
+      countParams.push(searchTerm, searchTerm);
+    }
+
     const [countRows] = await db.query<RowDataPacket[]>(countQuery, countParams);
     const total = countRows[0].total;
 
@@ -85,21 +100,40 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { title, slug: customSlug, content, excerpt, featured_image_id, status, post_type, parent_id, menu_order } = body;
+    const { title, slug: customSlug, content, excerpt, featured_image_id, status, post_type, parent_id, menu_order, scheduled_publish_at } = body;
 
     if (!title) {
       return NextResponse.json({ error: 'Title is required' }, { status: 400 });
     }
 
+    const permissions = (session.user as any).permissions || {};
+
+    // Check if user can publish (required for both immediate and scheduled publishing)
+    if ((status === 'published' || status === 'scheduled') && !permissions.can_publish) {
+      return NextResponse.json({ error: 'You do not have permission to publish posts' }, { status: 403 });
+    }
+
     // Use custom slug if provided, otherwise generate from title
     const slug = customSlug || slugify(title);
     const userId = (session.user as any).id;
-    const publishedAt = status === 'published' ? new Date() : null;
+    
+    // Handle published_at and scheduled_publish_at based on status
+    let publishedAt = null;
+    let scheduledPublishAt = null;
+    
+    if (status === 'published') {
+      publishedAt = new Date();
+    } else if (status === 'scheduled') {
+      scheduledPublishAt = scheduled_publish_at ? new Date(scheduled_publish_at) : null;
+      if (!scheduledPublishAt || scheduledPublishAt <= new Date()) {
+        return NextResponse.json({ error: 'Scheduled publish date must be in the future' }, { status: 400 });
+      }
+    }
 
     const [result] = await db.query<ResultSetHeader>(
-      `INSERT INTO posts (post_type, title, slug, content, excerpt, featured_image_id, parent_id, menu_order, status, author_id, published_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [post_type || 'post', title, slug, content || '', excerpt || '', featured_image_id || null, parent_id || null, menu_order || 0, status || 'draft', userId, publishedAt]
+      `INSERT INTO posts (post_type, title, slug, content, excerpt, featured_image_id, parent_id, menu_order, status, author_id, published_at, scheduled_publish_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [post_type || 'post', title, slug, content || '', excerpt || '', featured_image_id || null, parent_id || null, menu_order || 0, status || 'draft', userId, publishedAt, scheduledPublishAt]
     );
 
     const [newPost] = await db.query<RowDataPacket[]>(

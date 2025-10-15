@@ -11,6 +11,9 @@ export default function GeneralSettingsPage() {
   const [siteName, setSiteName] = useState('');
   const [siteTagline, setSiteTagline] = useState('');
   const [siteDescription, setSiteDescription] = useState('');
+  const [maxRevisions, setMaxRevisions] = useState('10');
+  const [sessionTimeoutValue, setSessionTimeoutValue] = useState('24');
+  const [sessionTimeoutUnit, setSessionTimeoutUnit] = useState<'minutes' | 'hours' | 'days'>('hours');
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
@@ -26,6 +29,24 @@ export default function GeneralSettingsPage() {
       setSiteName(data.settings.site_name || '');
       setSiteTagline(data.settings.site_tagline || '');
       setSiteDescription(data.settings.site_description || '');
+      setMaxRevisions(data.settings.max_revisions || '10');
+      
+      // Convert stored minutes to appropriate unit for display
+      const minutes = Number.parseInt(data.settings.session_timeout || '1440');
+      
+      if (minutes % 1440 === 0) {
+        // Divisible by 1440 = show as days
+        setSessionTimeoutValue((minutes / 1440).toString());
+        setSessionTimeoutUnit('days');
+      } else if (minutes % 60 === 0) {
+        // Divisible by 60 = show as hours
+        setSessionTimeoutValue((minutes / 60).toString());
+        setSessionTimeoutUnit('hours');
+      } else {
+        // Show as minutes
+        setSessionTimeoutValue(minutes.toString());
+        setSessionTimeoutUnit('minutes');
+      }
     }
   }, [data]);
 
@@ -45,10 +66,21 @@ export default function GeneralSettingsPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Convert session timeout to minutes
+    let timeoutInMinutes = Number.parseInt(sessionTimeoutValue);
+    if (sessionTimeoutUnit === 'hours') {
+      timeoutInMinutes *= 60;
+    } else if (sessionTimeoutUnit === 'days') {
+      timeoutInMinutes *= 1440;
+    }
+    
     updateMutation.mutate({
       site_name: siteName,
       site_tagline: siteTagline,
       site_description: siteDescription,
+      max_revisions: maxRevisions,
+      session_timeout: timeoutInMinutes.toString(),
     });
   };
 
@@ -117,6 +149,56 @@ export default function GeneralSettingsPage() {
           <p className="text-sm text-gray-500 mt-1">
             A longer description for SEO and site information
           </p>
+        </div>
+
+        <div className="border-t pt-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Content Management</h2>
+          
+          <div className="mb-6">
+            <label htmlFor="max-revisions" className="block text-sm font-medium text-gray-700 mb-2">
+              Maximum Revisions Per Post
+            </label>
+            <input
+              id="max-revisions"
+              type="number"
+              min="0"
+              max="100"
+              value={maxRevisions}
+              onChange={(e) => setMaxRevisions(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+            <p className="text-sm text-gray-500 mt-1">
+              Number of revisions to keep for each post. Set to 0 to disable revisions. Older revisions will be automatically deleted.
+            </p>
+          </div>
+
+          <div>
+            <label htmlFor="session-timeout" className="block text-sm font-medium text-gray-700 mb-2">
+              Session Timeout
+            </label>
+            <div className="flex gap-2">
+              <input
+                id="session-timeout"
+                type="number"
+                min="1"
+                value={sessionTimeoutValue}
+                onChange={(e) => setSessionTimeoutValue(e.target.value)}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+              <select
+                value={sessionTimeoutUnit}
+                onChange={(e) => setSessionTimeoutUnit(e.target.value as 'minutes' | 'hours' | 'days')}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+              >
+                <option value="minutes">Minutes</option>
+                <option value="hours">Hours</option>
+                <option value="days">Days</option>
+              </select>
+            </div>
+            <p className="text-sm text-gray-500 mt-1">
+              How long users stay logged in before automatic logout. Default: 24 hours. After changing this setting, run <code className="bg-gray-100 px-1 py-0.5 rounded text-xs">node scripts/sync-session-timeout.js</code> and restart the server.
+            </p>
+          </div>
         </div>
 
         <div className="pt-4">

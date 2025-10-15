@@ -44,9 +44,9 @@ export async function PUT(
     const userId = (session.user as any).id;
     const permissions = (session.user as any).permissions || {};
 
-    // Check if post exists and get author
+    // Check if post exists and get author + current content for revision
     const [existingPost] = await db.query<RowDataPacket[]>(
-      'SELECT author_id, post_type FROM posts WHERE id = ?',
+      'SELECT * FROM posts WHERE id = ?',
       [params.id]
     );
 
@@ -64,14 +64,14 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { title, slug: customSlug, content, excerpt, featured_image_id, status, parent_id, menu_order, author_id } = body;
+    const { title, slug: customSlug, content, excerpt, featured_image_id, status, parent_id, menu_order, author_id, scheduled_publish_at } = body;
 
     if (!title) {
       return NextResponse.json({ error: 'Title is required' }, { status: 400 });
     }
 
-    // Check if user can publish
-    if (status === 'published' && !permissions.can_publish) {
+    // Check if user can publish (required for both immediate and scheduled publishing)
+    if ((status === 'published' || status === 'scheduled') && !permissions.can_publish) {
       return NextResponse.json({ error: 'You do not have permission to publish posts' }, { status: 403 });
     }
 
@@ -84,11 +84,23 @@ export async function PUT(
 
     // Use custom slug if provided, otherwise generate from title
     const slug = customSlug || slugify(title);
-    const publishedAt = status === 'published' ? new Date() : null;
+    
+    // Handle published_at and scheduled_publish_at based on status
+    let publishedAt = null;
+    let scheduledPublishAt = null;
+    
+    if (status === 'published') {
+      publishedAt = new Date();
+    } else if (status === 'scheduled') {
+      scheduledPublishAt = scheduled_publish_at ? new Date(scheduled_publish_at) : null;
+      if (!scheduledPublishAt || scheduledPublishAt <= new Date()) {
+        return NextResponse.json({ error: 'Scheduled publish date must be in the future' }, { status: 400 });
+      }
+    }
 
     // Build dynamic update query
-    const updateFields = ['title = ?', 'slug = ?', 'content = ?', 'excerpt = ?', 'featured_image_id = ?', 'parent_id = ?', 'menu_order = ?', 'status = ?', 'published_at = ?'];
-    const updateValues: any[] = [title, slug, content || '', excerpt || '', featured_image_id || null, parent_id || null, menu_order || 0, status || 'draft', publishedAt];
+    const updateFields = ['title = ?', 'slug = ?', 'content = ?', 'excerpt = ?', 'featured_image_id = ?', 'parent_id = ?', 'menu_order = ?', 'status = ?', 'published_at = ?', 'scheduled_publish_at = ?'];
+    const updateValues: any[] = [title, slug, content || '', excerpt || '', featured_image_id || null, parent_id || null, menu_order || 0, status || 'draft', publishedAt, scheduledPublishAt];
 
     // Add author_id to update if provided and user has permission
     if (author_id && permissions.can_reassign) {
@@ -97,6 +109,47 @@ export async function PUT(
     }
 
     updateValues.push(params.id); // Add the post ID for WHERE clause
+
+    // Get max_revisions setting
+    const [settingsResult] = await db.query<RowDataPacket[]>(
+      'SELECT setting_value FROM settings WHERE setting_key = ?',
+      ['max_revisions']
+    );
+    const maxRevisions = settingsResult.length > 0 ? parseInt(settingsResult[0].setting_value) : 10;
+
+    // Save revision before updating (only if revisions are enabled)
+    if (maxRevisions > 0) {
+      // Get current custom fields
+      const [currentMeta] = await db.query<RowDataPacket[]>(
+        'SELECT meta_key, meta_value FROM post_meta WHERE post_id = ?',
+        [params.id]
+      );
+      
+      const customFieldsObj: Record<string, string> = {};
+      currentMeta.forEach((meta: any) => {
+        customFieldsObj[meta.meta_key] = meta.meta_value;
+      });
+
+      await db.query<ResultSetHeader>(
+        'INSERT INTO post_revisions (post_id, title, content, excerpt, custom_fields, author_id) VALUES (?, ?, ?, ?, ?, ?)',
+        [params.id, post.title, post.content, post.excerpt, JSON.stringify(customFieldsObj), userId]
+      );
+
+      // Clean up old revisions - keep only the most recent maxRevisions
+      await db.query<ResultSetHeader>(
+        `DELETE FROM post_revisions 
+         WHERE post_id = ? 
+         AND id NOT IN (
+           SELECT id FROM (
+             SELECT id FROM post_revisions 
+             WHERE post_id = ? 
+             ORDER BY created_at DESC 
+             LIMIT ?
+           ) AS keep_revisions
+         )`,
+        [params.id, params.id, maxRevisions]
+      );
+    }
 
     await db.query<ResultSetHeader>(
       `UPDATE posts SET ${updateFields.join(', ')} WHERE id = ?`,

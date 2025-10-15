@@ -28,6 +28,20 @@ CREATE TABLE IF NOT EXISTS users (
   FOREIGN KEY (role_id) REFERENCES roles(id)
 );
 
+-- User Meta table (for user preferences and settings)
+CREATE TABLE IF NOT EXISTS user_meta (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  meta_key VARCHAR(255) NOT NULL,
+  meta_value TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  INDEX idx_user_id (user_id),
+  INDEX idx_meta_key (meta_key),
+  UNIQUE KEY unique_user_meta (user_id, meta_key)
+);
+
 -- Post Types table
 CREATE TABLE IF NOT EXISTS post_types (
   id INT AUTO_INCREMENT PRIMARY KEY,
@@ -60,9 +74,10 @@ CREATE TABLE IF NOT EXISTS posts (
   featured_image_id INT,
   parent_id INT NULL,
   menu_order INT DEFAULT 0,
-  status ENUM('draft', 'pending', 'published', 'trash') DEFAULT 'draft',
+  status ENUM('draft', 'pending', 'published', 'scheduled', 'trash') DEFAULT 'draft',
   author_id INT NOT NULL,
   published_at TIMESTAMP NULL,
+  scheduled_publish_at TIMESTAMP NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -78,6 +93,36 @@ CREATE TABLE IF NOT EXISTS posts (
 -- Pages table (DEPRECATED - Pages are now managed as post_type='page' in posts table)
 -- This table can be dropped after migration:
 -- DROP TABLE IF EXISTS pages;
+
+-- Post Revisions table
+CREATE TABLE IF NOT EXISTS post_revisions (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  post_id INT NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  content TEXT,
+  excerpt TEXT,
+  custom_fields JSON,
+  author_id INT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE,
+  FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE CASCADE,
+  INDEX idx_post_id (post_id),
+  INDEX idx_created_at (created_at)
+);
+
+-- Post Meta (Custom Fields) table
+CREATE TABLE IF NOT EXISTS post_meta (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  post_id INT NOT NULL,
+  meta_key VARCHAR(255) NOT NULL,
+  meta_value TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE,
+  INDEX idx_post_id (post_id),
+  INDEX idx_meta_key (meta_key),
+  UNIQUE KEY unique_post_meta (post_id, meta_key)
+);
 
 -- Media table
 CREATE TABLE IF NOT EXISTS media (

@@ -9,6 +9,12 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import RichTextEditor from '@/components/admin/RichTextEditor';
 import MediaSelector from '@/components/admin/MediaSelector';
+import PublishBox from '@/components/admin/post-editor/PublishBox';
+import FeaturedImageBox from '@/components/admin/post-editor/FeaturedImageBox';
+import PageAttributesBox from '@/components/admin/post-editor/PageAttributesBox';
+import CustomFieldsBox from '@/components/admin/post-editor/CustomFieldsBox';
+import TaxonomyBox from '@/components/admin/post-editor/TaxonomyBox';
+import RevisionsBox from '@/components/admin/post-editor/RevisionsBox';
 
 interface PostTypeFormProps {
   readonly postTypeSlug: string;
@@ -80,10 +86,10 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
   const [featuredImageId, setFeaturedImageId] = useState<number | null>(null);
   const [featuredImageUrl, setFeaturedImageUrl] = useState('');
   const [showMediaModal, setShowMediaModal] = useState(false);
-  const [newTermName, setNewTermName] = useState<{[taxonomyId: number]: string}>({});
-  const [creatingTerm, setCreatingTerm] = useState<number | null>(null);
   const [slugEdited, setSlugEdited] = useState(false);
   const [previewUrl, setPreviewUrl] = useState('');
+  const [customFields, setCustomFields] = useState<Array<{meta_key: string, meta_value: string}>>([]);
+  const [scheduledPublishAt, setScheduledPublishAt] = useState<string>('');
 
   // Check permission for this specific post type
   useEffect(() => {
@@ -158,6 +164,36 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
     enabled: permissions.can_reassign === true,
   });
 
+  // Fetch revisions for this post (edit mode only)
+  const { data: revisionsData, isLoading: revisionsLoading } = useQuery({
+    queryKey: ['post-revisions', postId],
+    queryFn: async () => {
+      const res = await axios.get(`/api/posts/${postId}/revisions`);
+      return res.data;
+    },
+    enabled: isEdit && !!postId,
+  });
+
+  // Fetch custom fields for this post (edit mode only)
+  const { data: customFieldsData } = useQuery({
+    queryKey: ['post-meta', postId],
+    queryFn: async () => {
+      const res = await axios.get(`/api/posts/${postId}/meta`);
+      return res.data;
+    },
+    enabled: isEdit && !!postId,
+  });
+
+  // Load custom fields when data is fetched
+  useEffect(() => {
+    if (customFieldsData?.meta) {
+      setCustomFields(customFieldsData.meta.map((m: any) => ({
+        meta_key: m.meta_key,
+        meta_value: m.meta_value
+      })));
+    }
+  }, [customFieldsData]);
+
   // Fetch terms for this post (edit mode only)
   const { data: postTermsData } = useQuery({
     queryKey: ['post-terms', postId],
@@ -207,6 +243,14 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
       setFeaturedImageId(data.post.featured_image_id || null);
       setFeaturedImageUrl(data.post.featured_image_url || '');
       setSlugEdited(true); // Existing posts already have a slug
+      
+      // Load scheduled publish date if exists
+      if (data.post.scheduled_publish_at) {
+        const date = new Date(data.post.scheduled_publish_at);
+        // Format for datetime-local input: YYYY-MM-DDThh:mm
+        const formatted = date.toISOString().slice(0, 16);
+        setScheduledPublishAt(formatted);
+      }
     }
   }, [data]);
 
@@ -320,6 +364,11 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
         });
         await Promise.all(termPromises);
       }
+
+      // Update custom fields
+      await axios.put(`/api/posts/${postId}/meta`, {
+        meta: customFields.filter(cf => cf.meta_key.trim() !== '')
+      });
       
       return res.data;
     },
@@ -328,6 +377,8 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
       queryClient.invalidateQueries({ queryKey: ['post', postId] });
       queryClient.invalidateQueries({ queryKey: ['posts', postTypeSlug] });
       queryClient.invalidateQueries({ queryKey: ['post-terms', postId] });
+      queryClient.invalidateQueries({ queryKey: ['post-revisions', postId] });
+      queryClient.invalidateQueries({ queryKey: ['post-meta', postId] });
       
       const message = data.post?.status === 'published' 
         ? `${postTypeData?.singular_label || 'Item'} published successfully!`
@@ -355,6 +406,55 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
       toast.error(errorMessage, { duration: 5000 });
     },
   });
+
+  const restoreRevisionMutation = useMutation({
+    mutationFn: async (revisionId: number) => {
+      const res = await axios.post(`/api/posts/${postId}/revisions/${revisionId}/restore`);
+      return res.data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['post', postId] });
+      queryClient.invalidateQueries({ queryKey: ['post-revisions', postId] });
+      queryClient.invalidateQueries({ queryKey: ['post-meta', postId] });
+      
+      // Update local state with restored content
+      if (data.post) {
+        setTitle(data.post.title || '');
+        setContent(data.post.content || '');
+        setExcerpt(data.post.excerpt || '');
+      }
+      
+      toast.success('Revision restored successfully');
+    },
+    onError: () => {
+      toast.error('Failed to restore revision');
+    },
+  });
+
+  const handleRestoreRevision = (revisionId: number) => {
+    if (confirm('Are you sure you want to restore this revision? Your current changes will be saved as a new revision.')) {
+      restoreRevisionMutation.mutate(revisionId);
+    }
+  };
+
+  const handleAddCustomField = () => {
+    setCustomFields([...customFields, { meta_key: '', meta_value: '' }]);
+  };
+
+  const handleRemoveCustomField = (index: number) => {
+    setCustomFields(customFields.filter((_, i) => i !== index));
+  };
+
+  const handleCustomFieldChange = (index: number, field: 'meta_key' | 'meta_value', value: string) => {
+    const updated = [...customFields];
+    // Replace spaces with underscores and convert to lowercase in field names
+    if (field === 'meta_key') {
+      updated[index][field] = value.toLowerCase().replace(/\s+/g, '_');
+    } else {
+      updated[index][field] = value;
+    }
+    setCustomFields(updated);
+  };
 
   const handleSubmit = (e: React.FormEvent, publishStatus?: string) => {
     e.preventDefault();
@@ -385,6 +485,15 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
       data.author_id = authorId;
     }
 
+    // Include scheduled_publish_at if status is scheduled
+    if (finalStatus === 'scheduled') {
+      if (!scheduledPublishAt) {
+        toast.error('Please select a scheduled publish date/time', { duration: 3000 });
+        return;
+      }
+      data.scheduled_publish_at = scheduledPublishAt;
+    }
+
     if (isEdit) {
       updateMutation.mutate(data);
       // Update status immediately for UI feedback
@@ -406,50 +515,8 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
     handleSubmit(e, 'pending');
   };
 
-  const handleCreateTerm = async (taxonomyId: number) => {
-    const name = newTermName[taxonomyId]?.trim();
-    if (!name) {
-      toast.error('Please enter a term name', { duration: 3000 });
-      return;
-    }
-
-    setCreatingTerm(taxonomyId);
-    try {
-      const res = await axios.post('/api/terms', {
-        taxonomy_id: taxonomyId,
-        name: name,
-      });
-
-      const newTerm = res.data.term;
-
-      // Add the new term to selectedTerms
-      setSelectedTerms((prev) => ({
-        ...prev,
-        [taxonomyId]: [...(prev[taxonomyId] || []), newTerm.id],
-      }));
-
-      // Clear the input
-      setNewTermName((prev) => ({
-        ...prev,
-        [taxonomyId]: '',
-      }));
-
-      // Refresh the terms list
-      if (allTermsData) {
-        const taxonomyData = allTermsData.find((t: any) => t.taxonomyId === taxonomyId);
-        if (taxonomyData) {
-          taxonomyData.terms.push(newTerm);
-        }
-      }
-
-      const taxonomyLabel = allTermsData?.find((t: any) => t.taxonomyId === taxonomyId)?.taxonomy?.singular_label || 'Term';
-      toast.success(`${taxonomyLabel} "${newTerm.name}" created and added`, { duration: 3000 });
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.error || 'Failed to create term';
-      toast.error(errorMessage, { duration: 4000 });
-    } finally {
-      setCreatingTerm(null);
-    }
+  const handleSchedule = (e: React.FormEvent) => {
+    handleSubmit(e, 'scheduled');
   };
 
   if (sessionStatus === 'loading' || isLoading || !postTypeData) {
@@ -630,228 +697,78 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
               />
             </div>
           )}
+
+          {isEdit && (
+            <CustomFieldsBox
+              customFields={customFields}
+              onAddField={handleAddCustomField}
+              onRemoveField={handleRemoveCustomField}
+              onFieldChange={handleCustomFieldChange}
+            />
+          )}
         </div>
 
         <div className="space-y-6">
           {postTypeData?.supports?.featured_image === true && (
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="font-semibold text-gray-900 mb-4">Featured Image</h3>
-              
-              {featuredImageUrl ? (
-                <div className="space-y-3">
-                  <img
-                    src={featuredImageUrl}
-                    alt="Featured"
-                    className="w-full h-48 object-cover rounded-lg"
-                  />
-                  <div className="flex space-x-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowMediaModal(true)}
-                      className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
-                    >
-                      Change
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setFeaturedImageId(null);
-                        setFeaturedImageUrl('');
-                      }}
-                      className="px-3 py-2 text-sm border border-red-300 text-red-700 rounded-lg hover:bg-red-50"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setShowMediaModal(true)}
-                  className="w-full px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-primary-500 hover:text-primary-600 transition-colors"
-                >
-                  Select Image
-                </button>
-              )}
-            </div>
+            <FeaturedImageBox
+              featuredImageUrl={featuredImageUrl}
+              onSelectImage={() => setShowMediaModal(true)}
+              onRemoveImage={() => {
+                setFeaturedImageId(null);
+                setFeaturedImageUrl('');
+              }}
+            />
           )}
 
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="font-semibold text-gray-900 mb-4">Publish</h3>
+          <PublishBox
+            status={status}
+            isEdit={isEdit}
+            isSaving={isSaving}
+            canPublish={permissions.can_publish === true}
+            scheduledPublishAt={scheduledPublishAt}
+            scheduledDate={data?.post?.scheduled_publish_at}
+            singularLabel={postTypeData.singular_label}
+            onScheduleChange={setScheduledPublishAt}
+            onSaveDraft={handleSaveDraft}
+            onPublish={handlePublish}
+            onSchedule={handleSchedule}
+            onSubmitForReview={handleSubmitForReview}
+          />
 
-            <div className="mb-4">
-              <p className="text-sm text-gray-600">
-                Status: <span className="font-medium">
-                  {status === 'published' ? 'Published' : status === 'pending' ? 'Pending Review' : 'Draft'}
-                </span>
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <button
-                type="button"
-                onClick={handleSaveDraft}
-                disabled={isSaving}
-                className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
-              >
-                Save as Draft
-              </button>
-              
-              {permissions.can_publish ? (
-                <button
-                  type="button"
-                  onClick={handlePublish}
-                  disabled={isSaving}
-                  className="w-full px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
-                >
-                  {isEdit && status === 'published' ? 'Update' : 'Publish'} {postTypeData.singular_label}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={handleSubmitForReview}
-                  disabled={isSaving}
-                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-                >
-                  Submit for Review
-                </button>
-              )}
-            </div>
-          </div>
-
-          {(!!postTypeData?.hierarchical || permissions.can_reassign) && (
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="font-semibold text-gray-900 mb-4">Page Attributes</h3>
-              
-              {permissions.can_reassign && isEdit && (
-                <div className="mb-4">
-                  <label htmlFor="post-author" className="block text-sm font-medium text-gray-700 mb-2">
-                    Author
-                  </label>
-                  <select
-                    id="post-author"
-                    value={authorId || ''}
-                    onChange={(e) => setAuthorId(e.target.value ? parseInt(e.target.value) : null)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  >
-                    {usersData?.users?.map((user: any) => (
-                      <option key={user.id} value={user.id}>
-                        {user.first_name} {user.last_name} ({user.email})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {!!postTypeData?.hierarchical && (
-                <>
-                  <div className="mb-4">
-                    <label htmlFor="post-parent" className="block text-sm font-medium text-gray-700 mb-2">
-                      Parent
-                    </label>
-                    <select
-                      id="post-parent"
-                      value={parentId || ''}
-                      onChange={(e) => setParentId(e.target.value ? parseInt(e.target.value) : null)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    >
-                      <option value="">No Parent (Top Level)</option>
-                      {allPostsData?.posts
-                        ?.filter((post: any) => !isEdit || post.id !== parseInt(postId || '0'))
-                        .map((post: any) => (
-                          <option key={post.id} value={post.id}>
-                            {post.title}
-                          </option>
-                        ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label htmlFor="post-order" className="block text-sm font-medium text-gray-700 mb-2">
-                      Order
-                    </label>
-                    <input
-                      id="post-order"
-                      type="number"
-                      value={menuOrder}
-                      onChange={(e) => setMenuOrder(parseInt(e.target.value) || 0)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                      min="0"
-                    />
-                    <p className="mt-1 text-xs text-gray-500">
-                      Lower numbers appear first
-                    </p>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
+          <PageAttributesBox
+            isHierarchical={!!postTypeData?.hierarchical}
+            canReassign={permissions.can_reassign === true}
+            isEdit={isEdit}
+            authorId={authorId}
+            parentId={parentId}
+            menuOrder={menuOrder}
+            allPosts={allPostsData?.posts || []}
+            currentPostId={postId}
+            users={usersData?.users || []}
+            onAuthorChange={setAuthorId}
+            onParentChange={setParentId}
+            onMenuOrderChange={setMenuOrder}
+          />
 
           {allTermsData && allTermsData.length > 0 && allTermsData.map((taxonomyData: any) => (
-            <div key={taxonomyData.taxonomyId} className="bg-white rounded-lg shadow p-6">
-              <h3 className="font-semibold text-gray-900 mb-4">{taxonomyData.taxonomy.label}</h3>
-              
-              <div className="space-y-2 max-h-64 overflow-y-auto mb-4">
-                {taxonomyData.terms.map((term: any) => (
-                  <label key={term.id} className="flex items-center cursor-pointer hover:bg-gray-50 p-2 rounded">
-                    <input
-                      type="checkbox"
-                      checked={(selectedTerms[taxonomyData.taxonomyId] || []).includes(term.id)}
-                      onChange={(e) => {
-                        setSelectedTerms((prev) => {
-                          const currentTerms = prev[taxonomyData.taxonomyId] || [];
-                          const newTerms = e.target.checked
-                            ? [...currentTerms, term.id]
-                            : currentTerms.filter((id) => id !== term.id);
-                          
-                          return {
-                            ...prev,
-                            [taxonomyData.taxonomyId]: newTerms,
-                          };
-                        });
-                      }}
-                      className="mr-3 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                    <span className="text-sm text-gray-700">{term.name}</span>
-                  </label>
-                ))}
-              </div>
-
-              <div className="pt-4 border-t border-gray-200">
-                <label htmlFor={`new-term-${taxonomyData.taxonomyId}`} className="block text-xs font-medium text-gray-700 mb-2">
-                  Add New {taxonomyData.taxonomy.singular_label}
-                </label>
-                <div className="flex space-x-2">
-                  <input
-                    id={`new-term-${taxonomyData.taxonomyId}`}
-                    type="text"
-                    value={newTermName[taxonomyData.taxonomyId] || ''}
-                    onChange={(e) => setNewTermName((prev) => ({
-                      ...prev,
-                      [taxonomyData.taxonomyId]: e.target.value,
-                    }))}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleCreateTerm(taxonomyData.taxonomyId);
-                      }
-                    }}
-                    className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    placeholder={`New ${taxonomyData.taxonomy.singular_label.toLowerCase()} name`}
-                    disabled={creatingTerm === taxonomyData.taxonomyId}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleCreateTerm(taxonomyData.taxonomyId)}
-                    disabled={creatingTerm === taxonomyData.taxonomyId}
-                    className="px-4 py-2 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50"
-                  >
-                    {creatingTerm === taxonomyData.taxonomyId ? 'Adding...' : 'Add'}
-                  </button>
-                </div>
-              </div>
-            </div>
+            <TaxonomyBox
+              key={taxonomyData.taxonomyId}
+              taxonomy={taxonomyData.taxonomy}
+              terms={taxonomyData.terms}
+              selectedTerms={selectedTerms[taxonomyData.taxonomyId] || []}
+              onTermsChange={(termIds) => setSelectedTerms(prev => ({ ...prev, [taxonomyData.taxonomyId]: termIds }))}
+              onTermAdded={() => queryClient.invalidateQueries({ queryKey: ['all-terms'] })}
+            />
           ))}
+
+          {isEdit && (
+            <RevisionsBox
+              revisions={revisionsData?.revisions || []}
+              isLoading={revisionsLoading}
+              isPending={restoreRevisionMutation.isPending}
+              onRestore={handleRestoreRevision}
+            />
+          )}
         </div>
       </form>
 

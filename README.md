@@ -2,7 +2,7 @@
 
 A complete Content Management System built with Next.js 14, Tailwind CSS, and MySQL - similar to WordPress.
 
-## Current Version: 1.3.1
+## Current Version: 1.3.3
 
 See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
 
@@ -16,6 +16,9 @@ See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
   - Trash system with restore and permanent delete capabilities
   - Bulk actions for managing multiple posts at once
   - Smart status filtering with real-time post counts
+  - Post revisions with configurable history limit and one-click restore
+  - Custom fields (post meta) for unlimited key-value data
+  - Scheduled publishing with cron job integration
 - 🏷️ **Flexible Taxonomy System** - Create custom taxonomies (categories, tags, etc.) for any post type with hierarchical support
 - 🖼️ **Advanced Media Library** 
   - WordPress-style automatic image resizing with multiple size variants
@@ -31,7 +34,14 @@ See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
   - Content workflow with pending review status
   - Author reassignment capability
   - Role-based admin interface visibility
-- ⚙️ **Settings System** - Configurable site name, tagline, and media settings
+- 🔍 **Advanced Post List Features**
+  - Powerful search across title and content (debounced)
+  - Column filters for title, author, status, taxonomies, and date
+  - Customizable columns with user-specific preferences
+  - Featured image thumbnails in list view
+  - Items per page selector (10, 25, 50, 100)
+  - Smart pagination with page numbers and navigation
+- ⚙️ **Settings System** - Configurable site name, tagline, media settings, revisions limit, and session timeout
 - 🎨 **Beautiful UI** - Modern, responsive interface with Tailwind CSS
 - ⚡ **Fast & SEO-Friendly** - Server-side rendering with Next.js 14
 - 🗄️ **MySQL Database** - Robust relational database for content storage
@@ -99,6 +109,9 @@ See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
 
    # Upload
    UPLOAD_DIR=./public/uploads
+
+   # Session timeout in seconds (default: 86400 = 24 hours)
+   SESSION_TIMEOUT=86400
    ```
 
 5. **Run the development server**
@@ -132,26 +145,40 @@ next-cms/
 │   │   │   ├── post-types/   # Post type definitions
 │   │   │   └── taxonomies/   # Taxonomy definitions
 │   │   ├── post-type/        # Dynamic post type content
-│   │   │   └── [slug]/       # Posts for each type
+│   │   │   └── [slug]/       # Posts for each type (list, new, edit)
 │   │   ├── taxonomy/         # Dynamic taxonomy terms
 │   │   │   └── [slug]/       # Terms for each taxonomy
 │   │   ├── media/            # Media library
 │   │   ├── users/            # User management
 │   │   │   └── roles/        # Custom roles & permissions
 │   │   ├── settings/         # Site settings
+│   │   │   ├── page.tsx      # General settings
+│   │   │   └── media/        # Media settings
 │   │   └── login/            # Login page
 │   └── api/                  # API routes
 │       ├── auth/             # Authentication
 │       ├── posts/            # Posts CRUD
+│       │   ├── [id]/         # Single post operations
+│       │   │   ├── restore/          # Restore from trash
+│       │   │   ├── permanent-delete/ # Hard delete
+│       │   │   ├── revisions/        # Post revisions
+│       │   │   └── meta/             # Custom fields
+│       │   ├── trash/empty/  # Empty trash
+│       │   └── process-scheduled/ # Cron endpoint
 │       ├── post-types/       # Post types management
 │       ├── taxonomies/       # Taxonomies management
 │       ├── terms/            # Terms management
 │       ├── users/            # User management
 │       ├── roles/            # Roles & permissions
 │       ├── media/            # Media upload/management
-│       └── settings/         # Settings management
+│       ├── settings/         # Settings management
+│       └── user/             # User metadata/preferences
+│           └── meta/         # User preferences (columns, items per page)
 ├── components/               # React components
 │   ├── admin/               # Admin components
+│   │   ├── post-editor/     # Post editor sub-components
+│   │   ├── PostTypeForm.tsx # Main post editor
+│   │   └── Sidebar.tsx      # Admin navigation
 │   └── public/              # Public components
 ├── hooks/                   # Custom React hooks
 │   └── usePermission.ts    # Permission checking
@@ -161,6 +188,8 @@ next-cms/
 │   └── utils.ts            # Helper functions
 ├── database/                # Database schema
 │   └── schema.sql          # Complete database structure
+├── scripts/                # Utility scripts
+│   └── sync-session-timeout.js # Sync session timeout to .env
 └── public/                 # Static files
     └── uploads/            # Uploaded media files
 ```
@@ -177,20 +206,23 @@ Access the admin panel at `/admin`:
 4. **Taxonomies** - Manage terms (categories, tags) for your content
 5. **Media** - Upload and manage media files
 6. **Users** - Manage users and custom roles with granular permissions
-7. **Settings** - Configure site and media settings
+7. **Settings** - Configure site name, tagline, media sizes, revisions limit, and session timeout
 
 ### Creating Content
 
 1. Navigate to the desired post type (Posts, Pages, etc.)
 2. Click "New [Post Type]"
 3. Fill in the title and content using the rich text editor
-4. Select parent (for hierarchical content), taxonomies, and featured image
-5. Change author if you have `can_reassign` permission
-6. Set the status:
+4. Add custom fields for additional metadata (key-value pairs)
+5. Select parent (for hierarchical content), taxonomies, and featured image
+6. Change author if you have `can_reassign` permission
+7. Set the status:
    - **Draft** - Save without publishing
    - **Pending** - Submit for review (if you can't publish)
    - **Published** - Make content live (requires `can_publish` permission)
-7. Click "Publish", "Update", or "Submit for Review" based on your permissions
+   - **Scheduled** - Set a future publish date/time
+8. Click "Publish", "Update", "Schedule", or "Submit for Review" based on your permissions
+9. View revision history and restore previous versions if needed
 
 ### Managing Content
 
@@ -213,13 +245,34 @@ Access the admin panel at `/admin`:
 - Restore individual posts or empty entire trash
 - Permanent deletion only available from trash view
 
+**Search and Filtering:**
+- Use the search bar to find posts by title or content
+- Apply column filters for precise results
+- Combine multiple filters for advanced queries
+- Results update automatically as you type (debounced)
+
+**List Customization:**
+- Toggle column visibility (featured image, author, status, taxonomies, date)
+- Choose items per page (10, 25, 50, or 100)
+- Navigate with pagination controls
+- Settings saved per user and per post type
+
+**Revisions:**
+- View complete revision history for any post
+- See what changed, when, and by whom
+- Restore any previous version with one click
+- Automatic cleanup based on max revisions setting
+
 ### Media Management
 
 1. Go to the Media Library
 2. Click "Upload Files"
 3. Select one or more files
-4. Use the copy button to get the URL for use in posts/pages
-5. Delete files as needed
+4. Edit title and alt text for SEO and accessibility
+5. Use the copy button to get the URL for use in posts/pages
+6. Regenerate sizes if media settings change
+7. View usage before deleting (shows where media is used)
+8. Delete files as needed (removes all size variants)
 
 ### Managing Roles and Permissions
 
@@ -259,6 +312,11 @@ All API routes enforce role-based permissions. Unauthorized requests return 403 
 - `POST /api/posts/:id/restore` - Restore post from trash
 - `DELETE /api/posts/:id/permanent-delete` - Permanently delete post from database
 - `DELETE /api/posts/trash/empty` - Empty all items from trash
+- `GET /api/posts/:id/revisions` - Get post revision history
+- `POST /api/posts/:id/revisions/:revisionId/restore` - Restore a specific revision
+- `GET /api/posts/:id/meta` - Get post custom fields
+- `PUT /api/posts/:id/meta` - Update post custom fields
+- `GET /api/posts/process-scheduled` - Process scheduled posts (cron endpoint)
 
 ### Post Types
 - `GET /api/post-types` - List all post types
@@ -300,19 +358,26 @@ All API routes enforce role-based permissions. Unauthorized requests return 403 
 - `GET /api/settings` - Get site settings (requires `manage_settings`)
 - `PUT /api/settings` - Update settings
 
+### User Meta
+- `GET /api/user/meta` - Get user preference by key
+- `PUT /api/user/meta` - Update user preference (column visibility, items per page, etc.)
+
 ## Database Schema
 
 The system uses the following main tables:
 
 - **users** - User accounts and authentication
 - **roles** - Custom roles with granular permissions
-- **posts** - All content (posts, pages, custom post types)
+- **posts** - All content (posts, pages, custom post types) with trash and scheduled status
+- **post_revisions** - Complete revision history for posts
+- **post_meta** - Custom fields (key-value pairs) for posts
+- **user_meta** - User preferences and settings
 - **post_types** - Custom post type definitions
 - **taxonomies** - Custom taxonomy definitions
 - **terms** - Taxonomy terms (categories, tags, etc.)
 - **post_terms** - Post-term relationships
 - **media** - Uploaded files with metadata
-- **settings** - Site configuration
+- **settings** - Site configuration (includes max_revisions and session_timeout)
 
 ## Deployment
 
@@ -344,6 +409,8 @@ Comprehensive guides for various features:
 
 - [CHANGELOG.md](CHANGELOG.md) - Complete version history and release notes
 - [CUSTOM_POST_TYPES.md](CUSTOM_POST_TYPES.md) - Creating and managing custom post types
+- [SCHEDULED_PUBLISHING.md](SCHEDULED_PUBLISHING.md) - Setting up cron jobs for scheduled posts
+- [SESSION_MANAGEMENT.md](SESSION_MANAGEMENT.md) - Configuring session timeout and security
 - [MIGRATION_GUIDE.md](MIGRATION_GUIDE.md) - Migrating from v1.0.2 to v1.0.3 (Pages to Post Types)
 - [IMAGE_SYSTEM.md](IMAGE_SYSTEM.md) - WordPress-style image handling and sizing
 - [IMAGE_CROP_STYLES.md](IMAGE_CROP_STYLES.md) - Image crop and fit strategies
@@ -368,19 +435,37 @@ Comprehensive guides for various features:
 
 ## Future Enhancements
 
-- [ ] Comments system
-- [ ] SEO metadata editor per post/page
-- [ ] Multi-language support
-- [ ] AI-generated alt text suggestions
-- [ ] Analytics dashboard
-- [ ] Email notifications
-- [ ] Custom themes
-- [ ] Plugin system
-- [ ] Revision history
-- [ ] Scheduled publishing
-- [ ] Bulk actions for posts and media
-- [ ] Advanced search and filtering
-- [ ] Export/import functionality
+Completed features (see CHANGELOG for details):
+- [x] Revision history with restore capability
+- [x] Scheduled publishing with cron integration
+- [x] Bulk actions for posts (trash, restore, delete)
+- [x] Advanced search and filtering with column filters
+- [x] Custom fields (post meta) system
+- [x] Pagination for post lists
+- [x] Session timeout configuration
+
+Planned features:
+- [ ] Comments system with moderation
+- [ ] SEO metadata editor per post/page (title, description, keywords)
+- [ ] Multi-language support (i18n)
+- [ ] AI-generated content suggestions
+- [ ] AI-generated alt text for images
+- [ ] Analytics dashboard (page views, popular content)
+- [ ] Email notifications (new comment, user registration, etc.)
+- [ ] Custom themes with theme editor
+- [ ] Plugin system for extensibility
+- [ ] Bulk actions for media library
+- [ ] Export/import functionality (JSON, CSV)
+- [ ] Advanced media library (folders, categories)
+- [ ] Duplicate post/page functionality
+- [ ] Post templates for consistent formatting
+- [ ] Autosave and drafts
+- [ ] Collaborative editing with real-time updates
+- [ ] Activity log and audit trail
+- [ ] Two-factor authentication (2FA)
+- [ ] OAuth providers (Google, GitHub, etc.)
+- [ ] API rate limiting
+- [ ] GraphQL API option
 
 ## Contributing
 

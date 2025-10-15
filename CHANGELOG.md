@@ -5,6 +5,116 @@ All notable changes to Next CMS will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Configurable Session Timeout**
+  - Admin-configurable session duration in Settings
+  - User-friendly interface with number input and unit selector (minutes, hours, days)
+  - Automatic unit conversion and display
+  - Default: 24 hours
+  - Flexible range: any duration from minutes to days
+  - Session timeout stored in database settings table
+  - NextAuth integration with SESSION_TIMEOUT environment variable
+  - Sync script to update .env from database setting
+  - Comprehensive documentation in SESSION_MANAGEMENT.md
+  - Automatic session refresh on page interaction
+  - Prevents frequent unexpected logouts
+  - Server restart required after changing setting
+- **Post Revision System**
+  - Automatic revision creation when posts are updated
+  - Configurable maximum revisions per post (Admin → Settings)
+  - View all revisions with timestamp and author info
+  - One-click restoration of previous versions
+  - Automatic cleanup of old revisions based on max setting
+  - Current changes saved as revision before restoring
+  - Revisions panel in post editor sidebar
+  - Set to 0 to disable revisions entirely
+  - Default: 10 revisions per post
+- **Custom Fields (Post Meta)**
+  - WordPress-style custom fields for posts
+  - Add unlimited key-value pairs to any post
+  - Custom fields UI in main content area (below excerpt)
+  - Add, edit, and remove custom fields dynamically
+  - Custom fields included in revision history
+  - Restoring a revision also restores custom fields
+  - Unique constraint prevents duplicate keys per post
+  - API endpoints for managing post meta
+  - Custom fields automatically saved with post updates
+  - Field names auto-converted to lowercase with underscores
+- **Scheduled Publishing**
+  - Set future date/time for automatic post publication
+  - Datetime picker in Publish box
+  - New "scheduled" status with purple badge
+  - "Scheduled" tab shows all scheduled posts
+  - Posts automatically published when scheduled time arrives
+  - Cron job endpoint `/api/posts/process-scheduled` for automation
+  - Scheduled date displayed in post list
+  - Requires `can_publish` permission
+  - Schedule button dynamically appears when date is set
+  - Validation ensures scheduled dates are in the future
+  - Full documentation in SCHEDULED_PUBLISHING.md
+- **Customizable Post List Columns**
+  - User-specific column visibility preferences
+  - Toggle visibility of Featured Image, Author, Status, and Date columns
+  - Dynamic taxonomy columns for assigned taxonomies (built-in and custom)
+  - Featured image thumbnail (48x48) with placeholder icon for posts without images
+  - Column settings dropdown with checkboxes
+  - Preferences saved in user_meta table
+  - Per-post-type column configurations
+  - Real-time column show/hide
+  - Terms displayed inline with comma separation
+  - Empty state shows "—" for posts without terms
+  - Click-outside closes column settings
+  - Column preferences persist across sessions
+- **Post Search and Column Filters**
+  - Search bar integrated in bulk actions row (top right)
+  - Searches both title and content fields  
+  - Search icon with clear button (X)
+  - Debounced search (500ms delay after typing stops)
+  - Filter row below table headers for each column
+  - Filter by title (text input)
+  - Filter by author (text input)
+  - Filter by status (dropdown: all, published, draft, pending, scheduled, trash)
+  - Filter by taxonomy terms (text input per taxonomy)
+  - Filter by date (date picker for exact date match)
+  - Filters work in combination with search and status tabs
+  - Real-time client-side filtering for instant results
+  - Respects user permissions (only filters visible posts)
+  - API-level search using SQL LIKE queries with debouncing
+  - Column filters use client-side matching for performance
+- **Items Per Page Selector**
+  - Dropdown to select 10, 25, 50, or 100 items per page
+  - Located in bulk actions row (far right)
+  - User preference saved in user_meta table
+  - Per-post-type configuration (different limit for Posts vs Pages)
+  - Default: 25 items per page
+  - Preference persists across sessions
+  - Instant updates when changed
+- **Post List Pagination**
+  - Smart pagination controls below post list table
+  - First, Previous, Next, Last navigation buttons
+  - Numbered page buttons with current page highlighted
+  - Shows up to 5 page numbers with ellipsis for large lists
+  - Displays "Showing X to Y of Z results" counter
+  - Automatically resets to page 1 when changing status filter, search, or items per page
+  - Pagination only shown when total posts exceed items per page
+  - Smooth page navigation with disabled states for boundary pages
+  - Uses API offset parameter for efficient server-side pagination
+
+### Changed
+- **Code Refactoring: PostTypeForm Component**
+  - Broke down 1052-line PostTypeForm into smaller, focused components
+  - Created `PublishBox` component for publish controls and scheduling
+  - Created `FeaturedImageBox` component for image selection
+  - Created `PageAttributesBox` component for hierarchy and author controls
+  - Created `CustomFieldsBox` component for custom field management
+  - Created `TaxonomyBox` component for term selection and creation
+  - Created `RevisionsBox` component for revision history
+  - Reduced main file from 1052 to 732 lines (30% reduction)
+  - Improved maintainability and code organization
+  - Each component now has clear, single responsibility
+
 ## [1.3.1] - 2025-10-15
 
 ### Added
