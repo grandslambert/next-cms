@@ -5,6 +5,18 @@ All notable changes to Next CMS will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2] - 2025-10-15
+
+### Added
+- **Content Body Styling** for public pages
+  - Comprehensive CSS for all WYSIWYG-generated HTML elements
+  - Proper heading sizes (h1-h6) with appropriate font weights and spacing
+  - Styled paragraphs, lists (ul/ol), blockquotes, code blocks
+  - Table styling with borders and headers
+  - Link hover effects and inline formatting (bold, italic)
+  - Responsive images with rounded corners
+  - All content now displays beautifully on public site
+
 ## [1.1.1] - 2025-10-15
 
 ### Added
