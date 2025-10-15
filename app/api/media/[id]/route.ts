@@ -84,16 +84,12 @@ export async function DELETE(
       'SELECT COUNT(*) as count FROM posts WHERE featured_image_id = ?',
       [params.id]
     );
-    const [pageCount] = await db.query<RowDataPacket[]>(
-      'SELECT COUNT(*) as count FROM pages WHERE featured_image_id = ?',
-      [params.id]
-    );
-    const [categoryCount] = await db.query<RowDataPacket[]>(
-      'SELECT COUNT(*) as count FROM categories WHERE image_id = ?',
+    const [termCount] = await db.query<RowDataPacket[]>(
+      'SELECT COUNT(*) as count FROM terms WHERE image_id = ?',
       [params.id]
     );
 
-    const totalUsage = postCount[0].count + pageCount[0].count + categoryCount[0].count;
+    const totalUsage = postCount[0].count + termCount[0].count;
     
     if (totalUsage > 0) {
       console.log(`Media ${params.id} was used in ${totalUsage} location(s) - references will be cleared`);
@@ -132,8 +128,7 @@ export async function DELETE(
       success: true,
       cleared_references: totalUsage > 0 ? {
         posts: postCount[0].count,
-        pages: pageCount[0].count,
-        categories: categoryCount[0].count,
+        terms: termCount[0].count,
         total: totalUsage,
       } : null
     });

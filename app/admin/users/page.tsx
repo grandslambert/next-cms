@@ -6,8 +6,11 @@ import { useSession } from 'next-auth/react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { formatDate } from '@/lib/utils';
+import { usePermission } from '@/hooks/usePermission';
 
 export default function UsersPage() {
+  const { isLoading: permissionLoading } = usePermission('manage_users');
+  const { data: session } = useSession();
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [username, setUsername] = useState('');
@@ -15,14 +18,21 @@ export default function UsersPage() {
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState('author');
+  const [roleId, setRoleId] = useState(3); // Default to Author role
   const queryClient = useQueryClient();
-  const { data: session } = useSession();
 
   const { data, isLoading } = useQuery({
     queryKey: ['users'],
     queryFn: async () => {
       const res = await axios.get('/api/users');
+      return res.data;
+    },
+  });
+
+  const { data: rolesData } = useQuery({
+    queryKey: ['roles'],
+    queryFn: async () => {
+      const res = await axios.get('/api/roles');
       return res.data;
     },
   });
@@ -72,7 +82,7 @@ export default function UsersPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const formData = { username, first_name: firstName, last_name: lastName, email, password, role };
+    const formData = { username, first_name: firstName, last_name: lastName, email, password, role_id: roleId };
     
     if (editingId) {
       updateMutation.mutate({ id: editingId, data: formData });
@@ -88,7 +98,7 @@ export default function UsersPage() {
     setLastName(user.last_name || '');
     setEmail(user.email);
     setPassword(''); // Don't pre-fill password for security
-    setRole(user.role);
+    setRoleId(user.role_id || 3);
     setShowForm(true);
   };
 
@@ -104,20 +114,15 @@ export default function UsersPage() {
     setLastName('');
     setEmail('');
     setPassword('');
-    setRole('author');
+    setRoleId(3); // Default to Author
     setEditingId(null);
     setShowForm(false);
   };
 
-  const isAdmin = (session?.user as any)?.role === 'admin';
-
-  if (!isAdmin) {
+  if (permissionLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h2>
-          <p className="text-gray-600">Only administrators can manage users.</p>
-        </div>
+      <div className="flex items-center justify-center py-12">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
       </div>
     );
   }
@@ -126,8 +131,8 @@ export default function UsersPage() {
     <div>
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Users</h1>
-          <p className="text-gray-600 mt-2">Manage user accounts and permissions</p>
+          <h1 className="text-3xl font-bold text-gray-900">All Users</h1>
+          <p className="text-gray-600 mt-2">Manage user accounts and assign roles</p>
         </div>
         <button
           onClick={() => setShowForm(!showForm)}
@@ -215,13 +220,15 @@ export default function UsersPage() {
                 </label>
                 <select
                   id="role"
-                  value={role}
-                  onChange={(e) => setRole(e.target.value)}
+                  value={roleId}
+                  onChange={(e) => setRoleId(parseInt(e.target.value))}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
-                  <option value="admin">Administrator</option>
-                  <option value="editor">Editor</option>
-                  <option value="author">Author</option>
+                  {rolesData?.roles?.map((role: any) => (
+                    <option key={role.id} value={role.id}>
+                      {role.display_name}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -289,14 +296,14 @@ export default function UsersPage() {
                     {user.email}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 py-1 text-xs rounded capitalize ${
-                      user.role === 'admin' 
+                    <span className={`px-2 py-1 text-xs rounded ${
+                      user.role_name === 'admin' 
                         ? 'bg-purple-100 text-purple-800' 
-                        : user.role === 'editor'
+                        : user.role_name === 'editor'
                         ? 'bg-blue-100 text-blue-800'
                         : 'bg-green-100 text-green-800'
                     }`}>
-                      {user.role}
+                      {user.role_display_name || user.role_name || 'Unknown'}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">

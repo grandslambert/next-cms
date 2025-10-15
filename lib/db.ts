@@ -13,21 +13,21 @@ const dbConfig = {
 
 // Wrapper that creates a connection, runs the query, and closes it
 const db = {
-  async query(sql: string, params?: any) {
+  async query<T = any>(sql: string, params?: any): Promise<[T, any]> {
     const connection = await mysql.createConnection(dbConfig);
     try {
       const result = await connection.query(sql, params);
-      return result;
+      return result as [T, any];
     } finally {
       await connection.end();
     }
   },
   
-  async execute(sql: string, params?: any) {
+  async execute<T = any>(sql: string, params?: any): Promise<[T, any]> {
     const connection = await mysql.createConnection(dbConfig);
     try {
       const result = await connection.execute(sql, params);
-      return result;
+      return result as [T, any];
     } finally {
       await connection.end();
     }

@@ -13,7 +13,12 @@ export async function GET(request: NextRequest) {
     }
 
     const [rows] = await db.query<RowDataPacket[]>(
-      'SELECT id, username, first_name, last_name, email, role, created_at, updated_at FROM users ORDER BY created_at DESC'
+      `SELECT u.id, u.username, u.first_name, u.last_name, u.email, u.role_id, 
+              r.name as role_name, r.display_name as role_display_name, 
+              u.created_at, u.updated_at 
+       FROM users u
+       LEFT JOIN roles r ON u.role_id = r.id
+       ORDER BY u.created_at DESC`
     );
 
     return NextResponse.json({ users: rows });
@@ -26,27 +31,31 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user || (session.user as any).role !== 'admin') {
+    if (!session?.user || !(session.user as any).permissions?.manage_users) {
       return NextResponse.json({ error: 'Unauthorized - Admin only' }, { status: 401 });
     }
 
     const body = await request.json();
-    const { username, first_name, last_name, email, password, role } = body;
+    const { username, first_name, last_name, email, password, role_id } = body;
 
-    if (!username || !first_name || !email || !password) {
-      return NextResponse.json({ error: 'Username, first name, email, and password are required' }, { status: 400 });
+    if (!username || !first_name || !email || !password || !role_id) {
+      return NextResponse.json({ error: 'Username, first name, email, password, and role are required' }, { status: 400 });
     }
 
     // Hash password
     const hashedPassword = bcrypt.hashSync(password, 10);
 
     const [result] = await db.query<ResultSetHeader>(
-      'INSERT INTO users (username, first_name, last_name, email, password, role) VALUES (?, ?, ?, ?, ?, ?)',
-      [username, first_name, last_name || '', email, hashedPassword, role || 'author']
+      'INSERT INTO users (username, first_name, last_name, email, password, role_id) VALUES (?, ?, ?, ?, ?, ?)',
+      [username, first_name, last_name || '', email, hashedPassword, role_id]
     );
 
     const [newUser] = await db.query<RowDataPacket[]>(
-      'SELECT id, username, first_name, last_name, email, role, created_at FROM users WHERE id = ?',
+      `SELECT u.id, u.username, u.first_name, u.last_name, u.email, u.role_id,
+              r.name as role_name, r.display_name as role_display_name, u.created_at 
+       FROM users u
+       LEFT JOIN roles r ON u.role_id = r.id
+       WHERE u.id = ?`,
       [result.insertId]
     );
 

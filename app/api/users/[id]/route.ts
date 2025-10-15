@@ -16,7 +16,12 @@ export async function GET(
     }
 
     const [rows] = await db.query<RowDataPacket[]>(
-      'SELECT id, username, first_name, last_name, email, role, created_at, updated_at FROM users WHERE id = ?',
+      `SELECT u.id, u.username, u.first_name, u.last_name, u.email, u.role_id,
+              r.name as role_name, r.display_name as role_display_name,
+              u.created_at, u.updated_at 
+       FROM users u
+       LEFT JOIN roles r ON u.role_id = r.id
+       WHERE u.id = ?`,
       [params.id]
     );
 
@@ -37,33 +42,38 @@ export async function PUT(
 ) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user || (session.user as any).role !== 'admin') {
+    if (!session?.user || !(session.user as any).permissions?.manage_users) {
       return NextResponse.json({ error: 'Unauthorized - Admin only' }, { status: 401 });
     }
 
     const body = await request.json();
-    const { username, first_name, last_name, email, password, role } = body;
+    const { username, first_name, last_name, email, password, role_id } = body;
 
-    if (!username || !first_name || !email) {
-      return NextResponse.json({ error: 'Username, first name, and email are required' }, { status: 400 });
+    if (!username || !first_name || !email || !role_id) {
+      return NextResponse.json({ error: 'Username, first name, email, and role are required' }, { status: 400 });
     }
 
     // If password is provided, hash it; otherwise keep existing
-    if (password && password.trim()) {
+    if (password?.trim()) {
       const hashedPassword = bcrypt.hashSync(password, 10);
       await db.query<ResultSetHeader>(
-        'UPDATE users SET username = ?, first_name = ?, last_name = ?, email = ?, password = ?, role = ? WHERE id = ?',
-        [username, first_name, last_name || '', email, hashedPassword, role || 'author', params.id]
+        'UPDATE users SET username = ?, first_name = ?, last_name = ?, email = ?, password = ?, role_id = ? WHERE id = ?',
+        [username, first_name, last_name || '', email, hashedPassword, role_id, params.id]
       );
     } else {
       await db.query<ResultSetHeader>(
-        'UPDATE users SET username = ?, first_name = ?, last_name = ?, email = ?, role = ? WHERE id = ?',
-        [username, first_name, last_name || '', email, role || 'author', params.id]
+        'UPDATE users SET username = ?, first_name = ?, last_name = ?, email = ?, role_id = ? WHERE id = ?',
+        [username, first_name, last_name || '', email, role_id, params.id]
       );
     }
 
     const [updatedUser] = await db.query<RowDataPacket[]>(
-      'SELECT id, username, first_name, last_name, email, role, created_at, updated_at FROM users WHERE id = ?',
+      `SELECT u.id, u.username, u.first_name, u.last_name, u.email, u.role_id,
+              r.name as role_name, r.display_name as role_display_name,
+              u.created_at, u.updated_at 
+       FROM users u
+       LEFT JOIN roles r ON u.role_id = r.id
+       WHERE u.id = ?`,
       [params.id]
     );
 
@@ -83,7 +93,7 @@ export async function DELETE(
 ) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user || (session.user as any).role !== 'admin') {
+    if (!session?.user || !(session.user as any).permissions?.manage_users) {
       return NextResponse.json({ error: 'Unauthorized - Admin only' }, { status: 401 });
     }
 

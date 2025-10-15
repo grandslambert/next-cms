@@ -41,11 +41,38 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const userId = (session.user as any).id;
+    const permissions = (session.user as any).permissions || {};
+
+    // Check if post exists and get author
+    const [existingPost] = await db.query<RowDataPacket[]>(
+      'SELECT author_id, post_type FROM posts WHERE id = ?',
+      [params.id]
+    );
+
+    if (existingPost.length === 0) {
+      return NextResponse.json({ error: 'Post not found' }, { status: 404 });
+    }
+
+    const post = existingPost[0];
+    const isOwner = post.author_id === parseInt(userId);
+    const canManageOthers = permissions.manage_others_posts === true;
+
+    // Check if user can edit this post
+    if (!isOwner && !canManageOthers) {
+      return NextResponse.json({ error: 'You can only edit your own posts' }, { status: 403 });
+    }
+
     const body = await request.json();
     const { title, slug: customSlug, content, excerpt, featured_image_id, status, parent_id, menu_order } = body;
 
     if (!title) {
       return NextResponse.json({ error: 'Title is required' }, { status: 400 });
+    }
+
+    // Check if user can publish
+    if (status === 'published' && !permissions.can_publish) {
+      return NextResponse.json({ error: 'You do not have permission to publish posts' }, { status: 403 });
     }
 
     // Use custom slug if provided, otherwise generate from title
@@ -82,6 +109,33 @@ export async function DELETE(
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const userId = (session.user as any).id;
+    const permissions = (session.user as any).permissions || {};
+
+    // Check if post exists and get author
+    const [existingPost] = await db.query<RowDataPacket[]>(
+      'SELECT author_id, post_type FROM posts WHERE id = ?',
+      [params.id]
+    );
+
+    if (existingPost.length === 0) {
+      return NextResponse.json({ error: 'Post not found' }, { status: 404 });
+    }
+
+    const post = existingPost[0];
+    const isOwner = post.author_id === parseInt(userId);
+    const canDelete = permissions.can_delete === true;
+    const canDeleteOthers = permissions.can_delete_others === true;
+
+    // Check if user can delete this post
+    if (isOwner && !canDelete) {
+      return NextResponse.json({ error: 'You do not have permission to delete posts' }, { status: 403 });
+    }
+    
+    if (!isOwner && !canDeleteOthers) {
+      return NextResponse.json({ error: 'You do not have permission to delete others\' posts' }, { status: 403 });
     }
 
     await db.query<ResultSetHeader>('DELETE FROM posts WHERE id = ?', [params.id]);

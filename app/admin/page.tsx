@@ -34,8 +34,22 @@ const PostTypeCount = ({ postType }: { postType: string }) => {
   return <p className="text-2xl font-bold text-gray-900">{data?.total || 0}</p>;
 };
 
+// Component to fetch and display count for a specific taxonomy
+const TaxonomyCount = ({ taxonomyId }: { taxonomyId: number }) => {
+  const { data } = useQuery({
+    queryKey: ['terms', taxonomyId, 'count'],
+    queryFn: async () => {
+      const res = await axios.get(`/api/terms?taxonomy_id=${taxonomyId}&limit=1`);
+      return res.data;
+    },
+  });
+
+  return <p className="text-2xl font-bold text-gray-900">{data?.terms?.length || 0}</p>;
+};
+
 export default function AdminDashboard() {
   const { data: session } = useSession();
+  const permissions = (session?.user as any)?.permissions || {};
 
   const { data: postsData, isLoading: postsLoading } = useQuery({
     queryKey: ['posts'],
@@ -53,20 +67,13 @@ export default function AdminDashboard() {
     },
   });
 
-  const { data: categoriesData, isLoading: categoriesLoading } = useQuery({
-    queryKey: ['categories'],
-    queryFn: async () => {
-      const res = await axios.get('/api/categories');
-      return res.data;
-    },
-  });
-
   const { data: usersData, isLoading: usersLoading } = useQuery({
     queryKey: ['users'],
     queryFn: async () => {
       const res = await axios.get('/api/users');
       return res.data;
     },
+    enabled: !!permissions.manage_users,
   });
 
   const { data: postTypesData, isLoading: postTypesLoading } = useQuery({
@@ -77,10 +84,27 @@ export default function AdminDashboard() {
     },
   });
 
-  // Filter post types to show in dashboard
-  const dashboardPostTypes = postTypesData?.postTypes?.filter((pt: any) => pt.show_in_dashboard) || [];
+  const { data: taxonomiesData, isLoading: taxonomiesLoading } = useQuery({
+    queryKey: ['taxonomies'],
+    queryFn: async () => {
+      const res = await axios.get('/api/taxonomies');
+      return res.data;
+    },
+  });
 
-  const isContentLoading = postsLoading || mediaLoading || categoriesLoading || usersLoading || postTypesLoading;
+  // Filter post types to show in dashboard based on user permissions
+  const dashboardPostTypes = postTypesData?.postTypes?.filter((pt: any) => {
+    const hasPermission = permissions[`manage_posts_${pt.name}`];
+    return pt.show_in_dashboard && hasPermission;
+  }) || [];
+
+  // Filter taxonomies to show in dashboard based on user permissions
+  const dashboardTaxonomies = taxonomiesData?.taxonomies?.filter((tax: any) => {
+    const hasPermission = permissions.manage_taxonomies;
+    return tax.show_in_dashboard && hasPermission;
+  }) || [];
+
+  const isContentLoading = postsLoading || mediaLoading || usersLoading || postTypesLoading || taxonomiesLoading;
 
   return (
     <div>
@@ -100,13 +124,13 @@ export default function AdminDashboard() {
           <div className="p-6">
             {isContentLoading ? (
               <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
-                {['posts', 'pages', 'media', 'categories', 'users', 'settings'].map((item) => (
+                {[1, 2, 3, 4, 5, 6].map((item) => (
                   <ContentSummarySkeleton key={item} />
                 ))}
               </div>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
-                {/* Dynamic Post Types (filtered by show_in_dashboard) */}
+                {/* Dynamic Post Types (filtered by show_in_dashboard and permissions) */}
                 {dashboardPostTypes.map((postType: any) => (
                   <Link key={postType.name} href={`/admin/post-type/${postType.name}`} className="group">
                     <div className="text-center p-4 rounded-lg transition-colors hover:bg-gray-50">
@@ -117,29 +141,36 @@ export default function AdminDashboard() {
                   </Link>
                 ))}
 
-                <Link href="/admin/media" className="group">
-                  <div className="text-center p-4 rounded-lg transition-colors hover:bg-gray-50">
-                    <div className="text-4xl mb-2">🖼️</div>
-                    <p className="text-sm font-medium text-gray-600 mb-1 group-hover:text-primary-600">Media</p>
-                    <p className="text-2xl font-bold text-gray-900">{mediaData?.total || 0}</p>
-                  </div>
-                </Link>
+                {/* Dynamic Taxonomies (filtered by show_in_dashboard and permissions) */}
+                {dashboardTaxonomies.map((taxonomy: any) => (
+                  <Link key={taxonomy.name} href={`/admin/taxonomy/${taxonomy.name}`} className="group">
+                    <div className="text-center p-4 rounded-lg transition-colors hover:bg-gray-50">
+                      <div className="text-4xl mb-2">{taxonomy.hierarchical ? '🏷️' : '🔖'}</div>
+                      <p className="text-sm font-medium text-gray-600 mb-1 group-hover:text-primary-600">{taxonomy.label}</p>
+                      <TaxonomyCount taxonomyId={taxonomy.id} />
+                    </div>
+                  </Link>
+                ))}
 
-                <Link href="/admin/categories" className="group">
-                  <div className="text-center p-4 rounded-lg transition-colors hover:bg-gray-50">
-                    <div className="text-4xl mb-2">🏷️</div>
-                    <p className="text-sm font-medium text-gray-600 mb-1 group-hover:text-primary-600">Categories</p>
-                    <p className="text-2xl font-bold text-gray-900">{categoriesData?.categories?.length || 0}</p>
-                  </div>
-                </Link>
+                {permissions.manage_media && (
+                  <Link href="/admin/media" className="group">
+                    <div className="text-center p-4 rounded-lg transition-colors hover:bg-gray-50">
+                      <div className="text-4xl mb-2">🖼️</div>
+                      <p className="text-sm font-medium text-gray-600 mb-1 group-hover:text-primary-600">Media</p>
+                      <p className="text-2xl font-bold text-gray-900">{mediaData?.total || 0}</p>
+                    </div>
+                  </Link>
+                )}
 
-                <Link href="/admin/users" className="group">
-                  <div className="text-center p-4 rounded-lg transition-colors hover:bg-gray-50">
-                    <div className="text-4xl mb-2">👥</div>
-                    <p className="text-sm font-medium text-gray-600 mb-1 group-hover:text-primary-600">Users</p>
-                    <p className="text-2xl font-bold text-gray-900">{usersData?.users?.length || 0}</p>
-                  </div>
-                </Link>
+                {permissions.manage_users && (
+                  <Link href="/admin/users" className="group">
+                    <div className="text-center p-4 rounded-lg transition-colors hover:bg-gray-50">
+                      <div className="text-4xl mb-2">👥</div>
+                      <p className="text-sm font-medium text-gray-600 mb-1 group-hover:text-primary-600">Users</p>
+                      <p className="text-2xl font-bold text-gray-900">{usersData?.users?.length || 0}</p>
+                    </div>
+                  </Link>
+                )}
               </div>
             )}
           </div>

@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { formatDate } from '@/lib/utils';
+import { usePermission } from '@/hooks/usePermission';
 
 interface UploadProgress {
   name: string;
@@ -13,6 +14,7 @@ interface UploadProgress {
 }
 
 export default function MediaPage() {
+  const { isLoading: permissionLoading } = usePermission('manage_media');
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<UploadProgress[]>([]);
   const [editingMedia, setEditingMedia] = useState<any>(null);
@@ -277,6 +279,14 @@ export default function MediaPage() {
       setRegenerating(false);
     }
   };
+
+  if (permissionLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div>

@@ -36,11 +36,11 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { label, singular_label, description, hierarchical, show_in_menu, menu_position } = body;
+    const { label, singular_label, description, hierarchical, show_in_menu, show_in_dashboard, menu_position } = body;
 
     await db.query<ResultSetHeader>(
       `UPDATE taxonomies 
-       SET label = ?, singular_label = ?, description = ?, hierarchical = ?, show_in_menu = ?, menu_position = ?
+       SET label = ?, singular_label = ?, description = ?, hierarchical = ?, show_in_menu = ?, show_in_dashboard = ?, menu_position = ?
        WHERE id = ?`,
       [
         label,
@@ -48,6 +48,7 @@ export async function PUT(
         description || '',
         hierarchical || false,
         show_in_menu !== false,
+        show_in_dashboard || false,
         menu_position || 20,
         params.id
       ]

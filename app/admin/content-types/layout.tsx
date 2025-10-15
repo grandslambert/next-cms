@@ -1,4 +1,4 @@
-export default function SettingsLayout({
+export default function ContentTypesLayout({
   children,
 }: {
   readonly children: React.ReactNode;

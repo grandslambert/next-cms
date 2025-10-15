@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, label, singular_label, description, hierarchical, show_in_menu, menu_position } = body;
+    const { name, label, singular_label, description, hierarchical, show_in_menu, show_in_dashboard, menu_position } = body;
 
     if (!name || !label || !singular_label) {
       return NextResponse.json({ error: 'Name, label, and singular label are required' }, { status: 400 });
@@ -38,8 +38,8 @@ export async function POST(request: NextRequest) {
     }
 
     const [result] = await db.query<ResultSetHeader>(
-      `INSERT INTO taxonomies (name, label, singular_label, description, hierarchical, show_in_menu, menu_position)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO taxonomies (name, label, singular_label, description, hierarchical, show_in_menu, show_in_dashboard, menu_position)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         name,
         label,
@@ -47,6 +47,7 @@ export async function POST(request: NextRequest) {
         description || '',
         hierarchical || false,
         show_in_menu !== false,
+        show_in_dashboard || false,
         menu_position || 20
       ]
     );

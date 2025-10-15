@@ -1,6 +1,19 @@
 -- Note: Run this script while connected to your database
 -- It will use whatever database you're currently connected to
 
+-- Roles table
+CREATE TABLE IF NOT EXISTS roles (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(100) UNIQUE NOT NULL,
+  display_name VARCHAR(255) NOT NULL,
+  description TEXT,
+  permissions JSON,
+  is_system BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_name (name)
+);
+
 -- Users table
 CREATE TABLE IF NOT EXISTS users (
   id INT AUTO_INCREMENT PRIMARY KEY,
@@ -9,9 +22,10 @@ CREATE TABLE IF NOT EXISTS users (
   last_name VARCHAR(255),
   email VARCHAR(255) UNIQUE NOT NULL,
   password VARCHAR(255) NOT NULL,
-  role ENUM('admin', 'editor', 'author') DEFAULT 'author',
+  role_id INT DEFAULT 3,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (role_id) REFERENCES roles(id)
 );
 
 -- Post Types table
@@ -46,7 +60,7 @@ CREATE TABLE IF NOT EXISTS posts (
   featured_image_id INT,
   parent_id INT NULL,
   menu_order INT DEFAULT 0,
-  status ENUM('draft', 'published', 'trash') DEFAULT 'draft',
+  status ENUM('draft', 'pending', 'published', 'trash') DEFAULT 'draft',
   author_id INT NOT NULL,
   published_at TIMESTAMP NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -92,6 +106,7 @@ CREATE TABLE IF NOT EXISTS taxonomies (
   hierarchical BOOLEAN DEFAULT FALSE,
   public BOOLEAN DEFAULT TRUE,
   show_in_menu BOOLEAN DEFAULT TRUE,
+  show_in_dashboard BOOLEAN DEFAULT FALSE,
   menu_position INT DEFAULT 20,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -150,9 +165,24 @@ CREATE TABLE IF NOT EXISTS settings (
   INDEX idx_key (setting_key)
 );
 
+-- Insert default roles
+-- Note: Post type permissions (manage_posts_post, manage_posts_page) will be added dynamically
+-- when post types are created. These base permissions are the minimum set.
+INSERT INTO roles (id, name, display_name, description, permissions, is_system) VALUES
+(1, 'admin', 'Administrator', 'Full access to all features', 
+ '{"view_dashboard": true, "view_others_posts": true, "manage_posts_post": true, "manage_posts_page": true, "manage_others_posts": true, "can_publish": true, "can_delete": true, "can_delete_others": true, "manage_media": true, "manage_taxonomies": true, "manage_users": true, "manage_roles": true, "manage_post_types": true, "manage_settings": true}', 
+ true),
+(2, 'editor', 'Editor', 'Can manage and publish all content', 
+ '{"view_dashboard": true, "view_others_posts": false, "manage_posts_post": true, "manage_posts_page": true, "manage_others_posts": true, "can_publish": true, "can_delete": true, "can_delete_others": true, "manage_media": true, "manage_taxonomies": true, "manage_users": false, "manage_roles": false, "manage_post_types": false, "manage_settings": false}', 
+ true),
+(3, 'author', 'Author', 'Can create and edit own posts', 
+ '{"view_dashboard": true, "view_others_posts": false, "manage_posts_post": true, "manage_posts_page": true, "manage_others_posts": false, "can_publish": true, "can_delete": true, "can_delete_others": false, "manage_media": true, "manage_taxonomies": false, "manage_users": false, "manage_roles": false, "manage_post_types": false, "manage_settings": false}', 
+ true)
+ON DUPLICATE KEY UPDATE name = name;
+
 -- Insert default admin user (password: admin123)
-INSERT INTO users (username, first_name, last_name, email, password, role) 
-VALUES ('admin', 'Admin', 'User', 'admin@example.com', '$2a$10$1llDVX4S7vKlcibiDrrZuespn.U1vHjrhrktHt7fnYSaLqp1cb.Yu', 'admin')
+INSERT INTO users (username, first_name, last_name, email, password, role_id) 
+VALUES ('admin', 'Admin', 'User', 'admin@example.com', '$2a$10$1llDVX4S7vKlcibiDrrZuespn.U1vHjrhrktHt7fnYSaLqp1cb.Yu', 1)
 ON DUPLICATE KEY UPDATE email = email;
 
 -- Insert default post types

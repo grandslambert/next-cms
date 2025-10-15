@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import { usePermission } from '@/hooks/usePermission';
 
 interface ImageSize {
   width: number;
@@ -16,6 +17,7 @@ interface ImageSizes {
 }
 
 export default function MediaSettingsPage() {
+  const { isLoading: permissionLoading } = usePermission('manage_settings');
   const [imageSizes, setImageSizes] = useState<ImageSizes>({
     thumbnail: { width: 150, height: 150, crop: 'cover' },
     medium: { width: 300, height: 300, crop: 'inside' },
@@ -141,7 +143,7 @@ export default function MediaSettingsPage() {
     }
   };
 
-  if (isLoading) {
+  if (permissionLoading || isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
@@ -151,6 +153,11 @@ export default function MediaSettingsPage() {
 
   return (
     <div className="max-w-4xl">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900">Media Settings</h1>
+        <p className="text-gray-600 mt-2">Configure image sizes and media handling</p>
+      </div>
+
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="bg-white rounded-lg shadow p-6">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">Image Sizes</h2>

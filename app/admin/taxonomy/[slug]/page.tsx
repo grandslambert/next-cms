@@ -1,14 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { formatDate } from '@/lib/utils';
 import MediaSelector from '@/components/admin/MediaSelector';
+import { usePermission } from '@/hooks/usePermission';
 
 export default function TaxonomyTermsPage() {
+  const { isLoading: permissionLoading } = usePermission('manage_taxonomies');
   const params = useParams();
   const taxonomySlug = params?.slug as string;
   const queryClient = useQueryClient();
@@ -148,7 +150,7 @@ export default function TaxonomyTermsPage() {
 
   const availableParents = data?.terms?.filter((t: any) => t.id !== editingTerm?.id) || [];
 
-  if (!taxonomyData) {
+  if (permissionLoading || !taxonomyData) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>

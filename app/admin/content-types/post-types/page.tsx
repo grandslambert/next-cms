@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import { usePermission } from '@/hooks/usePermission';
 
 interface PostType {
   id: number;
@@ -22,6 +23,7 @@ interface PostType {
 }
 
 export default function PostTypesSettings() {
+  const { isLoading: permissionLoading } = usePermission('manage_post_types');
   const [editingPostType, setEditingPostType] = useState<PostType | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [formData, setFormData] = useState({
@@ -194,7 +196,7 @@ export default function PostTypesSettings() {
     }
   };
 
-  if (isLoading) {
+  if (permissionLoading || isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
@@ -205,8 +207,8 @@ export default function PostTypesSettings() {
   return (
     <div className="max-w-6xl">
       <div className="mb-8">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Post Types</h2>
-        <p className="text-gray-600">
+        <h1 className="text-3xl font-bold text-gray-900">Post Types</h1>
+        <p className="text-gray-600 mt-2">
           Create and manage custom post types for different content types (portfolios, products, events, etc.)
         </p>
       </div>
@@ -298,10 +300,11 @@ export default function PostTypesSettings() {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="pt-name" className="block text-sm font-medium text-gray-700 mb-2">
                   Name *
                 </label>
                 <input
+                  id="pt-name"
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_') })}
@@ -316,10 +319,11 @@ export default function PostTypesSettings() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="pt-slug" className="block text-sm font-medium text-gray-700 mb-2">
                   URL Slug {isBuiltIn(formData.name) && <span className="text-xs text-gray-500">(Built-in, cannot change)</span>}
                 </label>
                 <input
+                  id="pt-slug"
                   type="text"
                   value={formData.slug}
                   onChange={(e) => setFormData({ ...formData, slug: e.target.value.toLowerCase().replace(/[^\w-]/g, '-').replace(/-+/g, '-') })}
@@ -333,10 +337,11 @@ export default function PostTypesSettings() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="pt-url-structure" className="block text-sm font-medium text-gray-700 mb-2">
                   URL Structure
                 </label>
                 <select
+                  id="pt-url-structure"
                   value={formData.url_structure}
                   onChange={(e) => setFormData({ ...formData, url_structure: e.target.value as any })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
@@ -352,10 +357,11 @@ export default function PostTypesSettings() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="pt-label" className="block text-sm font-medium text-gray-700 mb-2">
                   Plural Label *
                 </label>
                 <input
+                  id="pt-label"
                   type="text"
                   value={formData.label}
                   onChange={(e) => setFormData({ ...formData, label: e.target.value })}
@@ -366,10 +372,11 @@ export default function PostTypesSettings() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="pt-singular-label" className="block text-sm font-medium text-gray-700 mb-2">
                   Singular Label *
                 </label>
                 <input
+                  id="pt-singular-label"
                   type="text"
                   value={formData.singular_label}
                   onChange={(e) => setFormData({ ...formData, singular_label: e.target.value })}
@@ -380,10 +387,11 @@ export default function PostTypesSettings() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="pt-description" className="block text-sm font-medium text-gray-700 mb-2">
                   Description
                 </label>
                 <textarea
+                  id="pt-description"
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
@@ -393,10 +401,11 @@ export default function PostTypesSettings() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="pt-icon" className="block text-sm font-medium text-gray-700 mb-2">
                   Icon (emoji)
                 </label>
                 <input
+                  id="pt-icon"
                   type="text"
                   value={formData.icon}
                   onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
@@ -407,10 +416,11 @@ export default function PostTypesSettings() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="pt-menu-position" className="block text-sm font-medium text-gray-700 mb-2">
                   Menu Position
                 </label>
                 <input
+                  id="pt-menu-position"
                   type="number"
                   value={formData.menu_position}
                   onChange={(e) => setFormData({ ...formData, menu_position: parseInt(e.target.value) })}
@@ -458,9 +468,9 @@ export default function PostTypesSettings() {
               </div>
 
               <div className="border-t pt-4">
-                <label className="block text-sm font-medium text-gray-700 mb-3">
+                <p className="block text-sm font-medium text-gray-700 mb-3">
                   Supports
-                </label>
+                </p>
                 <div className="space-y-2">
                   {['title', 'content', 'excerpt', 'featured_image'].map((feature) => (
                     <label key={feature} className="flex items-center">
@@ -486,9 +496,9 @@ export default function PostTypesSettings() {
 
               {editingPostType && taxonomiesData?.taxonomies && taxonomiesData.taxonomies.length > 0 && (
                 <div className="border-t pt-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                  <p className="block text-sm font-medium text-gray-700 mb-3">
                     Taxonomies
-                  </label>
+                  </p>
                   <div className="space-y-2 max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-3 bg-gray-50">
                     {taxonomiesData.taxonomies.map((taxonomy: any) => (
                       <label key={taxonomy.id} className="flex items-center cursor-pointer">

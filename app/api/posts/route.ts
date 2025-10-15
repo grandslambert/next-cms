@@ -7,11 +7,16 @@ import { RowDataPacket, ResultSetHeader } from 'mysql2';
 
 export async function GET(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
     const searchParams = request.nextUrl.searchParams;
     const status = searchParams.get('status');
     const postType = searchParams.get('post_type') || 'post';
     const limit = parseInt(searchParams.get('limit') || '10');
     const offset = parseInt(searchParams.get('offset') || '0');
+
+    const userId = session ? (session.user as any).id : null;
+    const permissions = session ? (session.user as any).permissions || {} : {};
+    const canViewOthers = permissions.view_others_posts === true;
 
     let query = `
       SELECT p.*, CONCAT(u.first_name, ' ', u.last_name) as author_name,
@@ -22,6 +27,12 @@ export async function GET(request: NextRequest) {
       WHERE p.post_type = ?
     `;
     const params: any[] = [postType];
+
+    // Filter by author if user can't view others' posts
+    if (userId && !canViewOthers) {
+      query += ' AND p.author_id = ?';
+      params.push(userId);
+    }
 
     if (status && status !== 'all') {
       query += ' AND p.status = ?';
@@ -36,6 +47,12 @@ export async function GET(request: NextRequest) {
     // Get total count
     let countQuery = 'SELECT COUNT(*) as total FROM posts WHERE post_type = ?';
     const countParams: any[] = [postType];
+    
+    // Filter by author if user can't view others' posts
+    if (userId && !canViewOthers) {
+      countQuery += ' AND author_id = ?';
+      countParams.push(userId);
+    }
     
     if (status && status !== 'all') {
       countQuery += ' AND status = ?';

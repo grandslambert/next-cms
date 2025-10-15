@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useSession } from 'next-auth/react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import RichTextEditor from '@/components/admin/RichTextEditor';
@@ -62,7 +63,9 @@ async function getPublicUrl(postType: any, slug: string, post: any, allPosts?: a
 
 export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: PostTypeFormProps) {
   const router = useRouter();
+  const { data: session, status: sessionStatus } = useSession();
   const queryClient = useQueryClient();
+  const permissions = (session?.user as any)?.permissions || {};
   
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
@@ -79,6 +82,19 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
   const [creatingTerm, setCreatingTerm] = useState<number | null>(null);
   const [slugEdited, setSlugEdited] = useState(false);
   const [previewUrl, setPreviewUrl] = useState('');
+
+  // Check permission for this specific post type
+  useEffect(() => {
+    if (sessionStatus === 'loading') return;
+    if (!session) {
+      router.push('/admin/login');
+      return;
+    }
+    const hasPermission = permissions[`manage_posts_${postTypeSlug}`];
+    if (!hasPermission) {
+      router.push('/admin');
+    }
+  }, [session, sessionStatus, permissions, postTypeSlug, router]);
 
   // Fetch post type info
   const { data: postTypeData } = useQuery({
@@ -149,6 +165,21 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
     },
     enabled: !!postTypeData?.hierarchical,
   });
+
+  // Check if user can edit this post
+  useEffect(() => {
+    if (isEdit && data?.post && sessionStatus === 'authenticated') {
+      const postAuthorId = data.post.author_id;
+      const currentUserId = parseInt((session.user as any)?.id);
+      const canManageOthers = permissions.manage_others_posts === true;
+      
+      // If not owner and can't manage others, redirect
+      if (postAuthorId !== currentUserId && !canManageOthers) {
+        toast.error('You can only edit your own posts');
+        router.push(`/admin/post-type/${postTypeSlug}`);
+      }
+    }
+  }, [isEdit, data?.post, session, sessionStatus, permissions, postTypeSlug, router]);
 
   // Load post data
   useEffect(() => {
@@ -352,6 +383,10 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
     handleSubmit(e, 'published');
   };
 
+  const handleSubmitForReview = (e: React.FormEvent) => {
+    handleSubmit(e, 'pending');
+  };
+
   const handleCreateTerm = async (taxonomyId: number) => {
     const name = newTermName[taxonomyId]?.trim();
     if (!name) {
@@ -398,7 +433,7 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
     }
   };
 
-  if (isLoading || !postTypeData) {
+  if (sessionStatus === 'loading' || isLoading || !postTypeData) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
@@ -619,7 +654,9 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
 
             <div className="mb-4">
               <p className="text-sm text-gray-600">
-                Status: <span className="font-medium">{status === 'published' ? 'Published' : 'Draft'}</span>
+                Status: <span className="font-medium">
+                  {status === 'published' ? 'Published' : status === 'pending' ? 'Pending Review' : 'Draft'}
+                </span>
               </p>
             </div>
 
@@ -633,14 +670,25 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
                 Save as Draft
               </button>
               
-              <button
-                type="button"
-                onClick={handlePublish}
-                disabled={isSaving}
-                className="w-full px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
-              >
-                Publish {postTypeData.singular_label}
-              </button>
+              {permissions.can_publish ? (
+                <button
+                  type="button"
+                  onClick={handlePublish}
+                  disabled={isSaving}
+                  className="w-full px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
+                >
+                  {isEdit && status === 'published' ? 'Update' : 'Publish'} {postTypeData.singular_label}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleSubmitForReview}
+                  disabled={isSaving}
+                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                >
+                  Submit for Review
+                </button>
+              )}
             </div>
           </div>
 

@@ -16,33 +16,25 @@ export async function GET(
 
     const usage: any = {
       posts: [],
-      pages: [],
-      categories: [],
+      terms: [],
       total: 0,
     };
 
-    // Check posts
+    // Check posts (includes all post types: posts, pages, custom types)
     const [posts] = await db.query<RowDataPacket[]>(
-      'SELECT id, title FROM posts WHERE featured_image_id = ?',
+      'SELECT id, title, post_type FROM posts WHERE featured_image_id = ?',
       [params.id]
     );
     usage.posts = posts;
 
-    // Check pages
-    const [pages] = await db.query<RowDataPacket[]>(
-      'SELECT id, title FROM pages WHERE featured_image_id = ?',
+    // Check taxonomy terms
+    const [terms] = await db.query<RowDataPacket[]>(
+      'SELECT t.id, t.name, tax.label as taxonomy_label FROM terms t LEFT JOIN taxonomies tax ON t.taxonomy_id = tax.id WHERE t.image_id = ?',
       [params.id]
     );
-    usage.pages = pages;
+    usage.terms = terms;
 
-    // Check categories
-    const [categories] = await db.query<RowDataPacket[]>(
-      'SELECT id, name FROM categories WHERE image_id = ?',
-      [params.id]
-    );
-    usage.categories = categories;
-
-    usage.total = usage.posts.length + usage.pages.length + usage.categories.length;
+    usage.total = usage.posts.length + usage.terms.length;
 
     return NextResponse.json({ usage });
   } catch (error) {
