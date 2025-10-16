@@ -1,0 +1,11 @@
+feat: add post autosave with visual diff modal (v1.3.5)
+- Automatic draft saving every 3 seconds after user makes changes
+- Visual diff modal on page load comparing current vs autosaved content side-by-side
+- Displays human-readable names for parent and author in diff
+- Modal requires user decision to continue editing (no dismissing)
+- Loading overlay while checking for autosaved drafts
+- Saves title, content, excerpt, custom fields, and page attributes per user/post
+- Auto-focus on field name input when adding new custom field
+- Only prompts for autosaves within last 24 hours
+- Clears autosave after successful publish or update
+

@@ -1,5 +1,7 @@
 'use client';
 
+import { useRef, useEffect } from 'react';
+
 interface CustomFieldsBoxProps {
   readonly customFields: Array<{meta_key: string, meta_value: string}>;
   readonly onAddField: () => void;
@@ -13,6 +15,17 @@ export default function CustomFieldsBox({
   onRemoveField,
   onFieldChange,
 }: CustomFieldsBoxProps) {
+  const lastFieldRef = useRef<HTMLInputElement>(null);
+  const previousCountRef = useRef(customFields.length);
+
+  // Focus on the newly added field's name input
+  useEffect(() => {
+    if (customFields.length > previousCountRef.current) {
+      // A new field was added
+      lastFieldRef.current?.focus();
+    }
+    previousCountRef.current = customFields.length;
+  }, [customFields.length]);
   return (
     <div className="bg-white rounded-lg shadow p-6">
       <div className="flex justify-between items-center mb-4">
@@ -36,6 +49,7 @@ export default function CustomFieldsBox({
             <div key={index} className="p-3 border border-gray-200 rounded-lg">
               <div className="space-y-2">
                 <input
+                  ref={index === customFields.length - 1 ? lastFieldRef : null}
                   type="text"
                   placeholder="Field Name"
                   value={field.meta_key}

@@ -15,6 +15,7 @@ import PageAttributesBox from '@/components/admin/post-editor/PageAttributesBox'
 import CustomFieldsBox from '@/components/admin/post-editor/CustomFieldsBox';
 import TaxonomyBox from '@/components/admin/post-editor/TaxonomyBox';
 import RevisionsBox from '@/components/admin/post-editor/RevisionsBox';
+import AutosaveDiffModal from '@/components/admin/post-editor/AutosaveDiffModal';
 
 interface PostTypeFormProps {
   readonly postTypeSlug: string;
@@ -90,6 +91,14 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
   const [previewUrl, setPreviewUrl] = useState('');
   const [customFields, setCustomFields] = useState<Array<{meta_key: string, meta_value: string}>>([]);
   const [scheduledPublishAt, setScheduledPublishAt] = useState<string>('');
+  const [autosaveStatus, setAutosaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [showAutosaveDiff, setShowAutosaveDiff] = useState(false);
+  const [autosaveData, setAutosaveData] = useState<any>(null);
+  const [initialDataLoaded, setInitialDataLoaded] = useState(false);
+  const [autosaveSystemReady, setAutosaveSystemReady] = useState(false);
+  const [autosaveTimerRef, setAutosaveTimerRef] = useState<NodeJS.Timeout | null>(null);
+  const [checkingAutosave, setCheckingAutosave] = useState(false);
 
   // Check permission for this specific post type
   useEffect(() => {
@@ -251,8 +260,14 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
         const formatted = date.toISOString().slice(0, 16);
         setScheduledPublishAt(formatted);
       }
+      
+      // Mark that initial post data has loaded
+      setInitialDataLoaded(true);
+    } else if (!isEdit) {
+      // For new posts, mark as loaded immediately
+      setInitialDataLoaded(true);
     }
-  }, [data]);
+  }, [data, isEdit]);
 
   // Auto-generate slug from title (only if slug hasn't been manually edited)
   useEffect(() => {
@@ -315,6 +330,83 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
     }
   }, [isEdit, postId, data?.post, queryClient]);
 
+  // Load autosaved content - runs FIRST before anything else
+  useEffect(() => {
+    if (autosaveSystemReady) return; // Only run once
+    if (sessionStatus !== 'authenticated') return;
+    if (!initialDataLoaded) return; // Wait for post data to load first
+    
+    const loadAutosave = async () => {
+      setCheckingAutosave(true);
+      const params = new URLSearchParams({
+        post_type: postTypeSlug,
+        ...(postId && { post_id: postId })
+      });
+
+      try {
+        const res = await axios.get(`/api/posts/autosave?${params}`);
+        if (res.data.autosave) {
+          const autosave = res.data.autosave;
+          const savedDate = new Date(autosave.saved_at);
+          
+          // Only show if autosave is recent (within last 24 hours)
+          const hoursSinceSave = (Date.now() - savedDate.getTime()) / (1000 * 60 * 60);
+          if (hoursSinceSave < 24) {
+            // Show the diff - but DON'T set autosaveSystemReady yet
+            // User must make a choice first
+            setAutosaveData(autosave);
+            setShowAutosaveDiff(true);
+            setCheckingAutosave(false);
+            return; // Exit without setting autosaveSystemReady
+          }
+        }
+        // If no autosave or it's too old, system is ready
+        setAutosaveSystemReady(true);
+        setCheckingAutosave(false);
+      } catch (error) {
+        // On error, allow autosave to work
+        setAutosaveSystemReady(true);
+        setCheckingAutosave(false);
+      }
+    };
+
+    loadAutosave();
+  }, [sessionStatus, postTypeSlug, postId, initialDataLoaded, autosaveSystemReady]);
+
+  // Manual autosave trigger function
+  const triggerAutosave = (overrides?: {
+    parent_id?: number | null;
+    menu_order?: number;
+    author_id?: number;
+  }) => {
+    // CRITICAL CHECK - autosave system must be ready (old autosave dealt with, data loaded)
+    if (!autosaveSystemReady) return;
+    if (!title && !content && !excerpt) return; // Don't autosave empty content
+    
+    // Clear existing timer
+    if (autosaveTimerRef) {
+      clearTimeout(autosaveTimerRef);
+    }
+
+    // Set new timer
+    const timer = setTimeout(() => {
+      setAutosaveStatus('saving');
+      autosaveMutation.mutate({
+        post_id: postId || null,
+        post_type: postTypeSlug,
+        title,
+        content,
+        excerpt,
+        custom_fields: customFields,
+        parent_id: overrides?.parent_id !== undefined ? overrides.parent_id : parentId,
+        menu_order: overrides?.menu_order !== undefined ? overrides.menu_order : menuOrder,
+        author_id: overrides?.author_id !== undefined ? overrides.author_id : authorId,
+      });
+    }, 3000);
+
+    setAutosaveTimerRef(timer);
+  };
+
   const createMutation = useMutation({
     mutationFn: async (data: any) => {
       const res = await axios.post('/api/posts', data);
@@ -334,10 +426,21 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
 
       return { ...res.data, newPostId };
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       const message = data.post.status === 'published' 
         ? `${postTypeData?.singular_label || 'Item'} published successfully!`
         : `${postTypeData?.singular_label || 'Item'} saved as draft`;
+      
+      // Clear autosave after successful save
+      try {
+        const params = new URLSearchParams({
+          post_type: postTypeSlug,
+        });
+        await axios.delete(`/api/posts/autosave?${params}`);
+      } catch (error) {
+        // Silently fail
+      }
+      
       // Store message to show after redirect
       sessionStorage.setItem('cms_success_message', message);
       // Redirect to edit page with the new post ID
@@ -372,7 +475,7 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
       
       return res.data;
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       // Invalidate queries to refresh data
       queryClient.invalidateQueries({ queryKey: ['post', postId] });
       queryClient.invalidateQueries({ queryKey: ['posts', postTypeSlug] });
@@ -383,6 +486,17 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
       const message = data.post?.status === 'published' 
         ? `${postTypeData?.singular_label || 'Item'} published successfully!`
         : `${postTypeData?.singular_label || 'Item'} updated successfully`;
+      
+      // Clear autosave after successful save
+      try {
+        const params = new URLSearchParams({
+          post_type: postTypeSlug,
+          post_id: postId || ''
+        });
+        await axios.delete(`/api/posts/autosave?${params}`);
+      } catch (error) {
+        // Silently fail
+      }
       
       // Update local state immediately
       if (data.post) {
@@ -404,6 +518,21 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
     onError: (error: any) => {
       const errorMessage = error.response?.data?.error || `Failed to update ${postTypeData?.singular_label?.toLowerCase() || 'item'}`;
       toast.error(errorMessage, { duration: 5000 });
+    },
+  });
+
+  const autosaveMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await axios.post('/api/posts/autosave', data);
+      return res.data;
+    },
+    onSuccess: (data) => {
+      setAutosaveStatus('saved');
+      setLastSaved(new Date(data.saved_at));
+      setTimeout(() => setAutosaveStatus('idle'), 2000);
+    },
+    onError: () => {
+      setAutosaveStatus('idle');
     },
   });
 
@@ -439,10 +568,12 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
 
   const handleAddCustomField = () => {
     setCustomFields([...customFields, { meta_key: '', meta_value: '' }]);
+    triggerAutosave();
   };
 
   const handleRemoveCustomField = (index: number) => {
     setCustomFields(customFields.filter((_, i) => i !== index));
+    triggerAutosave();
   };
 
   const handleCustomFieldChange = (index: number, field: 'meta_key' | 'meta_value', value: string) => {
@@ -454,7 +585,77 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
       updated[index][field] = value;
     }
     setCustomFields(updated);
+    triggerAutosave();
   };
+
+  const handleAuthorChange = (value: number) => {
+    setAuthorId(value);
+    triggerAutosave({ author_id: value });
+  };
+
+  const handleParentChange = (value: number | null) => {
+    setParentId(value);
+    triggerAutosave({ parent_id: value });
+  };
+
+  const handleMenuOrderChange = (value: number) => {
+    setMenuOrder(value);
+    triggerAutosave({ menu_order: value });
+  };
+
+  const handleUseAutosave = () => {
+    if (autosaveData) {
+      setTitle(autosaveData.title || '');
+      setContent(autosaveData.content || '');
+      setExcerpt(autosaveData.excerpt || '');
+      if (autosaveData.custom_fields) {
+        setCustomFields(autosaveData.custom_fields);
+      }
+      if (autosaveData.parent_id !== undefined) {
+        setParentId(autosaveData.parent_id);
+      }
+      if (autosaveData.menu_order !== undefined) {
+        setMenuOrder(autosaveData.menu_order);
+      }
+      if (autosaveData.author_id !== undefined) {
+        setAuthorId(autosaveData.author_id);
+      }
+      setShowAutosaveDiff(false);
+      setAutosaveData(null);
+      toast.success('Autosaved content restored');
+      
+      // NOW the autosave system is ready
+      setAutosaveSystemReady(true);
+    }
+  };
+
+  const handleKeepCurrent = async () => {
+    setShowAutosaveDiff(false);
+    setAutosaveData(null);
+    
+    // Clear the autosave since user chose to keep current
+    try {
+      const params = new URLSearchParams({
+        post_type: postTypeSlug,
+        ...(postId && { post_id: postId })
+      });
+      await axios.delete(`/api/posts/autosave?${params}`);
+    } catch (error) {
+      // Silently fail  
+    }
+    
+    // NOW the autosave system is ready
+    setAutosaveSystemReady(true);
+  };
+
+  // Cleanup autosave timer on unmount
+  useEffect(() => {
+    return () => {
+      if (autosaveTimerRef) {
+        clearTimeout(autosaveTimerRef);
+      }
+    };
+  }, [autosaveTimerRef]);
 
   const handleSubmit = (e: React.FormEvent, publishStatus?: string) => {
     e.preventDefault();
@@ -556,9 +757,28 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
       )}
 
       <div className="mb-8 flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-gray-900">
-          {isEdit ? `Edit ${postTypeData.singular_label}` : `Create New ${postTypeData.singular_label}`}
-        </h1>
+        <div className="flex items-center gap-4">
+          <h1 className="text-3xl font-bold text-gray-900">
+            {isEdit ? `Edit ${postTypeData.singular_label}` : `Create New ${postTypeData.singular_label}`}
+          </h1>
+          {/* Autosave Indicator */}
+          {autosaveStatus === 'saving' && (
+            <span className="text-sm text-gray-500 flex items-center gap-2">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-500"></div>
+              Saving...
+            </span>
+          )}
+          {autosaveStatus === 'saved' && (
+            <span className="text-sm text-green-600 flex items-center gap-1">
+              ✓ Draft saved
+            </span>
+          )}
+          {lastSaved && autosaveStatus === 'idle' && (
+            <span className="text-xs text-gray-400">
+              Last saved: {lastSaved.toLocaleTimeString()}
+            </span>
+          )}
+        </div>
         {isEdit && (
           <Link
             href={`/admin/post-type/${postTypeSlug}/new`}
@@ -582,7 +802,10 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
                     id="post-title"
                     type="text"
                     value={title}
-                    onChange={(e) => setTitle(e.target.value)}
+                    onChange={(e) => {
+                      setTitle(e.target.value);
+                      triggerAutosave();
+                    }}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                     placeholder="Enter title"
                     required
@@ -677,7 +900,13 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
                 <div className="block text-sm font-medium text-gray-700 mb-2">
                   Content
                 </div>
-                <RichTextEditor value={content} onChange={setContent} />
+                <RichTextEditor 
+                  value={content} 
+                  onChange={(value) => {
+                    setContent(value);
+                    triggerAutosave();
+                  }} 
+                />
               </div>
             )}
           </div>
@@ -690,7 +919,10 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
               <textarea
                 id="post-excerpt"
                 value={excerpt}
-                onChange={(e) => setExcerpt(e.target.value)}
+                onChange={(e) => {
+                  setExcerpt(e.target.value);
+                  triggerAutosave();
+                }}
                 rows={3}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 placeholder="Optional excerpt"
@@ -745,9 +977,9 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
             allPosts={allPostsData?.posts || []}
             currentPostId={postId}
             users={usersData?.users || []}
-            onAuthorChange={setAuthorId}
-            onParentChange={setParentId}
-            onMenuOrderChange={setMenuOrder}
+            onAuthorChange={handleAuthorChange}
+            onParentChange={handleParentChange}
+            onMenuOrderChange={handleMenuOrderChange}
           />
 
           {allTermsData && allTermsData.length > 0 && allTermsData.map((taxonomyData: any) => (
@@ -782,6 +1014,41 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
           }}
           currentMediaId={featuredImageId || undefined}
         />
+      )}
+
+      {/* Autosave Diff Modal */}
+      <AutosaveDiffModal
+        isOpen={showAutosaveDiff}
+        currentContent={{ 
+          title, 
+          content, 
+          excerpt, 
+          custom_fields: customFields,
+          parent_id: parentId,
+          menu_order: menuOrder,
+          author_id: authorId
+        }}
+        autosaveContent={autosaveData || { 
+          title: '', 
+          content: '', 
+          excerpt: '', 
+          custom_fields: [], 
+          saved_at: '' 
+        }}
+        allPosts={allPostsData?.posts || []}
+        users={usersData?.users || []}
+        onUseCurrent={handleKeepCurrent}
+        onUseAutosave={handleUseAutosave}
+      />
+
+      {/* Loading Overlay for Autosave Check */}
+      {checkingAutosave && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-8 flex flex-col items-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mb-4"></div>
+            <p className="text-lg font-medium text-gray-900">Checking for autosaved draft...</p>
+          </div>
+        </div>
       )}
     </div>
   );

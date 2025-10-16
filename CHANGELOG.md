@@ -5,6 +5,25 @@ All notable changes to Next CMS will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.5] - 2025-10-16
+
+### Added
+- **Post Autosave with Visual Diff**
+  - Automatic draft saving every 3 seconds after user makes changes
+  - Autosave indicator showing "Saving...", "Draft saved", and last saved time
+  - Saves title, content, excerpt, custom fields, and page attributes (parent, menu order, author)
+  - Stored per user and per post in user_meta table, separate for new vs existing posts
+  - **Visual diff modal on page load** comparing current vs autosaved content side-by-side
+  - Shows only changed fields with current (gray) vs autosaved (green) highlighting
+  - Displays human-readable names for parent and author (not just IDs)
+  - Modal requires user decision - "Keep Current" or "Restore Autosave" to continue editing
+  - Loading overlay while checking for autosaved drafts on page load
+  - Only prompts for autosaves within last 24 hours
+  - Clears autosave after successful post publish or update
+  - API endpoints for save, load, and clear autosave data
+  - Non-blocking - failures don't interrupt user workflow
+- **Custom Fields UX**: Auto-focus on field name input when adding a new custom field
+
 ## [1.3.4] - 2025-10-16
 
 ### Added
