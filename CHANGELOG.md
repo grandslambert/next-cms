@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.4.0] - 2025-10-16
+## [1.14.0] - 2025-10-16
 
 ### Added
 - **Activity Log & Audit Trail**: Comprehensive tracking of all user actions
@@ -56,7 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Lists, blockquotes, bold, and italic properly styled
   - Consistent styling in editor and preview
 
-## [1.3.6] - 2025-10-16
+## [1.13.0] - 2025-10-12
 
 ### Added
 - **SEO Metadata Editor**: Per-post SEO fields (title, description, keywords)
@@ -67,7 +67,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Separate from user-editable custom fields
 - **Custom Fields UX**: Auto-focus on field name input when adding a new custom field
 
-## [1.3.5] - 2025-10-16
+## [1.12.0] - 2025-10-07
 
 ### Added
 - **Post Autosave with Visual Diff**
@@ -86,7 +86,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Non-blocking - failures don't interrupt user workflow
 - **Custom Fields UX**: Auto-focus on field name input when adding a new custom field
 
-## [1.3.4] - 2025-10-16
+## [1.11.0] - 2025-10-02
 
 ### Added
 - **Media Library Folders**
@@ -164,7 +164,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Hidden breadcrumb navigation in trash view (trash shows all items across folders)
 - Added clear "Trash" heading when viewing trash instead of confusing breadcrumb
 
-## [1.3.3] - 2025-10-15
+## [1.10.0] - 2025-09-27
 
 ### Added
 - **Configurable Session Timeout**
@@ -274,7 +274,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Improved maintainability and code organization
   - Each component now has clear, single responsibility
 
-## [1.3.1] - 2025-10-15
+## [1.9.0] - 2025-09-22
 
 ### Added
 - **Trash System for Posts**
@@ -323,7 +323,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `DELETE /api/posts/:id/permanent-delete` - Permanently delete post from database
 - `DELETE /api/posts/trash/empty` - Empty all items from trash
 
-## [1.3.0] - 2025-10-15
+## [1.8.0] - 2025-09-16
 
 ### Added
 - **Pending Review Status and Publishing Workflow**
@@ -509,7 +509,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Allows controlling which taxonomies appear on the dashboard
   - Works alongside existing "Show in admin menu" option
 
-## [1.2.1] - 2025-10-15
+## [1.7.0] - 2025-09-11
 
 ### Added
 - Two-button publish system in post editor
@@ -603,7 +603,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Description column width limited to prevent pushing Created date off screen
 - All created/updated timestamps now display date AND time in 12-hour format (e.g., "Oct 15, 2025, 3:45 PM")
 
-## [1.2.0] - 2025-10-15
+## [1.6.0] - 2025-09-05
 
 ### Added
 - **Custom Taxonomies System** (WordPress-style)
@@ -646,7 +646,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Public pages now properly display formatted content from WYSIWYG editor
 
-## [1.1.2] - 2025-10-15
+## [1.5.0] - 2025-08-31
 
 ### Added
 - **Content Body Styling** for public pages
@@ -658,7 +658,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Responsive images with rounded corners
   - All content now displays beautifully on public site
 
-## [1.1.1] - 2025-10-15
+## [1.4.0] - 2025-08-25
 
 ### Added
 - "View" action in post type lists for published items (opens in new window)
@@ -685,7 +685,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed extra "0" appearing in non-hierarchical post type lists
 - Fixed multiple React boolean rendering issues (MySQL BOOLEAN as tinyint)
 
-## [1.1.0] - 2025-10-15
+## [1.3.0] - 2025-08-19
 
 ### Added
 - **Custom Post Types** (WordPress-style)
@@ -720,7 +720,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Migration Required**: Run `scripts/migrate-pages-to-posts.js` for existing installations
 - **Pages Table**: Can be dropped after confirming migration success: `DROP TABLE pages;`
 
-## [1.0.2] - 2025-10-15
+## [1.2.0] - 2025-08-14
 
 ### Added
 - **Media Metadata Management**
@@ -759,7 +759,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Improved dashboard layout and visual hierarchy
   - Added loading spinners and skeleton loaders for better UX during data fetching
 
-## [1.0.1] - 2025-10-15
+## [1.1.0] - 2025-08-08
 
 ### Added
 - **Settings System** with database-driven configuration
@@ -797,7 +797,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cache invalidation when images with references deleted
 - Better user feedback on media deletion
 
-## [1.0.0] - 2025-10-15
+## [1.0.0] - 2025-08-03
 
 ### Initial Release
 

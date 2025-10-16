@@ -1,4 +1,4 @@
-feat: add activity log and improve autosave system (v1.4.0)
+feat: add activity log and improve autosave system (v1.14.0)
 - Added comprehensive activity log and audit trail for all admin actions
 - Track before/after changes for posts, users, roles, media, taxonomies, terms, settings
 - Activity log details modal with side-by-side diff highlighting
