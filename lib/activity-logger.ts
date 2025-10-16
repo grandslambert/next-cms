@@ -20,10 +20,13 @@ export type ActivityAction =
   // Settings actions
   | 'settings_updated'
   // Folder actions
-  | 'folder_created' | 'folder_updated' | 'folder_deleted';
+  | 'folder_created' | 'folder_updated' | 'folder_deleted'
+  // Menu actions
+  | 'menu_created' | 'menu_updated' | 'menu_deleted'
+  | 'menu_item_created' | 'menu_item_updated' | 'menu_item_deleted';
 
 export type EntityType = 
-  | 'auth' | 'post' | 'media' | 'user' | 'role' | 'post_type' | 'taxonomy' | 'term' | 'settings' | 'folder';
+  | 'auth' | 'post' | 'media' | 'user' | 'role' | 'post_type' | 'taxonomy' | 'term' | 'settings' | 'folder' | 'menu' | 'menu_item';
 
 interface LogActivityParams {
   userId: number;

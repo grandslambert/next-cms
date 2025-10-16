@@ -32,6 +32,16 @@ const staticMenuItems = [
     ]
   },
   { 
+    name: 'Appearance', 
+    icon: '🎨', 
+    position: 25,
+    permission: 'manage_menus',
+    subItems: [
+      { name: 'Menus', href: '/admin/navigation', icon: '🧭', permission: 'manage_menus' },
+      { name: 'Menu Locations', href: '/admin/settings/menus', icon: '📍', permission: 'manage_settings' },
+    ]
+  },
+  { 
     name: 'Settings', 
     icon: '⚙️', 
     position: 30,
@@ -304,7 +314,7 @@ export default function Sidebar() {
           <span>Logout</span>
         </button>
         <div className="text-center text-xs text-gray-500 mt-2">
-          Next CMS v1.14.2
+          Next CMS v1.15.0
         </div>
       </div>
     </aside>

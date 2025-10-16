@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.15.0] - 2025-10-16
+
+### Added
+- **Navigation Menu System**:
+  - Create and manage multiple menus with location-based positioning
+  - Three menu item types: Post Types (archives/individual posts), Taxonomy archives, Custom links
+  - WordPress-style drag-and-drop reordering with visual drop zones
+  - Drag left/right to control hierarchy (parent/child relationships)
+  - Inline editing with arrow icons (▼/▲) for expand/collapse
+  - Advanced meta fields: Title Attribute, CSS Classes, Link Relationship (XFN), Description
+  - Batch saving with loading overlay (menu + items + meta + deletions in one operation)
+  - Sticky header with always-visible action buttons (disabled when no changes)
+  - Auto-remembers last selected menu per user
+  - Activity logging for all menu operations with before/after tracking
+  - New Appearance sidebar menu (🎨) with Menus and Menu Locations submenus
+  
+- **Menu Locations**:
+  - Settings page to create and manage custom menu locations
+  - Built-in locations (header, footer, sidebar) protected from deletion
+  - Radio button selector in menu form with descriptions
+  
+- **Public Template Integration**:
+  - Menus automatically render in header (main nav) and footer locations
+  - Hierarchical URL building for nested pages (e.g., /parent/child/grandchild)
+  - Server-side rendering with full meta data support (tooltips, CSS classes, rel attributes)
+  - Dropdown submenus on hover
+  
+- **Database**: New tables - menus, menu_items, menu_item_meta, menu_locations
+- **Permissions**: New manage_menus permission for role-based access
+- **Components**: Modular architecture (NavigationHeader, MenuList, MenuForm, MenuItemsList, AddMenuItemForm)
+  
+### Fixed
+- Menu order persistence when dragging and saving
+- Menu switching now properly clears previous menu items
+- Last selected menu loads from user preferences with loading spinner
+- Boolean display issue in menu locations (0 rendering as text)
+
 ## [1.14.2] - 2025-10-16
 
 ### Fixed

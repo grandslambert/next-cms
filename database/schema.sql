@@ -215,6 +215,59 @@ CREATE TABLE IF NOT EXISTS media_folders (
   INDEX idx_parent (parent_id)
 );
 
+-- Menus table (navigation menus)
+CREATE TABLE IF NOT EXISTS menus (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(255) UNIQUE NOT NULL,
+  location VARCHAR(100) NOT NULL,
+  description TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_name (name),
+  INDEX idx_location (location)
+);
+
+-- Menu items table (individual menu entries)
+CREATE TABLE IF NOT EXISTS menu_items (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  menu_id INT NOT NULL,
+  parent_id INT NULL,
+  type ENUM('post', 'post_type', 'taxonomy', 'term', 'custom') NOT NULL,
+  object_id INT NULL,
+  post_type VARCHAR(100) NULL,
+  custom_url VARCHAR(500),
+  custom_label VARCHAR(255),
+  menu_order INT DEFAULT 0,
+  target VARCHAR(20) DEFAULT '_self',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (menu_id) REFERENCES menus(id) ON DELETE CASCADE,
+  FOREIGN KEY (parent_id) REFERENCES menu_items(id) ON DELETE CASCADE,
+  INDEX idx_menu (menu_id),
+  INDEX idx_parent (parent_id),
+  INDEX idx_order (menu_order)
+);
+
+-- Menu item meta table (for advanced fields)
+CREATE TABLE IF NOT EXISTS menu_item_meta (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  menu_item_id INT NOT NULL,
+  meta_key VARCHAR(255) NOT NULL,
+  meta_value TEXT NULL,
+  FOREIGN KEY (menu_item_id) REFERENCES menu_items(id) ON DELETE CASCADE,
+  UNIQUE KEY unique_menu_item_meta (menu_item_id, meta_key)
+);
+
+-- Menu locations table (predefined locations for theme integration)
+CREATE TABLE IF NOT EXISTS menu_locations (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(100) NOT NULL UNIQUE,
+  description VARCHAR(255) NULL,
+  is_builtin BOOLEAN DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
 -- Activity Log table for audit trail
 CREATE TABLE IF NOT EXISTS activity_log (
   id INT AUTO_INCREMENT PRIMARY KEY,

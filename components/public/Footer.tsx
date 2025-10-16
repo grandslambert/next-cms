@@ -1,5 +1,6 @@
 import db from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
+import Menu from './Menu';
 
 async function getSettings() {
   try {
@@ -25,44 +26,14 @@ export default async function Footer() {
   return (
     <footer className="bg-gray-900 text-white mt-auto">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          <div>
-            <h3 className="text-xl font-bold mb-4">{settings.site_name || 'Next CMS'}</h3>
-            <p className="text-gray-400">
-              {settings.site_description || 'A complete content management system built with Next.js, Tailwind CSS, and MySQL.'}
-            </p>
-          </div>
-          
-          <div>
-            <h4 className="text-lg font-semibold mb-4">Quick Links</h4>
-            <ul className="space-y-2">
-              <li>
-                <a href="/" className="text-gray-400 hover:text-white transition-colors">
-                  Home
-                </a>
-              </li>
-              <li>
-                <a href="/blog" className="text-gray-400 hover:text-white transition-colors">
-                  Blog
-                </a>
-              </li>
-              <li>
-                <a href="/admin" className="text-gray-400 hover:text-white transition-colors">
-                  Admin
-                </a>
-              </li>
-            </ul>
-          </div>
-          
-          <div>
-            <h4 className="text-lg font-semibold mb-4">About</h4>
-            <p className="text-gray-400">
-              {settings.site_description || 'Built with Next.js 14, featuring posts, pages, media management, and rich text editing.'}
-            </p>
-          </div>
-        </div>
+        <Menu 
+          location="footer" 
+          className="mb-6"
+          linkClassName="text-gray-300 hover:text-white transition-colors"
+          submenuClassName="absolute left-0 top-full mt-2 bg-gray-800 shadow-lg rounded-lg py-2 min-w-[200px] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10"
+        />
         
-        <div className="border-t border-gray-800 mt-8 pt-8 text-center text-gray-400">
+        <div className="border-t border-gray-700 mt-8 pt-8 text-center text-gray-400">
           <p>&copy; {new Date().getFullYear()} {settings.site_name || 'Next CMS'}. All rights reserved.</p>
         </div>
       </div>

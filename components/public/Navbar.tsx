@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import db from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
+import Menu from './Menu';
 
 async function getSiteName() {
   try {
@@ -17,27 +18,20 @@ export default async function Navbar() {
   const siteName = await getSiteName();
   
   return (
-    <nav className="bg-white shadow-sm border-b border-gray-200">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-16 items-center">
-          <Link href="/" className="text-2xl font-bold text-gray-900">
-            {siteName}
-          </Link>
-          
-          <div className="flex space-x-8">
-            <Link href="/" className="text-gray-700 hover:text-primary-600 transition-colors">
-              Home
+      <nav className="bg-white shadow-sm border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16 items-center">
+            <Link href="/" className="text-2xl font-bold text-gray-900">
+              {siteName}
             </Link>
-            <Link href="/blog" className="text-gray-700 hover:text-primary-600 transition-colors">
-              Blog
-            </Link>
-            <Link href="/admin" className="text-gray-700 hover:text-primary-600 transition-colors">
-              Admin
-            </Link>
+            
+            <Menu 
+              location="header" 
+              linkClassName="text-gray-700 hover:text-primary-600 transition-colors"
+            />
           </div>
         </div>
-      </div>
-    </nav>
+      </nav>
   );
 }
 

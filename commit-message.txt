@@ -1,24 +1,30 @@
-fix: dashboard, post editor, and activity log improvements (v1.14.2)
-- Renamed "Recent Posts" to "Recent Content" with all post types
-- Post titles are clickable links to editor
-- Post type and status shown as bold uppercase badges with unique colors
-- Added hover effect on Recent Content list items
-- Posts API now supports post_type=all parameter
-- Content Summary grid displays in 5 columns on xl screens
-- Moved save/publish buttons to sticky header in post editor
-- Post editor header stays fixed at top while scrolling
-- Simplified sidebar Status box in post editor
-- Moved "View Site" icon to sidebar header next to title
-- Removed "View Site" from menu for cleaner navigation
-- Fixed flyout menu disappearing too quickly (300ms hover delay)
-- Fixed activity log not tracking before/after changes for term updates
-- Fixed activity log not tracking before/after changes for settings updates
-- Fixed activity log not tracking before/after changes for media size regeneration
-- Fixed activity log not tracking before/after changes for taxonomy updates
-- Fixed activity log not tracking before/after changes for post type updates
-- Added taxonomy tracking to post type activity logs (single log entry now)
-- Post type form now filters out legacy "categories" from supports before saving
-- Removed duplicate logging from taxonomy assignment updates
-- Consolidated post type and taxonomy updates into single log entry
-- Activity log details now show "True"/"False" for boolean fields instead of "1"/"0"
-- Fixed submenu items incorrectly showing as active (exact match instead of startsWith)
+feat: Add Navigation Menu System (v1.15.0)
+
+Complete WordPress-style navigation menu builder with:
+
+- Three menu item types: Post Type (archives/posts), Taxonomy archives, Custom links
+- Post search with real-time filtering (published posts only)
+- Remembers last selected menu per user, auto-loads on page load
+- WordPress-style drag-and-drop: reorder items, drag left/right to control hierarchy
+- Visual drop zones showing exact insert position with indent level indicator
+- Hierarchical parent/child structure with visual indentation and borders
+- Inline editing with arrow icons (▼ open, ▲ close) on right side
+- Advanced fields: Title Attribute, CSS Classes, Link Relationship (XFN), Description
+- Batch saving: Creates new items, updates existing, saves meta, processes deletions with loading overlay
+- Sticky header with Delete/Cancel/Update buttons (disabled when no changes)
+- Unsaved changes warning when switching menus
+- Modular component architecture (5 components for better maintainability)
+- Activity logging for all menu operations with before/after tracking
+- New manage_menus permission for role-based access
+- Database tables: menus, menu_items, menu_item_meta, menu_locations with cascade deletes
+- Menu Locations: built-in locations (header, footer, sidebar) protected from deletion
+- Location radio buttons in menu form with descriptions for better UX
+- New Appearance sidebar menu (🎨) with Menus and Menu Locations submenus
+- Public template integration: menus render in header and footer locations
+- Menu helper functions for server-side rendering with full meta data support
+- Hierarchical URL building for nested pages (e.g., /parent/child/grandchild)
+- Menu items display actual names (post titles, labels) instead of IDs
+- Link target options (_self, _blank) for same/new window
+
+Fixed:
+- Last selected menu properly loads from user preferences with loading spinner
