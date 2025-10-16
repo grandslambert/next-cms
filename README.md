@@ -2,7 +2,7 @@
 
 A complete Content Management System built with Next.js 14, Tailwind CSS, and MySQL - similar to WordPress.
 
-## Current Version: 1.3.3
+## Current Version: 1.3.4
 
 See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
 
@@ -23,9 +23,16 @@ See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
 - 🖼️ **Advanced Media Library** 
   - WordPress-style automatic image resizing with multiple size variants
   - Image metadata (title and alt text) for SEO and accessibility
+  - Folder organization with hierarchical structure
+  - Drag and drop to move files between folders
+  - Trash system with restore and permanent delete
+  - Bulk actions (move, trash, restore, delete)
+  - File count badges on folders
+  - Breadcrumb navigation for folder browsing
   - Regenerate image sizes when settings change
-  - Date-based folder organization (YYYY/MM)
+  - Date-based file storage (YYYY/MM on filesystem)
   - Customizable image sizes with crop styles (cover, inside, contain, fill)
+  - Compact grid layout showing more items at once
 - ✏️ **Rich Text Editor** - Full-featured WYSIWYG editor (react-simple-wysiwyg)
 - 🔐 **Authentication** - Secure login system with NextAuth.js
 - 👥 **Advanced User Management** 
@@ -176,8 +183,18 @@ next-cms/
 │           └── meta/         # User preferences (columns, items per page)
 ├── components/               # React components
 │   ├── admin/               # Admin components
+│   │   ├── media/           # Media library components
+│   │   │   ├── MediaUploadProgress.tsx
+│   │   │   ├── MediaGrid.tsx
+│   │   │   ├── EditMediaModal.tsx
+│   │   │   ├── FolderModal.tsx
+│   │   │   ├── MoveMediaModal.tsx
+│   │   │   ├── BulkMoveModal.tsx
+│   │   │   ├── LoadingOverlay.tsx
+│   │   │   └── TrashView.tsx
 │   │   ├── post-editor/     # Post editor sub-components
 │   │   ├── PostTypeForm.tsx # Main post editor
+│   │   ├── MediaSelector.tsx # Featured image picker
 │   │   └── Sidebar.tsx      # Admin navigation
 │   └── public/              # Public components
 ├── hooks/                   # Custom React hooks
@@ -265,14 +282,26 @@ Access the admin panel at `/admin`:
 
 ### Media Management
 
+**Organizing Media:**
 1. Go to the Media Library
-2. Click "Upload Files"
-3. Select one or more files
+2. Create folders to organize files by clicking "New Folder"
+3. Navigate folders with breadcrumb navigation
+4. Upload files into the current folder
+
+**Working with Files:**
+1. Click "Upload Files" to add new media
+2. Drag and drop files onto folders to move them
+3. Use bulk actions to move or delete multiple files at once
 4. Edit title and alt text for SEO and accessibility
-5. Use the copy button to get the URL for use in posts/pages
+5. Copy URLs for use in posts/pages
 6. Regenerate sizes if media settings change
-7. View usage before deleting (shows where media is used)
-8. Delete files as needed (removes all size variants)
+
+**Trash System:**
+1. Deleted files move to trash (not permanently deleted)
+2. Click "Trash" button to view deleted files
+3. Restore individual files or use bulk restore
+4. Permanently delete files when ready
+5. Empty entire trash with one click
 
 ### Managing Roles and Permissions
 
@@ -350,9 +379,24 @@ All API routes enforce role-based permissions. Unauthorized requests return 403 
 - `DELETE /api/roles/:id` - Delete custom role
 
 ### Media
-- `GET /api/media` - List all media (requires `manage_media`)
-- `POST /api/media` - Upload file
-- `DELETE /api/media/:id` - Delete file and sizes
+- `GET /api/media` - List all media (supports folder_id and trash filters)
+- `POST /api/media` - Upload file (supports folder_id)
+- `DELETE /api/media/:id` - Move file to trash (soft delete)
+- `PUT /api/media/:id/move` - Move file to folder
+- `POST /api/media/:id/restore` - Restore from trash
+- `DELETE /api/media/:id/permanent-delete` - Permanently delete file
+- `DELETE /api/media/trash/empty` - Empty entire trash
+
+### Media Folders
+- `GET /api/media/folders` - List folders (supports parent_id filter)
+- `POST /api/media/folders` - Create folder
+- `GET /api/media/folders/:id` - Get folder details
+- `PUT /api/media/folders/:id` - Update folder (rename/move)
+- `DELETE /api/media/folders/:id` - Delete folder
+
+### Media Bulk Actions
+- `POST /api/media/bulk` - Bulk operations (trash, restore, move)
+- `POST /api/media/bulk/permanent-delete` - Bulk permanent delete
 
 ### Settings
 - `GET /api/settings` - Get site settings (requires `manage_settings`)
@@ -376,7 +420,8 @@ The system uses the following main tables:
 - **taxonomies** - Custom taxonomy definitions
 - **terms** - Taxonomy terms (categories, tags, etc.)
 - **post_terms** - Post-term relationships
-- **media** - Uploaded files with metadata
+- **media** - Uploaded files with metadata, folder assignment, and soft delete (trash)
+- **media_folders** - Hierarchical folder structure for organizing media
 - **settings** - Site configuration (includes max_revisions and session_timeout)
 
 ## Deployment
@@ -439,10 +484,13 @@ Completed features (see CHANGELOG for details):
 - [x] Revision history with restore capability
 - [x] Scheduled publishing with cron integration
 - [x] Bulk actions for posts (trash, restore, delete)
+- [x] Bulk actions for media (move, trash, restore, delete)
 - [x] Advanced search and filtering with column filters
 - [x] Custom fields (post meta) system
 - [x] Pagination for post lists
 - [x] Session timeout configuration
+- [x] Media library folders with drag and drop
+- [x] Media trash system with restore
 
 Planned features:
 - [ ] Comments system with moderation
@@ -454,9 +502,7 @@ Planned features:
 - [ ] Email notifications (new comment, user registration, etc.)
 - [ ] Custom themes with theme editor
 - [ ] Plugin system for extensibility
-- [ ] Bulk actions for media library
 - [ ] Export/import functionality (JSON, CSV)
-- [ ] Advanced media library (folders, categories)
 - [ ] Duplicate post/page functionality
 - [ ] Post templates for consistent formatting
 - [ ] Autosave and drafts

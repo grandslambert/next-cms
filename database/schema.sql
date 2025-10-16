@@ -135,10 +135,15 @@ CREATE TABLE IF NOT EXISTS media (
   size INT NOT NULL,
   url VARCHAR(500) NOT NULL,
   sizes JSON,
+  folder_id INT NULL,
   uploaded_by INT NOT NULL,
+  deleted_at TIMESTAMP NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (folder_id) REFERENCES media_folders(id) ON DELETE SET NULL,
   FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE CASCADE,
-  INDEX idx_mime_type (mime_type)
+  INDEX idx_mime_type (mime_type),
+  INDEX idx_folder (folder_id),
+  INDEX idx_deleted (deleted_at)
 );
 
 -- Taxonomies table (defines taxonomy types like "category", "tag", etc.)
@@ -198,6 +203,17 @@ CREATE TABLE IF NOT EXISTS post_type_taxonomies (
   FOREIGN KEY (taxonomy_id) REFERENCES taxonomies(id) ON DELETE CASCADE
 );
 
+
+-- Media folders table
+CREATE TABLE IF NOT EXISTS media_folders (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  parent_id INT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (parent_id) REFERENCES media_folders(id) ON DELETE CASCADE,
+  INDEX idx_parent (parent_id)
+);
 
 -- Settings table
 CREATE TABLE IF NOT EXISTS settings (

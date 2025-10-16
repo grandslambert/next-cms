@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 
@@ -12,15 +12,30 @@ interface MediaSelectorProps {
   currentMediaId?: number;
 }
 
-export default function MediaSelector({ isOpen, onClose, onSelect, currentMediaId }: MediaSelectorProps) {
+export default function MediaSelector({ isOpen, onClose, onSelect, currentMediaId }: Readonly<MediaSelectorProps>) {
   const [uploading, setUploading] = useState(false);
+  const [currentFolderId, setCurrentFolderId] = useState<number | null>(null);
+  const [folderPath, setFolderPath] = useState<{ id: number | null; name: string }[]>([{ id: null, name: 'Media Library' }]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['media'],
+  // Fetch folders in current directory
+  const { data: foldersData } = useQuery({
+    queryKey: ['media-folders', currentFolderId],
     queryFn: async () => {
-      const res = await axios.get('/api/media?limit=100');
+      const parentParam = currentFolderId === null ? 'null' : currentFolderId;
+      const res = await axios.get(`/api/media/folders?parent_id=${parentParam}`);
+      return res.data;
+    },
+    enabled: isOpen,
+  });
+
+  // Fetch media in current folder
+  const { data, isLoading } = useQuery({
+    queryKey: ['media', currentFolderId],
+    queryFn: async () => {
+      const folderParam = currentFolderId === null ? '' : `&folder_id=${currentFolderId}`;
+      const res = await axios.get(`/api/media?limit=100${folderParam}`);
       return res.data;
     },
     enabled: isOpen, // Only fetch when modal is open
@@ -36,6 +51,9 @@ export default function MediaSelector({ isOpen, onClose, onSelect, currentMediaI
       for (const file of Array.from(files)) {
         const formData = new FormData();
         formData.append('file', file);
+        if (currentFolderId) {
+          formData.append('folder_id', currentFolderId.toString());
+        }
 
         await axios.post('/api/media', formData, {
           headers: {
@@ -45,6 +63,7 @@ export default function MediaSelector({ isOpen, onClose, onSelect, currentMediaI
       }
 
       queryClient.invalidateQueries({ queryKey: ['media'] });
+      queryClient.invalidateQueries({ queryKey: ['media-folders'] });
       toast.success('Files uploaded successfully');
       
       if (fileInputRef.current) {
@@ -61,6 +80,17 @@ export default function MediaSelector({ isOpen, onClose, onSelect, currentMediaI
     // Pass both ID and URL - ID is stored in database
     onSelect(item.id, item.url);
     onClose();
+  };
+
+  const handleOpenFolder = (folder: any) => {
+    setCurrentFolderId(folder.id);
+    setFolderPath([...folderPath, { id: folder.id, name: folder.name }]);
+  };
+
+  const handleBreadcrumbClick = (index: number) => {
+    const newPath = folderPath.slice(0, index + 1);
+    setFolderPath(newPath);
+    setCurrentFolderId(newPath.at(-1)?.id ?? null);
   };
 
   if (!isOpen) return null;
@@ -111,14 +141,53 @@ export default function MediaSelector({ isOpen, onClose, onSelect, currentMediaI
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto p-6">
+            {/* Breadcrumb Navigation */}
+            <div className="flex items-center space-x-2 mb-4 text-sm">
+              {folderPath.map((folder, index) => (
+                <div key={index} className="flex items-center">
+                  {index > 0 && <span className="text-gray-400 mx-2">/</span>}
+                  <button
+                    type="button"
+                    onClick={() => handleBreadcrumbClick(index)}
+                    className={`hover:text-primary-600 transition-colors ${
+                      index === folderPath.length - 1 ? 'text-gray-900 font-medium' : 'text-gray-600'
+                    }`}
+                  >
+                    {folder.name}
+                  </button>
+                </div>
+              ))}
+            </div>
+
             {isLoading ? (
               <div className="flex items-center justify-center py-12">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
               </div>
-            ) : data?.media && data.media.length > 0 ? (
+            ) : (foldersData?.folders && foldersData.folders.length > 0) || (data?.media && data.media.length > 0) ? (
               /* Media Grid View */
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                {data.media.map((item: any) => (
+              <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                {/* Folders */}
+                {foldersData?.folders?.map((folder: any) => (
+                  <button
+                    key={`folder-${folder.id}`}
+                    type="button"
+                    onClick={() => handleOpenFolder(folder)}
+                    className="group relative bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg overflow-hidden border-2 border-blue-200 hover:border-blue-400 transition-all"
+                  >
+                    <div className="aspect-square flex flex-col items-center justify-center p-3">
+                      <div className="text-4xl mb-1">📁</div>
+                      <span className="text-xs font-medium text-gray-900 text-center truncate w-full px-1">
+                        {folder.name}
+                      </span>
+                      <span className="text-xs text-gray-600 mt-1">
+                        {folder.file_count || 0} {folder.file_count === 1 ? 'file' : 'files'}
+                      </span>
+                    </div>
+                  </button>
+                ))}
+
+                {/* Media Files */}
+                {data?.media?.map((item: any) => (
                   <button
                     key={item.id}
                     type="button"

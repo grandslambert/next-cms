@@ -36,17 +36,60 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const limit = parseInt(searchParams.get('limit') || '20');
     const offset = parseInt(searchParams.get('offset') || '0');
+    const folderId = searchParams.get('folder_id');
+    const showTrash = searchParams.get('trash') === 'true';
 
-    const [rows] = await db.query<RowDataPacket[]>(
-      `SELECT m.*, CONCAT(u.first_name, ' ', u.last_name) as uploaded_by_name 
-       FROM media m 
-       LEFT JOIN users u ON m.uploaded_by = u.id
-       ORDER BY m.created_at DESC
-       LIMIT ? OFFSET ?`,
-      [limit, offset]
-    );
+    let query = `SELECT m.*, CONCAT(u.first_name, ' ', u.last_name) as uploaded_by_name 
+                 FROM media m 
+                 LEFT JOIN users u ON m.uploaded_by = u.id`;
+    let countQuery = 'SELECT COUNT(*) as total FROM media';
+    const params: any[] = [];
+    const countParams: any[] = [];
+    const conditions: string[] = [];
 
-    const [countRows] = await db.query<RowDataPacket[]>('SELECT COUNT(*) as total FROM media');
+    // Filter by trash status
+    if (showTrash) {
+      conditions.push('m.deleted_at IS NOT NULL');
+      countParams.push('1=1'); // Placeholder for easier logic
+    } else {
+      conditions.push('m.deleted_at IS NULL');
+      countParams.push('1=1');
+    }
+
+    // Filter by folder
+    if (folderId) {
+      conditions.push('m.folder_id = ?');
+      params.push(parseInt(folderId));
+      countParams.push(parseInt(folderId));
+    } else if (folderId === null || searchParams.has('folder_id')) {
+      // If folder_id is explicitly null, show root level only
+      conditions.push('m.folder_id IS NULL');
+    }
+
+    if (conditions.length > 0) {
+      query += ' WHERE ' + conditions.join(' AND ');
+      // Build count query conditions
+      const countConditions = [];
+      if (showTrash) {
+        countConditions.push('deleted_at IS NOT NULL');
+      } else {
+        countConditions.push('deleted_at IS NULL');
+      }
+      if (folderId) {
+        countConditions.push('folder_id = ?');
+      } else if (folderId === null || searchParams.has('folder_id')) {
+        countConditions.push('folder_id IS NULL');
+      }
+      if (countConditions.length > 0) {
+        countQuery += ' WHERE ' + countConditions.join(' AND ');
+      }
+    }
+
+    query += ' ORDER BY m.created_at DESC LIMIT ? OFFSET ?';
+    params.push(limit, offset);
+
+    const [rows] = await db.query<RowDataPacket[]>(query, params);
+    const [countRows] = await db.query<RowDataPacket[]>(countQuery, countParams.filter((p: any) => typeof p === 'number'));
     const total = countRows[0].total;
 
     return NextResponse.json({ media: rows, total });
@@ -67,6 +110,7 @@ export async function POST(request: NextRequest) {
     const file = formData.get('file') as File;
     const title = formData.get('title') as string || '';
     const altText = formData.get('alt_text') as string || '';
+    const folderId = formData.get('folder_id') as string || null;
 
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
@@ -147,9 +191,9 @@ export async function POST(request: NextRequest) {
       const filename = `${baseFilename}${ext}`;
 
       const [result] = await db.query<ResultSetHeader>(
-        `INSERT INTO media (filename, original_name, title, alt_text, mime_type, size, url, sizes, uploaded_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [filename, file.name, title, altText, file.type, file.size, url, JSON.stringify(sizes), userId]
+        `INSERT INTO media (filename, original_name, title, alt_text, mime_type, size, url, sizes, folder_id, uploaded_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [filename, file.name, title, altText, file.type, file.size, url, JSON.stringify(sizes), folderId ? parseInt(folderId) : null, userId]
       );
 
       const [newMedia] = await db.query<RowDataPacket[]>(
@@ -167,9 +211,9 @@ export async function POST(request: NextRequest) {
       const url = `/uploads/${folderPath}/${filename}`;
 
       const [result] = await db.query<ResultSetHeader>(
-        `INSERT INTO media (filename, original_name, title, alt_text, mime_type, size, url, uploaded_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [filename, file.name, title, altText, file.type, file.size, url, userId]
+        `INSERT INTO media (filename, original_name, title, alt_text, mime_type, size, url, folder_id, uploaded_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [filename, file.name, title, altText, file.type, file.size, url, folderId ? parseInt(folderId) : null, userId]
       );
 
       const [newMedia] = await db.query<RowDataPacket[]>(
