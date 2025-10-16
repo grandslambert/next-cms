@@ -5,6 +5,7 @@ import db from '@/lib/db';
 import bcrypt from 'bcryptjs';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import { validatePassword } from '@/lib/password-validator';
 
 export async function GET(
   request: NextRequest,
@@ -60,8 +61,58 @@ export async function PUT(
       return NextResponse.json({ error: 'Username, first name, email, and role are required' }, { status: 400 });
     }
 
-    // If password is provided, hash it; otherwise keep existing
+    // If password is provided, validate and hash it; otherwise keep existing
     if (password?.trim()) {
+      // Fetch password requirements
+      const [pwSettings] = await db.query<RowDataPacket[]>(
+        `SELECT setting_key, setting_value FROM settings 
+         WHERE setting_key IN (
+           'password_min_length',
+           'password_require_uppercase',
+           'password_require_lowercase',
+           'password_require_numbers',
+           'password_require_special'
+         )`
+      );
+
+      const requirements = {
+        minLength: 8,
+        requireUppercase: true,
+        requireLowercase: true,
+        requireNumbers: true,
+        requireSpecial: false,
+      };
+
+      pwSettings.forEach((setting: any) => {
+        const value = setting.setting_value;
+        switch (setting.setting_key) {
+          case 'password_min_length':
+            requirements.minLength = parseInt(value) || 8;
+            break;
+          case 'password_require_uppercase':
+            requirements.requireUppercase = value === '1';
+            break;
+          case 'password_require_lowercase':
+            requirements.requireLowercase = value === '1';
+            break;
+          case 'password_require_numbers':
+            requirements.requireNumbers = value === '1';
+            break;
+          case 'password_require_special':
+            requirements.requireSpecial = value === '1';
+            break;
+        }
+      });
+
+      // Validate password
+      const validation = validatePassword(password, requirements);
+      if (!validation.isValid) {
+        return NextResponse.json({ 
+          error: 'Password does not meet requirements', 
+          details: validation.errors 
+        }, { status: 400 });
+      }
+
       const hashedPassword = bcrypt.hashSync(password, 10);
       await db.query<ResultSetHeader>(
         'UPDATE users SET username = ?, first_name = ?, last_name = ?, email = ?, password = ?, role_id = ? WHERE id = ?',

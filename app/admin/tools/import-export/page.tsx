@@ -150,13 +150,18 @@ export default function ImportExportPage() {
   };
 
   return (
-    <div className="p-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Import/Export Data</h1>
-        <p className="text-gray-600">
-          Export your site data to JSON files for backup or migration, or import data from a previous export.
+    <div className="-m-8 h-[calc(100vh-4rem)]">
+      {/* Sticky Header */}
+      <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-8 py-4">
+        <h1 className="text-2xl font-bold">Import/Export Data</h1>
+        <p className="text-sm text-gray-600">
+          Export your site data to JSON files for backup or migration, or import data from a previous export
         </p>
       </div>
+
+      {/* Scrollable Content */}
+      <div className="overflow-y-auto h-[calc(100vh-8rem)]">
+        <div className="px-8 py-6">
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Export Section */}
@@ -372,6 +377,8 @@ export default function ImportExportPage() {
               </li>
             </ul>
           </div>
+        </div>
+      </div>
         </div>
       </div>
     </div>

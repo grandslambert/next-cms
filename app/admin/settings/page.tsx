@@ -93,12 +93,25 @@ export default function GeneralSettingsPage() {
   }
 
   return (
-    <div className="max-w-2xl">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">General Settings</h1>
-        <p className="text-gray-600 mt-2">Configure your site's general settings</p>
+    <div className="-m-8 h-[calc(100vh-4rem)]">
+      {/* Sticky Header */}
+      <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">General Settings</h1>
+          <p className="text-sm text-gray-600">Configure your site's general settings</p>
+        </div>
+        <button
+          onClick={handleSubmit}
+          disabled={updateMutation.isPending}
+          className="bg-primary-600 text-white px-6 py-2 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+        >
+          {updateMutation.isPending ? 'Saving...' : 'Save Settings'}
+        </button>
       </div>
 
+      {/* Scrollable Content */}
+      <div className="overflow-y-auto h-[calc(100vh-8rem)]">
+        <div className="max-w-2xl px-8 py-6">
       <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow p-6 space-y-6">
         <div>
           <label htmlFor="site-name" className="block text-sm font-medium text-gray-700 mb-2">
@@ -200,17 +213,9 @@ export default function GeneralSettingsPage() {
             </p>
           </div>
         </div>
-
-        <div className="pt-4">
-          <button
-            type="submit"
-            disabled={updateMutation.isPending}
-            className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
-          >
-            {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
-          </button>
-        </div>
       </form>
+        </div>
+      </div>
     </div>
   );
 }

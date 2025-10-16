@@ -7,6 +7,78 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.18.0] - 2025-10-16
+
+### Added
+- **Authentication Settings** - New admin page for security configuration
+  - Settings → Authentication page for login and password controls
+  - Option to hide default user credentials on login page (security enhancement)
+  - Configurable password requirements (min length, uppercase, lowercase, numbers, special characters)
+  - Password validation enforced on user creation and password changes
+  - Password requirements displayed in user forms with real-time validation feedback
+  - Settings stored in database and apply to all password operations
+  - Default requirements: 8 characters minimum, uppercase, lowercase, and numbers required
+- **Help Center Updates**:
+  - Authentication settings documentation in Settings and Users help pages
+  - Username validation rules documented
+  - Consistent link styling across all help pages (blue underlined headings with hover arrows)
+
+### Changed
+- **Admin UI Consistency** - Unified sticky header implementation across all admin pages
+  - Consistent header styling with `text-2xl` titles and `text-sm` descriptions
+  - All action buttons moved to sticky headers for better accessibility (except Tools and Taxonomy Terms pages)
+  - Proper scrollable content areas with `overflow-y-auto` on all pages
+  - Consistent spacing and padding throughout admin interface (`px-8 py-4` headers, `px-8 py-6` content)
+- **Settings Pages** - Fixed headers with save buttons
+  - General Settings, Media Settings, Authentication Settings pages
+  - Save button always visible in header
+  - Media Settings uses side-by-side layout: Image Sizes (left) and Add Custom Size (right)
+  - Regenerate All button moved to header alongside Save Settings
+- **Users Page** - Enhanced UI and workflow
+  - Actions column moved to left side of table
+  - Create/Update/Cancel buttons in sticky header
+  - Header buttons swap contextually: "+ New User" vs "Cancel/Create User"
+  - User list hidden when form is open for focused editing
+  - Password field with show/hide toggle (👁️ icon)
+  - Generate random password button (🎲 icon) that follows Authentication requirements
+  - Real-time password validation with visual feedback (✅ green for met, ❌ red for unmet)
+  - Username validation: Only alphanumeric and underscores allowed (auto-sanitizes input, spaces → underscores)
+  - Autofill disabled on username and password fields
+- **Roles Page** - Sticky header with contextual buttons
+  - Create/Update/Cancel buttons in header
+  - Header buttons swap: "+ Add New" vs "Cancel/Create Role"
+- **Menus Page** - Sticky header with menu actions
+  - Delete/Cancel/Update Menu buttons in header
+  - Proper scrollable content area
+- **Post Types & Taxonomies Pages** - Consistent sticky headers
+  - Create/Update/Cancel buttons in header
+  - Header buttons swap contextually based on state
+- **Content Management Pages** - Improved navigation
+  - Post List: Empty Trash/Columns/Add New buttons in sticky header
+  - Post Editor: Fixed header styling with Save/Publish buttons
+  - Taxonomy Terms: Sticky header with buttons remaining in form
+- **Tools Pages** - Fixed headers for better scrolling
+  - Import/Export and Activity Log pages with sticky headers
+  - Buttons remain in original positions within content sections
+
+## [1.17.1] - 2025-10-16
+
+### Fixed
+- Export functionality now uses simplified queries for better MySQL compatibility
+- Meta data (posts, menu items) fetched separately and attached in JavaScript for better reliability
+- Import now properly handles array-based meta data format
+- Taxonomy export now works correctly (exports taxonomies, terms, and term relationships)
+- User export now works correctly with proper column names (username, first_name, last_name)
+- Post types, taxonomies, and media import now use correct column names matching current schema
+- Media export now includes media_folders, and import processes folders before media files
+- Import validates foreign key references (folder_id, uploaded_by) and handles missing references gracefully
+- Menu items import now includes post_type column matching database schema
+- Menu items import now properly remaps parent_id references to handle hierarchical menu structures
+- Posts import now validates foreign keys (featured_image_id, author_id, parent_id) and remaps hierarchical post relationships
+- Posts import includes scheduled_publish_at column
+- Fixed incorrect table name references (term_relationships vs post_terms)
+- **Database schema.sql table ordering** - Fixed foreign key constraint errors by reordering tables (media_folders and media now created before posts and terms)
+
 ## [1.17.0] - 2025-10-16
 
 ### Added

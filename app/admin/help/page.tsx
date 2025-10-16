@@ -9,7 +9,7 @@ import TaxonomiesHelp from '@/components/admin/help/TaxonomiesHelp';
 import UsersHelp from '@/components/admin/help/UsersHelp';
 import AppearanceHelp from '@/components/admin/help/AppearanceHelp';
 import SettingsHelp from '@/components/admin/help/SettingsHelp';
-import ActivityLogHelp from '@/components/admin/help/ActivityLogHelp';
+import ToolsHelp from '@/components/admin/help/ToolsHelp';
 import TipsHelp from '@/components/admin/help/TipsHelp';
 
 type Section = {
@@ -66,10 +66,10 @@ export default function HelpPage() {
       component: SettingsHelp,
     },
     {
-      id: 'activity',
-      title: 'Activity Log',
-      icon: '📋',
-      component: ActivityLogHelp,
+      id: 'tools',
+      title: 'Tools',
+      icon: '🛠️',
+      component: ToolsHelp,
     },
     {
       id: 'tips',

@@ -107,13 +107,16 @@ export default function AdminDashboard() {
   const isContentLoading = postsLoading || mediaLoading || usersLoading || postTypesLoading || taxonomiesLoading;
 
   return (
-    <div>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-600 mt-2">
-          Welcome back, {session?.user?.name}!
-        </p>
+    <div className="-m-8 h-[calc(100vh-4rem)]">
+      {/* Sticky Header */}
+      <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-8 py-4">
+        <h1 className="text-2xl font-bold">Dashboard</h1>
+        <p className="text-sm text-gray-600">Welcome back, {session?.user?.name}!</p>
       </div>
+
+      {/* Scrollable Content */}
+      <div className="overflow-y-auto h-[calc(100vh-8rem)]">
+        <div className="px-8 py-6">
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
         {/* Combined Content Summary Card */}
@@ -310,6 +313,8 @@ export default function AdminDashboard() {
               <p className="text-gray-500">No media files yet</p>
             )}
           </div>
+        </div>
+      </div>
         </div>
       </div>
     </div>

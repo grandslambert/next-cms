@@ -161,7 +161,7 @@ export default function TaxonomyTermsPage() {
   const isSaving = createMutation.isPending || updateMutation.isPending || deleteMutation.isPending;
 
   return (
-    <div className="relative">
+    <div className="-m-8 h-[calc(100vh-4rem)]">
       {/* Loading Overlay */}
       {isSaving && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
@@ -177,15 +177,20 @@ export default function TaxonomyTermsPage() {
         </div>
       )}
 
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">{taxonomyData.label}</h1>
-        <p className="text-gray-600 mt-2">{taxonomyData.description}</p>
+      {/* Sticky Header */}
+      <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-8 py-4">
+        <h1 className="text-2xl font-bold">{taxonomyData.label}</h1>
+        <p className="text-sm text-gray-600">{taxonomyData.description}</p>
       </div>
+
+      {/* Scrollable Content */}
+      <div className="overflow-y-auto h-[calc(100vh-8rem)]">
+        <div className="px-8 py-6">
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: Add/Edit Form */}
         <div className="lg:col-span-1">
-          <div className="bg-white rounded-lg shadow p-6 sticky top-6">
+          <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">
               {editingTerm ? `Edit ${taxonomyData.singular_label}` : `Add New ${taxonomyData.singular_label}`}
             </h2>
@@ -400,6 +405,8 @@ export default function TaxonomyTermsPage() {
         }}
         currentMediaId={formData.image_id || undefined}
       />
+        </div>
+      </div>
     </div>
   );
 }

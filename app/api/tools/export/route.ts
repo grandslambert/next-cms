@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
 
     const options = await request.json();
     const exportData: any = {
-      version: '1.16.0',
+      version: '1.18.0',
       exported_at: new Date().toISOString(),
       exported_by: session.user.email,
       data: {},
@@ -29,28 +29,35 @@ export async function POST(request: NextRequest) {
     // Export Posts & Pages
     if (options.posts) {
       const [posts] = await db.query<RowDataPacket[]>(`
-        SELECT 
-          p.*,
-          COALESCE(
-            (SELECT JSON_ARRAYAGG(
-              JSON_OBJECT(
-                'meta_key', pm.meta_key,
-                'meta_value', pm.meta_value
-              )
-            ) FROM post_meta pm WHERE pm.post_id = p.id),
-            JSON_ARRAY()
-          ) as meta
-        FROM posts p
-        ORDER BY p.id
+        SELECT * FROM posts ORDER BY id
       `);
-      exportData.data.posts = posts;
+      
+      // Fetch post meta separately
+      const [postMeta] = await db.query<RowDataPacket[]>(`
+        SELECT * FROM post_meta ORDER BY post_id, meta_key
+      `);
+      
+      // Attach meta to each post
+      const postsWithMeta = posts.map((post: any) => ({
+        ...post,
+        meta: postMeta.filter((meta: any) => meta.post_id === post.id)
+      }));
+      
+      exportData.data.posts = postsWithMeta;
     }
 
     // Export Media
     if (options.media) {
+      // Export folders first
+      const [mediaFolders] = await db.query<RowDataPacket[]>(`
+        SELECT * FROM media_folders ORDER BY id
+      `);
+      
       const [media] = await db.query<RowDataPacket[]>(`
         SELECT * FROM media ORDER BY id
       `);
+      
+      exportData.data.media_folders = mediaFolders;
       exportData.data.media = media;
     }
 
@@ -61,28 +68,17 @@ export async function POST(request: NextRequest) {
       `);
       
       const [terms] = await db.query<RowDataPacket[]>(`
-        SELECT t.*, 
-          COALESCE(
-            (SELECT JSON_ARRAYAGG(
-              JSON_OBJECT(
-                'meta_key', tm.meta_key,
-                'meta_value', tm.meta_value
-              )
-            ) FROM term_meta tm WHERE tm.term_id = t.id),
-            JSON_ARRAY()
-          ) as meta
-        FROM terms t
-        ORDER BY t.id
+        SELECT * FROM terms ORDER BY id
       `);
       
-      const [postTerms] = await db.query<RowDataPacket[]>(`
-        SELECT * FROM post_terms ORDER BY post_id, term_id
+      const [termRelationships] = await db.query<RowDataPacket[]>(`
+        SELECT * FROM term_relationships ORDER BY post_id, term_id
       `);
 
       exportData.data.taxonomies = {
         taxonomies,
         terms,
-        post_terms: postTerms,
+        term_relationships: termRelationships,
       };
     }
 
@@ -93,19 +89,19 @@ export async function POST(request: NextRequest) {
       `);
       
       const [menuItems] = await db.query<RowDataPacket[]>(`
-        SELECT mi.*,
-          COALESCE(
-            (SELECT JSON_ARRAYAGG(
-              JSON_OBJECT(
-                'meta_key', mim.meta_key,
-                'meta_value', mim.meta_value
-              )
-            ) FROM menu_item_meta mim WHERE mim.menu_item_id = mi.id),
-            JSON_ARRAY()
-          ) as meta
-        FROM menu_items mi
-        ORDER BY mi.menu_id, mi.menu_order
+        SELECT * FROM menu_items ORDER BY menu_id, menu_order
       `);
+      
+      // Fetch menu item meta separately
+      const [menuItemMeta] = await db.query<RowDataPacket[]>(`
+        SELECT * FROM menu_item_meta ORDER BY menu_item_id, meta_key
+      `);
+      
+      // Attach meta to each menu item
+      const menuItemsWithMeta = menuItems.map((item: any) => ({
+        ...item,
+        meta: menuItemMeta.filter((meta: any) => meta.menu_item_id === item.id)
+      }));
       
       const [menuLocations] = await db.query<RowDataPacket[]>(`
         SELECT * FROM menu_locations ORDER BY id
@@ -113,7 +109,7 @@ export async function POST(request: NextRequest) {
 
       exportData.data.menus = {
         menus,
-        menu_items: menuItems,
+        menu_items: menuItemsWithMeta,
         menu_locations: menuLocations,
       };
     }
@@ -146,7 +142,7 @@ export async function POST(request: NextRequest) {
     if (options.users) {
       const [users] = await db.query<RowDataPacket[]>(`
         SELECT 
-          id, name, email, role_id, status, created_at, updated_at
+          id, username, first_name, last_name, email, role_id, created_at, updated_at
         FROM users 
         ORDER BY id
       `);
@@ -167,7 +163,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Return as JSON file download
-    const jsonString = JSON.stringify(exportData, null, 2);
+    const jsonString = JSON.stringify(exportData, (key, value) =>
+      typeof value === 'bigint' ? value.toString() : value
+    , 2);
     
     return new NextResponse(jsonString, {
       headers: {
@@ -179,7 +177,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Export error:', error);
     return NextResponse.json(
-      { error: 'Failed to export data' },
+      { error: 'Failed to export data: ' + (error as Error).message },
       { status: 500 }
     );
   }

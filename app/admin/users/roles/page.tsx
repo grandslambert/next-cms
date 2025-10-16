@@ -167,19 +167,32 @@ export default function RolesPage() {
   }
 
   return (
-    <div className="max-w-6xl">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Roles & Permissions</h1>
-        <p className="text-gray-600 mt-2">
-          Define custom roles and control what users can do in your CMS
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Roles List */}
-        <div className="space-y-4">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">Existing Roles</h3>
+    <div className="-m-8 h-[calc(100vh-4rem)]">
+      {/* Sticky Header */}
+      <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Roles & Permissions</h1>
+          <p className="text-sm text-gray-600">Define custom roles and control what users can do</p>
+        </div>
+        <div className="flex space-x-2">
+          {(isCreating || editingRole) ? (
+            <>
+              <button
+                type="button"
+                onClick={resetForm}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmit}
+                disabled={createMutation.isPending || updateMutation.isPending}
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
+              >
+                {editingRole ? 'Update Role' : 'Create Role'}
+              </button>
+            </>
+          ) : (
             <button
               onClick={() => {
                 resetForm();
@@ -190,6 +203,19 @@ export default function RolesPage() {
             >
               + Add New
             </button>
+          )}
+        </div>
+      </div>
+
+      {/* Scrollable Content */}
+      <div className="overflow-y-auto h-[calc(100vh-8rem)]">
+        <div className="px-8 py-6">
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Roles List */}
+        <div className="space-y-4">
+          <div className="mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">Existing Roles</h3>
           </div>
 
           {data?.roles && data.roles.length > 0 ? (
@@ -413,26 +439,6 @@ export default function RolesPage() {
                   )}
                 </div>
               </div>
-
-              <div className="flex space-x-3 pt-4">
-                <button
-                  type="submit"
-                  disabled={createMutation.isPending || updateMutation.isPending}
-                  className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
-                >
-                  {editingRole ? 'Update' : 'Create'} Role
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditingRole(null);
-                    resetForm();
-                  }}
-                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-              </div>
             </form>
           </div>
         )}
@@ -454,6 +460,8 @@ export default function RolesPage() {
             <strong>Safety:</strong> Roles with assigned users cannot be deleted until users are reassigned.
           </li>
         </ul>
+      </div>
+        </div>
       </div>
     </div>
   );

@@ -136,19 +136,36 @@ export default function TaxonomiesSettingsPage() {
   }
 
   return (
-    <div className="max-w-6xl">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Taxonomies</h1>
-        <p className="text-gray-600 mt-2">
-          Taxonomies organize and categorize your content. Create custom taxonomies like "Locations" or "Products".
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Taxonomies List */}
-        <div className="space-y-4">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">Existing Taxonomies</h3>
+    <div className="-m-8 h-[calc(100vh-4rem)]">
+      {/* Sticky Header */}
+      <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Taxonomies</h1>
+          <p className="text-sm text-gray-600">Organize and categorize your content with custom taxonomies</p>
+        </div>
+        <div className="flex space-x-2">
+          {(isCreating || editingTaxonomy) ? (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingTaxonomy(null);
+                  setIsCreating(false);
+                  resetForm();
+                }}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmit}
+                disabled={createMutation.isPending || updateMutation.isPending}
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
+              >
+                {editingTaxonomy ? 'Update Taxonomy' : 'Create Taxonomy'}
+              </button>
+            </>
+          ) : (
             <button
               onClick={() => {
                 resetForm();
@@ -159,6 +176,19 @@ export default function TaxonomiesSettingsPage() {
             >
               + Add New
             </button>
+          )}
+        </div>
+      </div>
+
+      {/* Scrollable Content */}
+      <div className="overflow-y-auto h-[calc(100vh-8rem)]">
+        <div className="px-8 py-6">
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Taxonomies List */}
+        <div className="space-y-4">
+          <div className="mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">Existing Taxonomies</h3>
           </div>
 
           {data?.taxonomies && data.taxonomies.length > 0 ? (
@@ -351,26 +381,6 @@ export default function TaxonomiesSettingsPage() {
                   Display this taxonomy in the dashboard overview card
                 </p>
               </div>
-
-              <div className="flex space-x-3 pt-4">
-                <button
-                  type="submit"
-                  disabled={createMutation.isPending || updateMutation.isPending}
-                  className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
-                >
-                  {editingTaxonomy ? 'Update' : 'Create'} Taxonomy
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditingTaxonomy(null);
-                    resetForm();
-                  }}
-                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-              </div>
             </form>
           </div>
         )}
@@ -384,6 +394,8 @@ export default function TaxonomiesSettingsPage() {
           <li><strong>Built-in:</strong> Categories and Tags are pre-configured and cannot be deleted</li>
           <li><strong>Custom:</strong> Create your own like "Products", "Locations", "Events", etc.</li>
         </ul>
+      </div>
+        </div>
       </div>
     </div>
   );

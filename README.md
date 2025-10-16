@@ -2,7 +2,7 @@
 
 A complete Content Management System built with Next.js 14, Tailwind CSS, and MySQL - similar to WordPress.
 
-## Current Version: 1.17.0
+## Current Version: 1.18.0
 
 See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
 
@@ -65,7 +65,11 @@ See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
   - Featured image thumbnails in list view
   - Items per page selector (10, 25, 50, 100)
   - Smart pagination with page numbers and navigation
-- ⚙️ **Settings System** - Configurable site name, tagline, media settings, revisions limit, and session timeout
+- ⚙️ **Settings System** 
+  - Configurable site name, tagline, and description
+  - Media settings: Image sizes with custom crop styles
+  - Post revisions limit and session timeout
+  - Authentication: Hide default user, password requirements (length, complexity)
 - 🛠️ **Import/Export Tools**
   - Comprehensive data backup and migration system
   - Export all or selected data types to JSON files
@@ -76,6 +80,7 @@ See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
 - ❓ **Help Center** 
   - Comprehensive in-app documentation covering all CMS features
   - 9 detailed sections with interactive navigation
+  - Dashboard, Posts, Media, Taxonomies, Users, Appearance, Settings, Tools (Import/Export & Activity Log), Tips
   - Direct links to admin pages from help documentation
   - Modular component architecture for easy maintenance
   - Tips and best practices for security, performance, and organization
@@ -524,6 +529,7 @@ Completed features (see CHANGELOG for details):
 - [x] Autosave with visual diff modal
 - [x] SEO metadata editor per post/page
 - [x] Activity log and audit trail
+- [x] Export/import functionality (JSON, CSV)
 
 Planned features:
 - [ ] Comments system with moderation
@@ -534,7 +540,6 @@ Planned features:
 - [ ] Email notifications (new comment, user registration, etc.)
 - [ ] Custom themes with theme editor
 - [ ] Plugin system for extensibility
-- [ ] Export/import functionality (JSON, CSV)
 - [ ] Duplicate post/page functionality
 - [ ] Post templates for consistent formatting
 - [ ] Collaborative editing with real-time updates

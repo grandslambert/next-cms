@@ -18,6 +18,7 @@ export default function UsersPage() {
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [roleId, setRoleId] = useState(3); // Default to Author role
   const queryClient = useQueryClient();
 
@@ -33,6 +34,15 @@ export default function UsersPage() {
     queryKey: ['roles'],
     queryFn: async () => {
       const res = await axios.get('/api/roles');
+      return res.data;
+    },
+  });
+
+  // Fetch password requirements
+  const { data: authSettings } = useQuery({
+    queryKey: ['auth-settings'],
+    queryFn: async () => {
+      const res = await axios.get('/api/settings/authentication');
       return res.data;
     },
   });
@@ -114,9 +124,82 @@ export default function UsersPage() {
     setLastName('');
     setEmail('');
     setPassword('');
+    setShowPassword(false);
     setRoleId(3); // Default to Author
     setEditingId(null);
     setShowForm(false);
+  };
+
+  // Check which password requirements are met
+  const checkPasswordRequirements = () => {
+    const settings = authSettings?.settings || {
+      password_min_length: 8,
+      password_require_uppercase: true,
+      password_require_lowercase: true,
+      password_require_numbers: true,
+      password_require_special: false,
+    };
+
+    return {
+      length: password.length >= settings.password_min_length,
+      uppercase: !settings.password_require_uppercase || /[A-Z]/.test(password),
+      lowercase: !settings.password_require_lowercase || /[a-z]/.test(password),
+      numbers: !settings.password_require_numbers || /[0-9]/.test(password),
+      special: !settings.password_require_special || /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password),
+    };
+  };
+
+  const generatePassword = () => {
+    const settings = authSettings?.settings || {
+      password_min_length: 8,
+      password_require_uppercase: true,
+      password_require_lowercase: true,
+      password_require_numbers: true,
+      password_require_special: false,
+    };
+
+    const lowercase = 'abcdefghijklmnopqrstuvwxyz';
+    const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const numbers = '0123456789';
+    const special = '!@#$%^&*()_+-=[]{}';
+
+    let chars = '';
+    let generated = '';
+
+    // Add required character types first
+    if (settings.password_require_lowercase) {
+      chars += lowercase;
+      generated += lowercase[Math.floor(Math.random() * lowercase.length)];
+    }
+    if (settings.password_require_uppercase) {
+      chars += uppercase;
+      generated += uppercase[Math.floor(Math.random() * uppercase.length)];
+    }
+    if (settings.password_require_numbers) {
+      chars += numbers;
+      generated += numbers[Math.floor(Math.random() * numbers.length)];
+    }
+    if (settings.password_require_special) {
+      chars += special;
+      generated += special[Math.floor(Math.random() * special.length)];
+    }
+
+    // If no requirements, use all character types
+    if (!chars) {
+      chars = lowercase + uppercase + numbers;
+    }
+
+    // Fill remaining length
+    const remainingLength = Math.max(settings.password_min_length - generated.length, 0);
+    for (let i = 0; i < remainingLength; i++) {
+      generated += chars[Math.floor(Math.random() * chars.length)];
+    }
+
+    // Shuffle the password
+    const shuffled = generated.split('').sort(() => Math.random() - 0.5).join('');
+    setPassword(shuffled);
+    setShowPassword(true);
+    toast.success('Password generated!');
   };
 
   if (permissionLoading) {
@@ -128,19 +211,45 @@ export default function UsersPage() {
   }
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-8">
+    <div className="-m-8 h-[calc(100vh-4rem)]">
+      {/* Sticky Header */}
+      <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">All Users</h1>
-          <p className="text-gray-600 mt-2">Manage user accounts and assign roles</p>
+          <h1 className="text-2xl font-bold">All Users</h1>
+          <p className="text-sm text-gray-600">Manage user accounts and assign roles</p>
         </div>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-        >
-          {showForm ? 'Cancel' : '+ New User'}
-        </button>
+        <div className="flex space-x-2">
+          {showForm ? (
+            <>
+              <button
+                type="button"
+                onClick={resetForm}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmit}
+                disabled={createMutation.isPending || updateMutation.isPending}
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
+              >
+                {editingId ? 'Update User' : 'Create User'}
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => setShowForm(!showForm)}
+              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+            >
+              + New User
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Scrollable Content */}
+      <div className="overflow-y-auto h-[calc(100vh-8rem)]">
+        <div className="px-8 py-6">
 
       {showForm && (
         <div className="bg-white rounded-lg shadow p-6 mb-6">
@@ -157,11 +266,23 @@ export default function UsersPage() {
                   id="username"
                   type="text"
                   value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  onChange={(e) => {
+                    // Convert spaces to underscores, remove other special characters
+                    const sanitized = e.target.value
+                      .replace(/ /g, '_')
+                      .replace(/[^a-zA-Z0-9_]/g, '');
+                    setUsername(sanitized);
+                  }}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   required
                   placeholder="john_doe"
+                  autoComplete="off"
+                  pattern="[a-zA-Z0-9_]+"
+                  title="Username can only contain letters, numbers, and underscores"
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  Only letters, numbers, and underscores allowed
+                </p>
               </div>
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
@@ -205,14 +326,80 @@ export default function UsersPage() {
                 <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
                   Password {editingId && '(leave blank to keep current)'}
                 </label>
-                <input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  required={!editingId}
-                />
+                <div className="relative">
+                  <input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full px-4 py-2 pr-24 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    required={!editingId}
+                    autoComplete="new-password"
+                  />
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex space-x-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="px-2 py-1 text-gray-500 hover:text-gray-700 text-sm"
+                      title={showPassword ? "Hide password" : "Show password"}
+                    >
+                      {showPassword ? '🙈' : '👁️'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={generatePassword}
+                      className="px-2 py-1 text-gray-500 hover:text-gray-700 text-sm"
+                      title="Generate random password"
+                    >
+                      🎲
+                    </button>
+                  </div>
+                </div>
+                {authSettings?.settings && (password || !editingId) && (
+                  <div className="mt-2 text-xs">
+                    <div className="font-medium mb-1 text-gray-700">Requirements:</div>
+                    <ul className="space-y-1">
+                      <li className="flex items-center space-x-2">
+                        <span>{checkPasswordRequirements().length ? '✅' : '❌'}</span>
+                        <span className={checkPasswordRequirements().length ? 'text-green-700' : 'text-red-700'}>
+                          At least {authSettings.settings.password_min_length} characters
+                        </span>
+                      </li>
+                      {authSettings.settings.password_require_uppercase && (
+                        <li className="flex items-center space-x-2">
+                          <span>{checkPasswordRequirements().uppercase ? '✅' : '❌'}</span>
+                          <span className={checkPasswordRequirements().uppercase ? 'text-green-700' : 'text-red-700'}>
+                            One uppercase letter
+                          </span>
+                        </li>
+                      )}
+                      {authSettings.settings.password_require_lowercase && (
+                        <li className="flex items-center space-x-2">
+                          <span>{checkPasswordRequirements().lowercase ? '✅' : '❌'}</span>
+                          <span className={checkPasswordRequirements().lowercase ? 'text-green-700' : 'text-red-700'}>
+                            One lowercase letter
+                          </span>
+                        </li>
+                      )}
+                      {authSettings.settings.password_require_numbers && (
+                        <li className="flex items-center space-x-2">
+                          <span>{checkPasswordRequirements().numbers ? '✅' : '❌'}</span>
+                          <span className={checkPasswordRequirements().numbers ? 'text-green-700' : 'text-red-700'}>
+                            One number
+                          </span>
+                        </li>
+                      )}
+                      {authSettings.settings.password_require_special && (
+                        <li className="flex items-center space-x-2">
+                          <span>{checkPasswordRequirements().special ? '✅' : '❌'}</span>
+                          <span className={checkPasswordRequirements().special ? 'text-green-700' : 'text-red-700'}>
+                            One special character
+                          </span>
+                        </li>
+                      )}
+                    </ul>
+                  </div>
+                )}
               </div>
               <div>
                 <label htmlFor="role" className="block text-sm font-medium text-gray-700 mb-2">
@@ -232,26 +419,11 @@ export default function UsersPage() {
                 </select>
               </div>
             </div>
-            <div className="flex space-x-2">
-              <button
-                type="submit"
-                disabled={createMutation.isPending || updateMutation.isPending}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
-              >
-                {editingId ? 'Update User' : 'Create User'}
-              </button>
-              <button
-                type="button"
-                onClick={resetForm}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
           </form>
         </div>
       )}
 
+      {!showForm && (
       <div className="bg-white rounded-lg shadow">
         {isLoading ? (
           <div className="p-8 text-center">
@@ -261,6 +433,9 @@ export default function UsersPage() {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Actions
+                </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Username
                 </th>
@@ -276,14 +451,27 @@ export default function UsersPage() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Created
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {data.users.map((user: any) => (
                 <tr key={user.id} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <button
+                      onClick={() => handleEdit(user)}
+                      className="text-primary-600 hover:text-primary-900 mr-4"
+                    >
+                      Edit
+                    </button>
+                    {user.id !== (session?.user as any)?.id && (
+                      <button
+                        onClick={() => handleDelete(user.id, user.username)}
+                        className="text-red-600 hover:text-red-900"
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900">{user.username}</div>
                   </td>
@@ -309,22 +497,6 @@ export default function UsersPage() {
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {formatDate(user.created_at)}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button
-                      onClick={() => handleEdit(user)}
-                      className="text-primary-600 hover:text-primary-900 mr-4"
-                    >
-                      Edit
-                    </button>
-                    {user.id !== (session?.user as any)?.id && (
-                      <button
-                        onClick={() => handleDelete(user.id, user.username)}
-                        className="text-red-600 hover:text-red-900"
-                      >
-                        Delete
-                      </button>
-                    )}
-                  </td>
                 </tr>
               ))}
             </tbody>
@@ -334,6 +506,9 @@ export default function UsersPage() {
             <p className="text-lg">No users found</p>
           </div>
         )}
+      </div>
+      )}
+        </div>
       </div>
     </div>
   );

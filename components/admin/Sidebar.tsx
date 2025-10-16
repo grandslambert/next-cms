@@ -49,6 +49,7 @@ const staticMenuItems = [
     subItems: [
       { name: 'General', href: '/admin/settings', icon: '🔧', permission: 'manage_settings' },
       { name: 'Media', href: '/admin/settings/media', icon: '🖼️', permission: 'manage_settings' },
+      { name: 'Authentication', href: '/admin/settings/authentication', icon: '🔐', permission: 'manage_settings' },
     ]
   },
   { 
@@ -165,7 +166,7 @@ export default function Sidebar() {
 
   return (
     <aside className="w-64 bg-gray-900 text-white min-h-screen flex flex-col">
-      <div className="p-6 flex items-center justify-between border-b border-gray-700">
+      <div className="px-8 py-4 flex items-center justify-between border-b border-gray-700">
         <h1 className="text-2xl font-bold">Next CMS</h1>
         <Link
           href="/"
@@ -327,7 +328,7 @@ export default function Sidebar() {
           <span>Logout</span>
         </button>
         <div className="text-center text-xs text-gray-500 mt-2">
-          Next CMS v1.17.0
+          Next CMS v1.18.0
         </div>
       </div>
     </aside>

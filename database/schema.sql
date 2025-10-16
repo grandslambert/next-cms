@@ -42,6 +42,39 @@ CREATE TABLE IF NOT EXISTS user_meta (
   UNIQUE KEY unique_user_meta (user_id, meta_key)
 );
 
+-- Media folders table (MOVED BEFORE media)
+CREATE TABLE IF NOT EXISTS media_folders (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  parent_id INT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (parent_id) REFERENCES media_folders(id) ON DELETE CASCADE,
+  INDEX idx_parent (parent_id)
+);
+
+-- Media table (MOVED BEFORE posts and terms)
+CREATE TABLE IF NOT EXISTS media (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  filename VARCHAR(255) NOT NULL,
+  original_name VARCHAR(255) NOT NULL,
+  title VARCHAR(255),
+  alt_text VARCHAR(255),
+  mime_type VARCHAR(100) NOT NULL,
+  size INT NOT NULL,
+  url VARCHAR(500) NOT NULL,
+  sizes JSON,
+  folder_id INT NULL,
+  uploaded_by INT NOT NULL,
+  deleted_at TIMESTAMP NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (folder_id) REFERENCES media_folders(id) ON DELETE SET NULL,
+  FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE CASCADE,
+  INDEX idx_mime_type (mime_type),
+  INDEX idx_folder (folder_id),
+  INDEX idx_deleted (deleted_at)
+);
+
 -- Post Types table
 CREATE TABLE IF NOT EXISTS post_types (
   id INT AUTO_INCREMENT PRIMARY KEY,
@@ -90,10 +123,6 @@ CREATE TABLE IF NOT EXISTS posts (
   INDEX idx_published_at (published_at)
 );
 
--- Pages table (DEPRECATED - Pages are now managed as post_type='page' in posts table)
--- This table can be dropped after migration:
--- DROP TABLE IF EXISTS pages;
-
 -- Post Revisions table
 CREATE TABLE IF NOT EXISTS post_revisions (
   id INT AUTO_INCREMENT PRIMARY KEY,
@@ -122,28 +151,6 @@ CREATE TABLE IF NOT EXISTS post_meta (
   INDEX idx_post_id (post_id),
   INDEX idx_meta_key (meta_key),
   UNIQUE KEY unique_post_meta (post_id, meta_key)
-);
-
--- Media table
-CREATE TABLE IF NOT EXISTS media (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  filename VARCHAR(255) NOT NULL,
-  original_name VARCHAR(255) NOT NULL,
-  title VARCHAR(255),
-  alt_text VARCHAR(255),
-  mime_type VARCHAR(100) NOT NULL,
-  size INT NOT NULL,
-  url VARCHAR(500) NOT NULL,
-  sizes JSON,
-  folder_id INT NULL,
-  uploaded_by INT NOT NULL,
-  deleted_at TIMESTAMP NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (folder_id) REFERENCES media_folders(id) ON DELETE SET NULL,
-  FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE CASCADE,
-  INDEX idx_mime_type (mime_type),
-  INDEX idx_folder (folder_id),
-  INDEX idx_deleted (deleted_at)
 );
 
 -- Taxonomies table (defines taxonomy types like "category", "tag", etc.)
@@ -183,6 +190,20 @@ CREATE TABLE IF NOT EXISTS terms (
   INDEX idx_slug (slug)
 );
 
+-- Term Meta table
+CREATE TABLE IF NOT EXISTS term_meta (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  term_id INT NOT NULL,
+  meta_key VARCHAR(255) NOT NULL,
+  meta_value TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (term_id) REFERENCES terms(id) ON DELETE CASCADE,
+  INDEX idx_term_id (term_id),
+  INDEX idx_meta_key (meta_key),
+  UNIQUE KEY unique_term_meta (term_id, meta_key)
+);
+
 -- Term Relationships table (many-to-many between posts and terms)
 CREATE TABLE IF NOT EXISTS term_relationships (
   post_id INT NOT NULL,
@@ -201,18 +222,6 @@ CREATE TABLE IF NOT EXISTS post_type_taxonomies (
   PRIMARY KEY (post_type_id, taxonomy_id),
   FOREIGN KEY (post_type_id) REFERENCES post_types(id) ON DELETE CASCADE,
   FOREIGN KEY (taxonomy_id) REFERENCES taxonomies(id) ON DELETE CASCADE
-);
-
-
--- Media folders table
-CREATE TABLE IF NOT EXISTS media_folders (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  name VARCHAR(255) NOT NULL,
-  parent_id INT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY (parent_id) REFERENCES media_folders(id) ON DELETE CASCADE,
-  INDEX idx_parent (parent_id)
 );
 
 -- Menus table (navigation menus)
@@ -306,13 +315,13 @@ CREATE TABLE IF NOT EXISTS settings (
 -- when post types are created. These base permissions are the minimum set.
 INSERT INTO roles (id, name, display_name, description, permissions, is_system) VALUES
 (1, 'admin', 'Administrator', 'Full access to all features', 
- '{"view_dashboard": true, "view_others_posts": true, "manage_posts_post": true, "manage_posts_page": true, "manage_others_posts": true, "can_publish": true, "can_delete": true, "can_delete_others": true, "manage_media": true, "manage_taxonomies": true, "manage_users": true, "manage_roles": true, "manage_post_types": true, "manage_settings": true}', 
+ '{"view_dashboard": true, "view_others_posts": true, "manage_posts_post": true, "manage_posts_page": true, "manage_others_posts": true, "can_publish": true, "can_delete": true, "can_delete_others": true, "manage_media": true, "manage_taxonomies": true, "manage_users": true, "manage_roles": true, "manage_post_types": true, "manage_settings": true, "manage_menus": true}', 
  true),
 (2, 'editor', 'Editor', 'Can manage and publish all content', 
- '{"view_dashboard": true, "view_others_posts": false, "manage_posts_post": true, "manage_posts_page": true, "manage_others_posts": true, "can_publish": true, "can_delete": true, "can_delete_others": true, "manage_media": true, "manage_taxonomies": true, "manage_users": false, "manage_roles": false, "manage_post_types": false, "manage_settings": false}', 
+ '{"view_dashboard": true, "view_others_posts": false, "manage_posts_post": true, "manage_posts_page": true, "manage_others_posts": true, "can_publish": true, "can_delete": true, "can_delete_others": true, "manage_media": true, "manage_taxonomies": true, "manage_users": false, "manage_roles": false, "manage_post_types": false, "manage_settings": false, "manage_menus": false}', 
  true),
 (3, 'author', 'Author', 'Can create and edit own posts', 
- '{"view_dashboard": true, "view_others_posts": false, "manage_posts_post": true, "manage_posts_page": true, "manage_others_posts": false, "can_publish": true, "can_delete": true, "can_delete_others": false, "manage_media": true, "manage_taxonomies": false, "manage_users": false, "manage_roles": false, "manage_post_types": false, "manage_settings": false}', 
+ '{"view_dashboard": true, "view_others_posts": false, "manage_posts_post": true, "manage_posts_page": true, "manage_others_posts": false, "can_publish": true, "can_delete": true, "can_delete_others": false, "manage_media": true, "manage_taxonomies": false, "manage_users": false, "manage_roles": false, "manage_post_types": false, "manage_settings": false, "manage_menus": false}', 
  true)
 ON DUPLICATE KEY UPDATE name = name;
 
@@ -322,12 +331,12 @@ VALUES ('admin', 'Admin', 'User', 'admin@example.com', '$2a$10$1llDVX4S7vKlcibiD
 ON DUPLICATE KEY UPDATE email = email;
 
 -- Insert default post types
-INSERT INTO post_types (name, slug, label, singular_label, description, icon, url_structure, supports, show_in_dashboard, hierarchical, menu_position) 
+INSERT INTO post_types (id, name, slug, label, singular_label, description, icon, url_structure, supports, show_in_dashboard, hierarchical, menu_position) 
 VALUES 
-  ('post', 'blog', 'Posts', 'Post', 'Regular blog posts', '📝', 'default',
+  (1, 'post', 'blog', 'Posts', 'Post', 'Regular blog posts', '📝', 'default',
    '{"title": true, "content": true, "excerpt": true, "featured_image": true}',
    TRUE, FALSE, 5),
-  ('page', '', 'Pages', 'Page', 'Static pages', '📄', 'default',
+  (2, 'page', '', 'Pages', 'Page', 'Static pages', '📄', 'default',
    '{"title": true, "content": true, "featured_image": true}',
    TRUE, TRUE, 10)
 ON DUPLICATE KEY UPDATE 
@@ -337,10 +346,10 @@ ON DUPLICATE KEY UPDATE
   url_structure = VALUES(url_structure);
 
 -- Insert default taxonomies
-INSERT INTO taxonomies (name, label, singular_label, description, hierarchical, show_in_menu, menu_position)
+INSERT INTO taxonomies (id, name, label, singular_label, description, hierarchical, show_in_menu, menu_position)
 VALUES 
-  ('category', 'Categories', 'Category', 'Organize content into categories', TRUE, TRUE, 15),
-  ('tag', 'Tags', 'Tag', 'Add tags to your content', FALSE, TRUE, 16)
+  (1, 'category', 'Categories', 'Category', 'Organize content into categories', TRUE, TRUE, 15),
+  (2, 'tag', 'Tags', 'Tag', 'Add tags to your content', FALSE, TRUE, 16)
 ON DUPLICATE KEY UPDATE 
   label = VALUES(label),
   hierarchical = VALUES(hierarchical);
@@ -352,6 +361,13 @@ SELECT pt.id, t.id
 FROM post_types pt, taxonomies t
 WHERE (pt.name = 'post' AND t.name IN ('category', 'tag'))
 ON DUPLICATE KEY UPDATE post_type_id = post_type_id;
+
+-- Insert default menu locations
+INSERT INTO menu_locations (name, description, is_builtin) VALUES
+('header', 'Main header navigation', 1),
+('footer', 'Footer navigation', 1),
+('sidebar', 'Sidebar navigation', 1)
+ON DUPLICATE KEY UPDATE description = VALUES(description);
 
 -- Insert default settings
 INSERT INTO settings (setting_key, setting_value, setting_type) VALUES

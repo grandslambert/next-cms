@@ -553,13 +553,14 @@ export default function PostTypePage() {
   ].filter(tab => tab.count > 0); // Only show tabs with posts
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-8">
+    <div className="-m-8 h-[calc(100vh-4rem)]">
+      {/* Sticky Header */}
+      <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">{postTypeData.label}</h1>
-          <p className="text-gray-600 mt-2">{postTypeData.description}</p>
+          <h1 className="text-2xl font-bold">{postTypeData.label}</h1>
+          <p className="text-sm text-gray-600">{postTypeData.description}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex space-x-2">
           {statusFilter === 'trash' && data?.posts && data.posts.length > 0 && (
             <button
               onClick={handleEmptyTrash}
@@ -640,6 +641,10 @@ export default function PostTypePage() {
           </Link>
         </div>
       </div>
+
+      {/* Scrollable Content */}
+      <div className="overflow-y-auto h-[calc(100vh-8rem)]">
+        <div className="px-8 py-6">
 
       {/* Status Filter Tabs */}
       {statusTabs.length > 0 && (
@@ -1143,6 +1148,8 @@ export default function PostTypePage() {
             </Link>
           </div>
         )}
+      </div>
+        </div>
       </div>
     </div>
   );

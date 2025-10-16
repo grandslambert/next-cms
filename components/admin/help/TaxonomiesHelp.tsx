@@ -15,8 +15,13 @@ export default function TaxonomiesHelp() {
       </div>
 
       <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-        <h3 className="font-semibold text-gray-900 mb-2">Creating Custom Taxonomies</h3>
-        <p className="text-gray-700 mb-2">Go to <Link href="/admin/content-types/taxonomies" className="text-primary-600 hover:text-primary-800 font-semibold underline">Content Types &gt; Taxonomies</Link> to create custom ways to organize content:</p>
+        <Link href="/admin/content-types/taxonomies" className="group">
+          <h3 className="font-semibold text-primary-600 mb-2 hover:text-primary-800 transition-colors inline-flex items-center gap-2 underline">
+            Creating Custom Taxonomies
+            <span className="opacity-0 group-hover:opacity-100 transition-opacity">→</span>
+          </h3>
+        </Link>
+        <p className="text-gray-700 mb-2">Create custom ways to organize content:</p>
         <ul className="list-disc list-inside space-y-1 text-gray-700">
           <li><strong>Name:</strong> Machine-readable identifier (e.g., "genre", "location")</li>
           <li><strong>Label:</strong> Display name (e.g., "Genres", "Locations")</li>

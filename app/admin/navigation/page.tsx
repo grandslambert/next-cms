@@ -556,7 +556,7 @@ export default function NavigationPage() {
   const hasAnyChanges = hasMenuChanges || hasUnsavedChanges;
 
   return (
-    <div className="pb-8">
+    <div className="-m-8 h-[calc(100vh-4rem)]">
       {/* Loading Overlay */}
       {isSaving && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -577,7 +577,9 @@ export default function NavigationPage() {
         onDelete={handleDeleteMenu}
       />
 
-      <div className="px-8">
+      {/* Scrollable Content */}
+      <div className="overflow-y-auto h-[calc(100vh-8rem)]">
+        <div className="px-8 py-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column */}
           <div className="space-y-6">
@@ -669,6 +671,7 @@ export default function NavigationPage() {
               </div>
             )}
           </div>
+        </div>
         </div>
       </div>
     </div>

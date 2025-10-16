@@ -1,15 +1,28 @@
 'use client';
 
 import { signIn } from 'next-auth/react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import axios from 'axios';
 import toast from 'react-hot-toast';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [hideDefaultUser, setHideDefaultUser] = useState(false);
   const router = useRouter();
+
+  // Fetch auth settings
+  useEffect(() => {
+    axios.get('/api/settings/authentication')
+      .then(res => {
+        if (res.data.settings) {
+          setHideDefaultUser(res.data.settings.hide_default_user);
+        }
+      })
+      .catch(err => console.error('Error fetching auth settings:', err));
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,10 +95,12 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div className="mt-6 text-center text-sm text-gray-600">
-          <p>Default credentials:</p>
-          <p className="font-mono mt-1">admin@example.com / admin123</p>
-        </div>
+        {!hideDefaultUser && (
+          <div className="mt-6 text-center text-sm text-gray-600">
+            <p>Default credentials:</p>
+            <p className="font-mono mt-1">admin@example.com / admin123</p>
+          </div>
+        )}
       </div>
     </div>
   );

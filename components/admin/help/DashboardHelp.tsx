@@ -5,14 +5,14 @@ export default function DashboardHelp() {
     <div className="space-y-4">
       <h2 className="text-2xl font-bold text-gray-900">Dashboard</h2>
       <p>The Dashboard provides an overview of your site's content and activity. What you see depends on your user role and permissions.</p>
-      <p>
-        <Link href="/admin" className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-semibold">
-          Go to Dashboard →
-        </Link>
-      </p>
       
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <h3 className="font-semibold text-gray-900 mb-2">Content Summary</h3>
+        <Link href="/admin" className="group">
+          <h3 className="font-semibold text-primary-600 mb-2 hover:text-primary-800 transition-colors inline-flex items-center gap-2 underline">
+            Content Summary
+            <span className="opacity-0 group-hover:opacity-100 transition-opacity">→</span>
+          </h3>
+        </Link>
         <p className="text-gray-700 mb-2">
           The Content Summary section displays clickable tiles showing the total count for each content type you have access to:
         </p>

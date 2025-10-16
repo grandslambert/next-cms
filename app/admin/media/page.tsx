@@ -496,11 +496,12 @@ export default function MediaPage() {
   }
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-4">
+    <div className="-m-8 h-[calc(100vh-4rem)]">
+      {/* Sticky Header */}
+      <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Media Library</h1>
-          <p className="text-gray-600 mt-2">Upload and manage your media files</p>
+          <h1 className="text-2xl font-bold">Media Library</h1>
+          <p className="text-sm text-gray-600">Upload and manage your media files</p>
         </div>
         <div className="flex space-x-3">
           <button
@@ -540,6 +541,10 @@ export default function MediaPage() {
           </button>
         </div>
       </div>
+
+      {/* Scrollable Content */}
+      <div className="overflow-y-auto h-[calc(100vh-8rem)]">
+        <div className="px-8 py-6">
 
       {/* Breadcrumb Navigation */}
       <div className="flex items-center space-x-2 mb-4 text-sm">
@@ -682,6 +687,8 @@ export default function MediaPage() {
         isVisible={bulkActionMutation.isPending}
         message={`Processing ${selectedMedia.length} item${selectedMedia.length !== 1 ? 's' : ''}...`}
       />
+        </div>
+      </div>
     </div>
   );
 }

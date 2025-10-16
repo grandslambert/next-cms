@@ -75,13 +75,18 @@ export default function ActivityLogPage() {
   }
 
   return (
-    <div className="p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Activity Log</h1>
-        <p className="text-gray-600 mt-1">
+    <div className="-m-8 h-[calc(100vh-4rem)]">
+      {/* Sticky Header */}
+      <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-8 py-4">
+        <h1 className="text-2xl font-bold">Activity Log</h1>
+        <p className="text-sm text-gray-600">
           View all user activities and system events
         </p>
       </div>
+
+      {/* Scrollable Content */}
+      <div className="overflow-y-auto h-[calc(100vh-8rem)]">
+        <div className="px-8 py-6">
 
       {/* Filters */}
       <div className="bg-white rounded-lg shadow p-4 mb-6">
@@ -327,6 +332,8 @@ export default function ActivityLogPage() {
           setSelectedLog(null);
         }}
       />
+        </div>
+      </div>
     </div>
   );
 }

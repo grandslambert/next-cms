@@ -5,14 +5,14 @@ export default function MediaHelp() {
     <div className="space-y-4">
       <h2 className="text-2xl font-bold text-gray-900">Media Library</h2>
       <p>Upload, organize, and manage all your images, videos, and other media files.</p>
-      <p>
-        <Link href="/admin/media" className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-semibold">
-          Go to Media Library →
-        </Link>
-      </p>
       
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <h3 className="font-semibold text-gray-900 mb-2">Uploading Media</h3>
+        <Link href="/admin/media" className="group">
+          <h3 className="font-semibold text-primary-600 mb-2 hover:text-primary-800 transition-colors inline-flex items-center gap-2 underline">
+            Uploading Media
+            <span className="opacity-0 group-hover:opacity-100 transition-opacity">→</span>
+          </h3>
+        </Link>
         <ul className="list-disc list-inside space-y-1 text-gray-700">
           <li>Click "Upload Media" or drag and drop files directly</li>
           <li>Supported formats: Images (jpg, png, gif, webp), Videos, PDFs, and more</li>

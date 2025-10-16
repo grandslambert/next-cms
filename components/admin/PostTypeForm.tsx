@@ -824,7 +824,7 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
   const isSaving = createMutation.isPending || updateMutation.isPending;
 
   return (
-    <div className="relative">
+    <div className="-m-8 h-[calc(100vh-4rem)]">
       {/* Loading Overlay */}
       {isSaving && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
@@ -840,7 +840,8 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
         </div>
       )}
 
-      <div className="sticky top-0 z-10 bg-white border-b border-gray-200 shadow-sm mb-6 -mx-8 px-8 py-4">
+      {/* Sticky Header */}
+      <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-8 py-4">
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-4">
             <h1 className="text-2xl font-bold text-gray-900">
@@ -918,6 +919,10 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
           </div>
         </div>
       </div>
+
+      {/* Scrollable Content */}
+      <div className="overflow-y-auto h-[calc(100vh-8rem)]">
+        <div className="px-8 py-6">
 
       <form onSubmit={(e) => handleSubmit(e)} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
@@ -1219,6 +1224,8 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
           </div>
         </div>
       )}
+        </div>
+      </div>
     </div>
   );
 }
