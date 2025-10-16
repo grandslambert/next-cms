@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.16.0] - 2025-10-16
+
+### Added
+- **Help Center**:
+  - Comprehensive help documentation accessible from admin sidebar
+  - 9 detailed sections covering all CMS features
+  - Dashboard, Posts & Custom Post Types, Media Library, Taxonomies
+  - Users & Roles, Appearance (Menus), Settings, Activity Log, Tips & Best Practices
+  - Direct links from help pages to relevant admin pages for easy navigation
+  - Modular component architecture with separate files for each help section
+  - Clean two-column layout with sidebar navigation
+  - Color-coded information boxes for easy scanning
+  - Help link (❓) positioned above Logout button in sidebar
+
+- **Menu Editor Enhancements**:
+  - Individual taxonomy term selection (similar to individual post selection)
+  - Choose either taxonomy archive page or specific terms (e.g., "Technology", "Sports")
+  - Search functionality for filtering terms
+  - New 'term' menu item type with proper URL generation (/{taxonomy}/{term-slug})
+  - Terms display with taxonomy label for context
+  - Public menu rendering supports term links
+
+- **Taxonomy Public Pages**:
+  - Taxonomy archive pages (/{taxonomy}) display all terms with post counts
+  - Hierarchical taxonomy support with visual indentation and nested display
+  - Parent/child term relationships shown with visual indicators (↳)
+  - Individual term pages (/{taxonomy}/{term}) show posts tagged with that term
+  - Full breadcrumb navigation showing complete term hierarchy path
+  - Featured images, excerpts, and post metadata displayed
+  - Centralized URL builder respects post type URL structure settings
+
+### Fixed
+- Post URLs on all public pages now correctly follow post type URL structure settings (default, year, year_month, year_month_day)
+- Home page, blog page, and taxonomy pages now generate proper post links
+
 ## [1.15.0] - 2025-10-16
 
 ### Added

@@ -3,15 +3,18 @@ import db from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
 import { formatDate, truncate } from '@/lib/utils';
 import { getImageUrl } from '@/lib/image-utils';
+import { buildPostUrls } from '@/lib/post-url-builder';
 
 async function getPosts() {
   try {
     const [rows] = await db.query<RowDataPacket[]>(
       `SELECT p.*, CONCAT(u.first_name, ' ', u.last_name) as author_name,
-              m.url as featured_image, m.sizes as featured_image_sizes
+              m.url as featured_image, m.sizes as featured_image_sizes,
+              pt.url_structure, pt.hierarchical, pt.slug as post_type_slug
        FROM posts p 
        LEFT JOIN users u ON p.author_id = u.id
        LEFT JOIN media m ON p.featured_image_id = m.id
+       LEFT JOIN post_types pt ON p.post_type = pt.name
        WHERE p.status = 'published'
        ORDER BY p.published_at DESC`
     );
@@ -24,6 +27,7 @@ async function getPosts() {
 
 export default async function BlogPage() {
   const posts = await getPosts();
+  const postsWithUrls = await buildPostUrls(posts);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -34,9 +38,9 @@ export default async function BlogPage() {
         </p>
       </div>
 
-      {posts.length > 0 ? (
+      {postsWithUrls.length > 0 ? (
         <div className="space-y-8">
-          {posts.map((post: any) => (
+          {postsWithUrls.map((post: any) => (
             <article key={post.id} className="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow">
               <div className="md:flex">
                 {post.featured_image && (
@@ -57,7 +61,7 @@ export default async function BlogPage() {
                     <span>By {post.author_name}</span>
                   </div>
                   <h2 className="text-2xl font-bold text-gray-900 mb-3">
-                    <Link href={`/blog/${post.slug}`} className="hover:text-primary-600">
+                    <Link href={post.url} className="hover:text-primary-600">
                       {post.title}
                     </Link>
                   </h2>
@@ -67,7 +71,7 @@ export default async function BlogPage() {
                     </p>
                   )}
                   <Link
-                    href={`/blog/${post.slug}`}
+                    href={post.url}
                     className="inline-flex items-center text-primary-600 hover:text-primary-700 font-semibold"
                   >
                     Read More →

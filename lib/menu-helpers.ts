@@ -63,12 +63,17 @@ export async function getMenuByLocation(location: string): Promise<MenuItem[]> {
               p.parent_id as post_parent_id,
               p.post_type as post_post_type,
               pt2.hierarchical as post_hierarchical,
-              pt2.url_structure as post_url_structure
+              pt2.url_structure as post_url_structure,
+              t.name as term_name,
+              t.slug as term_slug,
+              tax2.name as term_taxonomy_slug
        FROM menu_items mi
        LEFT JOIN post_types pt ON mi.type = 'post_type' AND mi.object_id = pt.id
        LEFT JOIN taxonomies tax ON mi.type = 'taxonomy' AND mi.object_id = tax.id
        LEFT JOIN posts p ON mi.type = 'post' AND mi.object_id = p.id
        LEFT JOIN post_types pt2 ON p.post_type = pt2.name
+       LEFT JOIN terms t ON mi.type = 'term' AND mi.object_id = t.id
+       LEFT JOIN taxonomies tax2 ON mi.type = 'term' AND t.taxonomy_id = tax2.id
        WHERE mi.menu_id = ? 
        ORDER BY mi.menu_order ASC, mi.id ASC`,
       [(menu as any).id]
@@ -99,6 +104,8 @@ export async function getMenuByLocation(location: string): Promise<MenuItem[]> {
           itemAny.url = `/${itemAny.post_type_slug}`;
         } else if (itemAny.type === 'taxonomy') {
           itemAny.url = `/${itemAny.taxonomy_slug}`;
+        } else if (itemAny.type === 'term') {
+          itemAny.url = `/${itemAny.term_taxonomy_slug}/${itemAny.term_slug}`;
         } else if (itemAny.type === 'post' && itemAny.post_id) {
           // Check if this post's type is hierarchical (using pt2.hierarchical from the join)
           const isHierarchical = itemAny.post_hierarchical === 1 || itemAny.post_hierarchical === true;
@@ -127,6 +134,8 @@ export async function getMenuByLocation(location: string): Promise<MenuItem[]> {
           itemAny.label = itemAny.post_type_label;
         } else if (itemAny.type === 'taxonomy') {
           itemAny.label = itemAny.taxonomy_label;
+        } else if (itemAny.type === 'term') {
+          itemAny.label = itemAny.term_name;
         } else {
           itemAny.label = itemAny.custom_url;
         }

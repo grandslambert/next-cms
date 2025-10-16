@@ -3,6 +3,7 @@ import db from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
 import { formatDate, truncate } from '@/lib/utils';
 import { getImageUrl } from '@/lib/image-utils';
+import { buildPostUrls } from '@/lib/post-url-builder';
 
 async function getSettings() {
   try {
@@ -25,10 +26,12 @@ async function getRecentPosts() {
   try {
     const [rows] = await db.query<RowDataPacket[]>(
       `SELECT p.*, CONCAT(u.first_name, ' ', u.last_name) as author_name,
-              m.url as featured_image, m.sizes as featured_image_sizes
+              m.url as featured_image, m.sizes as featured_image_sizes,
+              pt.url_structure, pt.hierarchical, pt.slug as post_type_slug
        FROM posts p 
        LEFT JOIN users u ON p.author_id = u.id
        LEFT JOIN media m ON p.featured_image_id = m.id
+       LEFT JOIN post_types pt ON p.post_type = pt.name
        WHERE p.status = 'published'
        ORDER BY p.published_at DESC
        LIMIT 6`
@@ -42,6 +45,7 @@ async function getRecentPosts() {
 
 export default async function HomePage() {
   const posts = await getRecentPosts();
+  const postsWithUrls = await buildPostUrls(posts);
   const settings = await getSettings();
 
   return (
@@ -124,9 +128,9 @@ export default async function HomePage() {
             </Link>
           </div>
 
-          {posts.length > 0 ? (
+          {postsWithUrls.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {posts.map((post: any) => (
+              {postsWithUrls.map((post: any) => (
                 <article key={post.id} className="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow">
                   {post.featured_image && (
                     <div className="aspect-video bg-gray-200">
@@ -142,7 +146,7 @@ export default async function HomePage() {
                       {formatDate(post.published_at)}
                     </div>
                     <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                      <Link href={`/blog/${post.slug}`} className="hover:text-primary-600">
+                      <Link href={post.url} className="hover:text-primary-600">
                         {post.title}
                       </Link>
                     </h3>
@@ -152,7 +156,7 @@ export default async function HomePage() {
                       </p>
                     )}
                     <Link
-                      href={`/blog/${post.slug}`}
+                      href={post.url}
                       className="text-primary-600 hover:text-primary-700 font-semibold"
                     >
                       Read More →

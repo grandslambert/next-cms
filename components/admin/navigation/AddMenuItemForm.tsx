@@ -6,24 +6,31 @@ interface AddMenuItemFormProps {
   postTypesData: any;
   taxonomiesData: any;
   postsData: any;
+  termsData: any;
   onSubmit: (payload: any) => void;
   onCancel: () => void;
   onPostTypeFilterChange: (postType: string) => void;
   onPostSearchChange: (search: string) => void;
+  onTaxonomyFilterChange: (taxonomyId: number | null) => void;
+  onTermSearchChange: (search: string) => void;
 }
 
 export default function AddMenuItemForm({
   postTypesData,
   taxonomiesData,
   postsData,
+  termsData,
   onSubmit,
   onCancel,
   onPostTypeFilterChange,
   onPostSearchChange,
+  onTaxonomyFilterChange,
+  onTermSearchChange,
 }: AddMenuItemFormProps) {
   const [formData, setFormData] = useState({
     type: 'custom' as 'post_type' | 'taxonomy' | 'custom',
     post_type_filter: '',
+    taxonomy_filter: null as number | null,
     object_id: null as number | null,
     is_archive: false,
     custom_url: '',
@@ -31,6 +38,7 @@ export default function AddMenuItemForm({
     target: '_self',
   });
   const [postSearchQuery, setPostSearchQuery] = useState('');
+  const [termSearchQuery, setTermSearchQuery] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,9 +61,15 @@ export default function AddMenuItemForm({
         payload.custom_label = formData.custom_label;
       }
     } else if (formData.type === 'taxonomy') {
-      payload.type = 'taxonomy';
-      payload.object_id = formData.object_id;
-      payload.custom_label = formData.custom_label;
+      if (formData.is_archive) {
+        payload.type = 'taxonomy';
+        payload.object_id = formData.taxonomy_filter;
+        payload.custom_label = formData.custom_label;
+      } else {
+        payload.type = 'term';
+        payload.object_id = formData.object_id;
+        payload.custom_label = formData.custom_label;
+      }
     }
 
     onSubmit(payload);
@@ -65,6 +79,7 @@ export default function AddMenuItemForm({
     setFormData({ 
       type: newType as any, 
       post_type_filter: '',
+      taxonomy_filter: null,
       object_id: null,
       is_archive: false,
       custom_url: '',
@@ -72,6 +87,7 @@ export default function AddMenuItemForm({
       target: '_self',
     });
     setPostSearchQuery('');
+    setTermSearchQuery('');
   };
 
   const handlePostTypeFilterChange = (postType: string) => {
@@ -88,6 +104,21 @@ export default function AddMenuItemForm({
   const handlePostSearchChange = (search: string) => {
     setPostSearchQuery(search);
     onPostSearchChange(search);
+  };
+
+  const handleTaxonomyFilterChange = (taxonomyId: number) => {
+    setFormData({ 
+      ...formData, 
+      taxonomy_filter: taxonomyId,
+      object_id: null,
+      is_archive: true, // Default to archive page (first option in dropdown)
+    });
+    onTaxonomyFilterChange(taxonomyId);
+  };
+
+  const handleTermSearchChange = (search: string) => {
+    setTermSearchQuery(search);
+    onTermSearchChange(search);
   };
 
   return (
@@ -244,8 +275,8 @@ export default function AddMenuItemForm({
               </label>
               <select
                 id="add-item-taxonomy"
-                value={formData.object_id || ''}
-                onChange={(e) => setFormData({ ...formData, object_id: Number.parseInt(e.target.value) })}
+                value={formData.taxonomy_filter || ''}
+                onChange={(e) => handleTaxonomyFilterChange(Number.parseInt(e.target.value))}
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 required
               >
@@ -256,19 +287,75 @@ export default function AddMenuItemForm({
               </select>
             </div>
 
-            <div>
-              <label htmlFor="add-item-tax-label" className="block text-sm font-medium text-gray-700 mb-1">
-                Custom Label (optional)
-              </label>
-              <input
-                id="add-item-tax-label"
-                type="text"
-                value={formData.custom_label}
-                onChange={(e) => setFormData({ ...formData, custom_label: e.target.value })}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                placeholder="Override default label"
-              />
-            </div>
+            {formData.taxonomy_filter && (
+              <>
+                <div>
+                  <label htmlFor="add-term-search" className="block text-sm font-medium text-gray-700 mb-1">
+                    Search Terms
+                  </label>
+                  <input
+                    id="add-term-search"
+                    type="text"
+                    value={termSearchQuery}
+                    onChange={(e) => handleTermSearchChange(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="Search by name..."
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="add-item-term-selection" className="block text-sm font-medium text-gray-700 mb-1">
+                    Select Item *
+                  </label>
+                  <select
+                    id="add-item-term-selection"
+                    value={formData.is_archive ? 'archive' : (formData.object_id?.toString() || '')}
+                    onChange={(e) => {
+                      if (e.target.value === 'archive') {
+                        setFormData({ 
+                          ...formData, 
+                          is_archive: true,
+                          object_id: null, // Clear object_id for archive
+                        });
+                      } else {
+                        setFormData({ 
+                          ...formData, 
+                          is_archive: false,
+                          object_id: Number.parseInt(e.target.value),
+                        });
+                      }
+                    }}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    size={6}
+                    required
+                  >
+                    <option value="archive">📚 Archive Page</option>
+                    {termsData?.terms?.map((term: any) => (
+                      <option key={term.id} value={term.id}>
+                        {term.name}
+                      </option>
+                    ))}
+                  </select>
+                  {termsData?.terms?.length === 0 && termSearchQuery && (
+                    <p className="text-xs text-gray-500 mt-1">No terms found</p>
+                  )}
+                </div>
+
+                <div>
+                  <label htmlFor="add-item-tax-label" className="block text-sm font-medium text-gray-700 mb-1">
+                    Custom Label (optional)
+                  </label>
+                  <input
+                    id="add-item-tax-label"
+                    type="text"
+                    value={formData.custom_label}
+                    onChange={(e) => setFormData({ ...formData, custom_label: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="Override default label"
+                  />
+                </div>
+              </>
+            )}
           </>
         )}
 
@@ -306,4 +393,5 @@ export default function AddMenuItemForm({
     </div>
   );
 }
+
 

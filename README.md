@@ -2,7 +2,7 @@
 
 A complete Content Management System built with Next.js 14, Tailwind CSS, and MySQL - similar to WordPress.
 
-## Current Version: 1.15.0
+## Current Version: 1.16.0
 
 See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
 
@@ -21,16 +21,20 @@ See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
   - Scheduled publishing with cron job integration
   - **Autosave with visual diff** - Automatic draft saving every 3 seconds with side-by-side comparison modal
   - **SEO metadata editor** - Per-post SEO title, description, and keywords with character count guidance
-- 🏷️ **Flexible Taxonomy System** - Create custom taxonomies (categories, tags, etc.) for any post type with hierarchical support
+- 🏷️ **Flexible Taxonomy System** 
+  - Create custom taxonomies (categories, tags, etc.) for any post type with hierarchical support
+  - Public taxonomy archive pages showing all terms with post counts
+  - Individual term pages displaying tagged posts
+  - Hierarchical term display with visual nesting and breadcrumb navigation
 - 🧭 **Navigation Menu System**
   - WordPress-style menu builder with drag-and-drop reordering
   - Hierarchical menu structure (parent/child items with visual indentation)
   - Menu locations: Built-in (header, footer, sidebar) + create custom locations
-  - Three item types: Post Type archives/individual posts, Taxonomy archives, Custom links
+  - Four item types: Post Type archives/individual posts, Taxonomy archives/individual terms, Custom links
   - Advanced meta fields: Title Attribute (tooltip), CSS Classes, Link Relationship (XFN), Description
   - Inline editing with batch save (menu + items + meta + deletions in one operation)
   - Public template integration with automatic hierarchical URL building and dropdown submenus
-  - Post search with real-time filtering when adding menu items
+  - Post and term search with real-time filtering when adding menu items
   - Custom label overrides and link target options (same/new window)
 - 🖼️ **Advanced Media Library** 
   - WordPress-style automatic image resizing with multiple size variants
@@ -62,6 +66,12 @@ See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
   - Items per page selector (10, 25, 50, 100)
   - Smart pagination with page numbers and navigation
 - ⚙️ **Settings System** - Configurable site name, tagline, media settings, revisions limit, and session timeout
+- ❓ **Help Center** 
+  - Comprehensive in-app documentation covering all CMS features
+  - 9 detailed sections with interactive navigation
+  - Direct links to admin pages from help documentation
+  - Modular component architecture for easy maintenance
+  - Tips and best practices for security, performance, and organization
 - 🎨 **Beautiful UI** - Modern, responsive interface with Tailwind CSS
 - ⚡ **Fast & SEO-Friendly** - Server-side rendering with Next.js 14
 - 🗄️ **MySQL Database** - Robust relational database for content storage
