@@ -2,7 +2,7 @@
 
 A complete Content Management System built with Next.js 14, Tailwind CSS, and MySQL - similar to WordPress.
 
-## Current Version: 1.16.0
+## Current Version: 1.17.0
 
 See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
 
@@ -66,6 +66,13 @@ See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
   - Items per page selector (10, 25, 50, 100)
   - Smart pagination with page numbers and navigation
 - ⚙️ **Settings System** - Configurable site name, tagline, media settings, revisions limit, and session timeout
+- 🛠️ **Import/Export Tools**
+  - Comprehensive data backup and migration system
+  - Export all or selected data types to JSON files
+  - Import data from previous exports
+  - 7 data categories: Posts, Media, Taxonomies, Menus, Post Types, Settings, Users
+  - Duplicate prevention and detailed import summaries
+  - Security: User passwords never exported/imported
 - ❓ **Help Center** 
   - Comprehensive in-app documentation covering all CMS features
   - 9 detailed sections with interactive navigation

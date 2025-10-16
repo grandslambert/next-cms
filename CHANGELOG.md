@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.17.0] - 2025-10-16
+
+### Added
+- **Import/Export System**:
+  - Comprehensive data backup and migration tool accessible from Tools menu
+  - Export site data to downloadable JSON files with selective data types
+  - Import data from previous exports to restore or migrate content
+  - 7 data categories: Posts & Pages, Media Library, Taxonomies, Navigation Menus, Post Types, Settings, Users & Roles
+  - Select All/Select None quick actions for export options
+  - User data export excludes passwords for security
+  - Import prevents duplicates by checking existing content
+  - Detailed import summary showing counts of imported items
+  - Warning notifications about media files (metadata only, files require manual transfer)
+  - Built-in safeguards with confirmation dialogs
+  - Activity logging for all import/export operations
+
 ## [1.16.0] - 2025-10-16
 
 ### Added

@@ -57,6 +57,7 @@ const staticMenuItems = [
     position: 35,
     subItems: [
       { name: 'Activity Log', href: '/admin/activity-log', icon: '📋', permission: 'manage_users' },
+      { name: 'Import/Export', href: '/admin/tools/import-export', icon: '📦', permission: 'manage_settings' },
     ]
   },
 ];
@@ -326,7 +327,7 @@ export default function Sidebar() {
           <span>Logout</span>
         </button>
         <div className="text-center text-xs text-gray-500 mt-2">
-          Next CMS v1.16.0
+          Next CMS v1.17.0
         </div>
       </div>
     </aside>
