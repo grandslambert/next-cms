@@ -9,7 +9,6 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import RichTextEditor from '@/components/admin/RichTextEditor';
 import MediaSelector from '@/components/admin/MediaSelector';
-import PublishBox from '@/components/admin/post-editor/PublishBox';
 import FeaturedImageBox from '@/components/admin/post-editor/FeaturedImageBox';
 import PageAttributesBox from '@/components/admin/post-editor/PageAttributesBox';
 import CustomFieldsBox from '@/components/admin/post-editor/CustomFieldsBox';
@@ -841,37 +840,83 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
         </div>
       )}
 
-      <div className="mb-8 flex justify-between items-center">
-        <div className="flex items-center gap-4">
-          <h1 className="text-3xl font-bold text-gray-900">
-            {isEdit ? `Edit ${postTypeData.singular_label}` : `Create New ${postTypeData.singular_label}`}
-          </h1>
-          {/* Autosave Indicator */}
-          {autosaveStatus === 'saving' && (
-            <span className="text-sm text-gray-500 flex items-center gap-2">
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-500"></div>
-              Saving...
-            </span>
-          )}
-          {autosaveStatus === 'saved' && (
-            <span className="text-sm text-green-600 flex items-center gap-1">
-              ✓ Draft saved
-            </span>
-          )}
-          {lastSaved && autosaveStatus === 'idle' && (
-            <span className="text-xs text-gray-400">
-              Last saved: {lastSaved.toLocaleTimeString()}
-            </span>
-          )}
+      <div className="sticky top-0 z-10 bg-white border-b border-gray-200 shadow-sm mb-6 -mx-8 px-8 py-4">
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-4">
+            <h1 className="text-2xl font-bold text-gray-900">
+              {isEdit ? `Edit ${postTypeData.singular_label}` : `Create New ${postTypeData.singular_label}`}
+            </h1>
+            {/* Autosave Indicator */}
+            {autosaveStatus === 'saving' && (
+              <span className="text-sm text-gray-500 flex items-center gap-2">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-500"></div>
+                Saving...
+              </span>
+            )}
+            {autosaveStatus === 'saved' && (
+              <span className="text-sm text-green-600 flex items-center gap-1">
+                ✓ Draft saved
+              </span>
+            )}
+            {lastSaved && autosaveStatus === 'idle' && (
+              <span className="text-xs text-gray-400">
+                Last saved: {lastSaved.toLocaleTimeString()}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleSaveDraft}
+              disabled={isSaving}
+              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+            >
+              Save as Draft
+            </button>
+            
+            {permissions.can_publish ? (
+              <>
+                {scheduledPublishAt ? (
+                  <button
+                    type="button"
+                    onClick={handleSchedule}
+                    disabled={isSaving}
+                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
+                  >
+                    Schedule {postTypeData.singular_label}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handlePublish}
+                    disabled={isSaving}
+                    className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
+                  >
+                    {isEdit && status === 'published' ? 'Update' : 'Publish'} {postTypeData.singular_label}
+                  </button>
+                )}
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={handleSubmitForReview}
+                disabled={isSaving}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+              >
+                Submit for Review
+              </button>
+            )}
+            
+            {isEdit && (
+              <Link
+                href={`/admin/post-type/${postTypeSlug}/new`}
+                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+              >
+                + Add New
+              </Link>
+            )}
+          </div>
         </div>
-        {isEdit && (
-          <Link
-            href={`/admin/post-type/${postTypeSlug}/new`}
-            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-          >
-            + Add New {postTypeData.singular_label}
-          </Link>
-        )}
       </div>
 
       <form onSubmit={(e) => handleSubmit(e)} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -1049,20 +1094,44 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
             />
           )}
 
-          <PublishBox
-            status={status}
-            isEdit={isEdit}
-            isSaving={isSaving}
-            canPublish={permissions.can_publish === true}
-            scheduledPublishAt={scheduledPublishAt}
-            scheduledDate={data?.post?.scheduled_publish_at}
-            singularLabel={postTypeData.singular_label}
-            onScheduleChange={setScheduledPublishAt}
-            onSaveDraft={handleSaveDraft}
-            onPublish={handlePublish}
-            onSchedule={handleSchedule}
-            onSubmitForReview={handleSubmitForReview}
-          />
+          {/* Status & Schedule Box */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="font-semibold text-gray-900 mb-4">Status</h3>
+            
+            <div className="mb-4">
+              <p className="text-sm text-gray-600">
+                Current Status: <span className="font-medium">
+                  {status === 'published' ? 'Published' : 
+                   status === 'pending' ? 'Pending Review' : 
+                   status === 'scheduled' ? 'Scheduled' : 
+                   'Draft'}
+                </span>
+              </p>
+              {status === 'scheduled' && data?.post?.scheduled_publish_at && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Scheduled for: {new Date(data.post.scheduled_publish_at).toLocaleString()}
+                </p>
+              )}
+            </div>
+
+            {permissions.can_publish && (
+              <div>
+                <label htmlFor="scheduled-publish" className="block text-sm font-medium text-gray-700 mb-2">
+                  Schedule Publish
+                </label>
+                <input
+                  id="scheduled-publish"
+                  type="datetime-local"
+                  value={scheduledPublishAt}
+                  onChange={(e) => setScheduledPublishAt(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Leave empty for immediate publish
+                </p>
+              </div>
+            )}
+          </div>
 
           <PageAttributesBox
             isHierarchical={!!postTypeData?.hierarchical}

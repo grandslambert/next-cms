@@ -52,9 +52,9 @@ export default function AdminDashboard() {
   const permissions = (session?.user as any)?.permissions || {};
 
   const { data: postsData, isLoading: postsLoading } = useQuery({
-    queryKey: ['posts'],
+    queryKey: ['recent-posts-all-types'],
     queryFn: async () => {
-      const res = await axios.get('/api/posts?limit=5');
+      const res = await axios.get('/api/posts?post_type=all&limit=10');
       return res.data;
     },
   });
@@ -123,13 +123,13 @@ export default function AdminDashboard() {
           </div>
           <div className="p-6">
             {isContentLoading ? (
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-6">
                 {[1, 2, 3, 4, 5, 6].map((item) => (
                   <ContentSummarySkeleton key={item} />
                 ))}
               </div>
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-6">
                 {/* Dynamic Post Types (filtered by show_in_dashboard and permissions) */}
                 {dashboardPostTypes.map((postType: any) => (
                   <Link key={postType.name} href={`/admin/post-type/${postType.name}`} className="group">
@@ -211,34 +211,73 @@ export default function AdminDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-lg shadow">
           <div className="p-6 border-b border-gray-200">
-            <h2 className="text-xl font-semibold text-gray-900">Recent Posts</h2>
+            <h2 className="text-xl font-semibold text-gray-900">Recent Content</h2>
           </div>
           <div className="p-6">
-            {postsLoading ? (
+            {postsLoading || postTypesLoading ? (
               <LoadingSpinner />
-            ) : postsData?.posts && postsData.posts.length > 0 ? (
-              <ul className="space-y-4">
-                {postsData.posts.slice(0, 5).map((post: any) => (
-                  <li key={post.id} className="flex justify-between items-start">
-                    <div>
-                      <h3 className="font-medium text-gray-900">{post.title}</h3>
-                      <p className="text-sm text-gray-500">
-                        by {post.author_name} • {new Date(post.created_at).toLocaleDateString()}
-                      </p>
-                    </div>
-                    <span className={`px-2 py-1 text-xs rounded ${
-                      post.status === 'published' 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-yellow-100 text-yellow-800'
-                    }`}>
-                      {post.status}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-gray-500">No posts yet</p>
-            )}
+            ) : (() => {
+              // Filter posts by user permissions
+              const filteredPosts = postsData?.posts?.filter((post: any) => {
+                return permissions[`manage_posts_${post.post_type}`];
+              }) || [];
+
+              // Get post types with menu_order for sorting
+              const postTypeMap = new Map(
+                postTypesData?.postTypes?.map((pt: any) => [pt.name, pt]) || []
+              );
+
+              // Sort by created_at (most recent first)
+              const sortedPosts = [...filteredPosts].sort((a: any, b: any) => {
+                return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+              });
+
+              return sortedPosts.length > 0 ? (
+                <ul className="space-y-2">
+                  {sortedPosts.slice(0, 8).map((post: any) => {
+                    const postType = postTypeMap.get(post.post_type);
+                    const postTypeLabel = (postType?.labels?.singular_name || post.post_type).toUpperCase();
+                    return (
+                      <li key={post.id} className="p-3 rounded-lg hover:bg-gray-50 transition-colors duration-150">
+                        <div className="flex justify-between items-start gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="px-2 py-0.5 text-xs font-bold bg-gray-200 text-gray-700 rounded">
+                                {postTypeLabel}
+                              </span>
+                              <span className={`px-2 py-0.5 text-xs font-bold rounded whitespace-nowrap ${
+                                post.status === 'published' 
+                                  ? 'bg-green-100 text-green-800' 
+                                  : post.status === 'pending'
+                                  ? 'bg-blue-100 text-blue-800'
+                                  : post.status === 'draft'
+                                  ? 'bg-yellow-100 text-yellow-800'
+                                  : post.status === 'scheduled'
+                                  ? 'bg-purple-100 text-purple-800'
+                                  : 'bg-gray-100 text-gray-800'
+                              }`}>
+                                {post.status.toUpperCase()}
+                              </span>
+                            </div>
+                            <Link 
+                              href={`/admin/post-type/${post.post_type}/${post.id}`}
+                              className="font-medium text-blue-600 hover:text-blue-800 hover:underline block"
+                            >
+                              {post.title}
+                            </Link>
+                            <p className="text-sm text-gray-500 mt-1">
+                              by {post.author_name} • {new Date(post.created_at).toLocaleDateString()}
+                            </p>
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p className="text-gray-500">No posts yet</p>
+              );
+            })()}
           </div>
         </div>
 

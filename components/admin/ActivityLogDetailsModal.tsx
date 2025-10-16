@@ -154,7 +154,9 @@ export default function ActivityLogDetailsModal({
 
                     const formatValue = (value: any, isAfter: boolean = false) => {
                       if (value === null || value === undefined) return <span className="text-gray-400 italic">Empty</span>;
-                      if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+                      // Handle booleans (including MySQL TINYINT 0/1)
+                      if (typeof value === 'boolean') return value ? 'True' : 'False';
+                      if (value === 1 || value === 0) return value === 1 ? 'True' : 'False';
                       if (typeof value === 'object') return <pre className="text-xs whitespace-pre-wrap">{JSON.stringify(value, null, 2)}</pre>;
                       
                       const stringValue = String(value);

@@ -26,9 +26,15 @@ export async function GET(request: NextRequest) {
       FROM posts p 
       LEFT JOIN users u ON p.author_id = u.id
       LEFT JOIN media m ON p.featured_image_id = m.id
-      WHERE p.post_type = ?
+      WHERE 1=1
     `;
-    const params: any[] = [postType];
+    const params: any[] = [];
+    
+    // Only filter by post_type if it's not 'all'
+    if (postType !== 'all') {
+      query += ' AND p.post_type = ?';
+      params.push(postType);
+    }
 
     // Filter by author if user can't view others' posts
     if (userId && !canViewOthers) {
@@ -58,8 +64,14 @@ export async function GET(request: NextRequest) {
     const [rows] = await db.query<RowDataPacket[]>(query, params);
 
     // Get total count
-    let countQuery = 'SELECT COUNT(*) as total FROM posts WHERE post_type = ?';
-    const countParams: any[] = [postType];
+    let countQuery = 'SELECT COUNT(*) as total FROM posts WHERE 1=1';
+    const countParams: any[] = [];
+    
+    // Only filter by post_type if it's not 'all'
+    if (postType !== 'all') {
+      countQuery += ' AND post_type = ?';
+      countParams.push(postType);
+    }
     
     // Filter by author if user can't view others' posts
     if (userId && !canViewOthers) {

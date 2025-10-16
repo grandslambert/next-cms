@@ -51,20 +51,25 @@ export async function PUT(
 
     const slug = slugify(name);
 
-    // Get current term to check taxonomy
-    const [currentTerm] = await db.query<RowDataPacket[]>(
-      'SELECT taxonomy_id FROM terms WHERE id = ?',
+    // Get current term BEFORE updating (for activity log)
+    const [beforeUpdate] = await db.query<RowDataPacket[]>(
+      `SELECT t.*, tax.name as taxonomy_name
+       FROM terms t
+       INNER JOIN taxonomies tax ON t.taxonomy_id = tax.id
+       WHERE t.id = ?`,
       [params.id]
     );
 
-    if (currentTerm.length === 0) {
+    if (beforeUpdate.length === 0) {
       return NextResponse.json({ error: 'Term not found' }, { status: 404 });
     }
+
+    const currentTerm = beforeUpdate[0];
 
     // Check if new slug already exists for this taxonomy (excluding current term)
     const [existing] = await db.query<RowDataPacket[]>(
       'SELECT id FROM terms WHERE taxonomy_id = ? AND slug = ? AND id != ?',
-      [currentTerm[0].taxonomy_id, slug, params.id]
+      [currentTerm.taxonomy_id, slug, params.id]
     );
 
     if (existing.length > 0) {
@@ -90,6 +95,23 @@ export async function PUT(
       [params.id]
     );
 
+    // Prepare before/after changes
+    const changesBefore = {
+      name: currentTerm.name,
+      slug: currentTerm.slug,
+      description: currentTerm.description,
+      image_id: currentTerm.image_id,
+      parent_id: currentTerm.parent_id,
+    };
+
+    const changesAfter = {
+      name: updated[0].name,
+      slug: updated[0].slug,
+      description: updated[0].description,
+      image_id: updated[0].image_id,
+      parent_id: updated[0].parent_id,
+    };
+
     // Log activity
     const userId = (session.user as any).id;
     await logActivity({
@@ -101,6 +123,8 @@ export async function PUT(
       details: `Updated term: ${name} in ${updated[0].taxonomy_name}`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
+      changesBefore,
+      changesAfter,
     });
 
     return NextResponse.json({ term: updated[0] });

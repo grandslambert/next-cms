@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.14.2] - 2025-10-16
+
+### Fixed
+- **Activity Log**:
+  - Term updates now properly track before/after changes
+  - Settings updates now properly track before/after changes for each modified setting
+  - Media size regeneration now properly logs before/after size changes
+  - Taxonomy updates now properly track before/after changes
+  - Post type updates now properly track before/after changes including assigned taxonomies
+  - Removed duplicate logging when updating post type taxonomies (now only one log entry per save)
+  - Consolidated post type and taxonomy updates into single comprehensive log entry
+- **Post Type Form**: Now filters out legacy "categories" field from supports before saving
+- **Sidebar Navigation**: Fixed submenu items incorrectly showing as active (changed from startsWith to exact match)
+
+### Changed
+- **Activity Log Details**:
+  - Boolean values now display as "True"/"False" instead of "1"/"0"
+- **Post Editor Header**:
+  - Moved save and publish buttons to sticky header bar
+  - Header now stays fixed at top of screen while scrolling
+  - All action buttons (Save Draft, Publish, Schedule, Add New) now in header for easy access
+  - Simplified sidebar Status box to show current status and schedule input only
+  - Reduced header font size (2xl) for better proportions with buttons
+- **Sidebar**:
+  - Moved "View Site" icon to header next to "Next CMS" title
+  - Removed "View Site" from menu items for cleaner navigation
+  - Fixed flyout menu disappearing too quickly with 300ms hover delay
+- **Dashboard Recent Content**:
+  - Renamed from "Recent Posts" to "Recent Content"
+  - Now includes all post types (not just "post") - Pages, Portfolios, etc.
+  - Post titles are now clickable links to the editor
+  - Posts are sorted by creation date (most recent first)
+  - Post type and status displayed as bold, uppercase badges (e.g., "PAGE", "PUBLISHED")
+  - Post type badge in light gray, status badges with unique colors (Published: green, Pending: blue, Draft: yellow, Scheduled: purple)
+  - Added hover effect on list items with subtle background change for better UX
+  - Badges displayed together above the title for better organization
+  - Increased from 5 to 8 recent items displayed
+  - Filtered by user permissions to only show post types the user can manage
+- **Dashboard Content Summary Grid**: Now displays in 5 columns on extra-large screens (xl breakpoint) for better use of space
+- **Posts API**: Now supports `post_type=all` parameter to fetch posts across all post types
+
 ## [1.14.1] - 2025-10-16
 
 ### Fixed

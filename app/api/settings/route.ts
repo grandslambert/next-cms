@@ -50,6 +50,28 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Settings object is required' }, { status: 400 });
     }
 
+    // Fetch current settings BEFORE updating (for activity log)
+    const [currentRows] = await db.query<RowDataPacket[]>(
+      'SELECT * FROM settings'
+    );
+
+    const beforeSettings: any = {};
+    currentRows.forEach((row: any) => {
+      if (row.setting_type === 'json' && row.setting_value) {
+        try {
+          beforeSettings[row.setting_key] = JSON.parse(row.setting_value);
+        } catch {
+          beforeSettings[row.setting_key] = row.setting_value;
+        }
+      } else if (row.setting_type === 'boolean') {
+        beforeSettings[row.setting_key] = row.setting_value === 'true' || row.setting_value === '1';
+      } else if (row.setting_type === 'number') {
+        beforeSettings[row.setting_key] = Number(row.setting_value);
+      } else {
+        beforeSettings[row.setting_key] = row.setting_value;
+      }
+    });
+
     // Update each setting
     for (const [key, value] of Object.entries(settings)) {
       let settingType = 'string';
@@ -74,9 +96,24 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    // Log activity
+    // Log activity with before/after changes
     const userId = (session.user as any).id;
     const settingKeys = Object.keys(settings).join(', ');
+    
+    // Only include changed settings in before/after
+    const changesBefore: any = {};
+    const changesAfter: any = {};
+    
+    for (const key of Object.keys(settings)) {
+      const beforeValue = beforeSettings[key] !== undefined ? beforeSettings[key] : null;
+      const afterValue = settings[key];
+      
+      if (JSON.stringify(beforeValue) !== JSON.stringify(afterValue)) {
+        changesBefore[key] = beforeValue;
+        changesAfter[key] = afterValue;
+      }
+    }
+    
     await logActivity({
       userId,
       action: 'settings_updated',
@@ -86,6 +123,8 @@ export async function PUT(request: NextRequest) {
       details: `Updated settings: ${settingKeys}`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
+      changesBefore: Object.keys(changesBefore).length > 0 ? changesBefore : undefined,
+      changesAfter: Object.keys(changesAfter).length > 0 ? changesAfter : undefined,
     });
 
     return NextResponse.json({ success: true });

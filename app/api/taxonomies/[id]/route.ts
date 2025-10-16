@@ -39,6 +39,18 @@ export async function PUT(
     const body = await request.json();
     const { label, singular_label, description, hierarchical, show_in_menu, show_in_dashboard, menu_position } = body;
 
+    // Get current taxonomy BEFORE updating (for activity log)
+    const [beforeUpdate] = await db.query<RowDataPacket[]>(
+      'SELECT * FROM taxonomies WHERE id = ?',
+      [params.id]
+    );
+
+    if (beforeUpdate.length === 0) {
+      return NextResponse.json({ error: 'Taxonomy not found' }, { status: 404 });
+    }
+
+    const currentTaxonomy = beforeUpdate[0];
+
     await db.query<ResultSetHeader>(
       `UPDATE taxonomies 
        SET label = ?, singular_label = ?, description = ?, hierarchical = ?, show_in_menu = ?, show_in_dashboard = ?, menu_position = ?
@@ -60,6 +72,27 @@ export async function PUT(
       [params.id]
     );
 
+    // Prepare before/after changes
+    const changesBefore = {
+      label: currentTaxonomy.label,
+      singular_label: currentTaxonomy.singular_label,
+      description: currentTaxonomy.description,
+      hierarchical: currentTaxonomy.hierarchical,
+      show_in_menu: currentTaxonomy.show_in_menu,
+      show_in_dashboard: currentTaxonomy.show_in_dashboard,
+      menu_position: currentTaxonomy.menu_position,
+    };
+
+    const changesAfter = {
+      label: updated[0].label,
+      singular_label: updated[0].singular_label,
+      description: updated[0].description,
+      hierarchical: updated[0].hierarchical,
+      show_in_menu: updated[0].show_in_menu,
+      show_in_dashboard: updated[0].show_in_dashboard,
+      menu_position: updated[0].menu_position,
+    };
+
     // Log activity
     const userId = (session.user as any).id;
     await logActivity({
@@ -71,6 +104,8 @@ export async function PUT(
       details: `Updated taxonomy: ${label}`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
+      changesBefore,
+      changesAfter,
     });
 
     return NextResponse.json({ taxonomy: updated[0] });

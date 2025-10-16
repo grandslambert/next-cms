@@ -6,7 +6,7 @@ import { signOut, useSession } from 'next-auth/react';
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
 import { cn } from '@/lib/utils';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 const staticMenuItems = [
   { name: 'Dashboard', href: '/admin', icon: '📊', position: 0, permission: 'view_dashboard' },
@@ -49,7 +49,6 @@ const staticMenuItems = [
       { name: 'Activity Log', href: '/admin/activity-log', icon: '📋', permission: 'manage_users' },
     ]
   },
-  { name: 'View Site', href: '/', icon: '🌐', external: true, position: 99 }, // No permission required
 ];
 
 const hasPermission = (permissions: any, requiredPermission: string | undefined): boolean => {
@@ -100,8 +99,18 @@ const getStaticMenuItemsWithTaxonomies = (taxonomiesData: any, permissions: any)
 export default function Sidebar() {
   const pathname = usePathname();
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
+  const [hoverTimeout, setHoverTimeout] = useState<NodeJS.Timeout | null>(null);
   const { data: session } = useSession();
   const permissions = (session?.user as any)?.permissions || {};
+  
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (hoverTimeout) {
+        clearTimeout(hoverTimeout);
+      }
+    };
+  }, [hoverTimeout]);
   
   // Fetch custom post types
   const { data: postTypesData } = useQuery({
@@ -145,16 +154,25 @@ export default function Sidebar() {
 
   return (
     <aside className="w-64 bg-gray-900 text-white min-h-screen flex flex-col">
-      <div className="p-6">
+      <div className="p-6 flex items-center justify-between border-b border-gray-700">
         <h1 className="text-2xl font-bold">Next CMS</h1>
+        <Link
+          href="/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-2xl hover:opacity-80 transition-opacity"
+          title="View Site"
+        >
+          🌐
+        </Link>
       </div>
 
       <nav className="flex-1 px-4">
         <ul className="space-y-2">
           {menuItems.map((item: any) => {
             // Check if item has sub-items and if any are active
-            const hasActiveSubItem = item.subItems?.some((subItem: any) => 
-              pathname?.startsWith(subItem.href)
+            const hasActiveSubItem = item.subItems?.some((subItem: any) =>
+              pathname === subItem.href
             );
             
             const isHovered = hoveredItem === item.name;
@@ -173,8 +191,19 @@ export default function Sidebar() {
                 <li 
                   key={item.name}
                   className="relative"
-                  onMouseEnter={() => setHoveredItem(item.name)}
-                  onMouseLeave={() => setHoveredItem(null)}
+                  onMouseEnter={() => {
+                    if (hoverTimeout) {
+                      clearTimeout(hoverTimeout);
+                      setHoverTimeout(null);
+                    }
+                    setHoveredItem(item.name);
+                  }}
+                  onMouseLeave={() => {
+                    const timeout = setTimeout(() => {
+                      setHoveredItem(null);
+                    }, 300);
+                    setHoverTimeout(timeout);
+                  }}
                 >
                   <div
                     className={cn(
@@ -191,7 +220,16 @@ export default function Sidebar() {
                   
                   {/* Flyout submenu - ONLY on hover (not when active) */}
                   {isHovered && !hasActiveSubItem && (
-                    <div className="absolute left-full top-0 ml-1 min-w-[200px] bg-gray-800 rounded-lg shadow-xl border border-gray-700 py-2 z-50">
+                    <div 
+                      className="absolute left-full top-0 ml-1 min-w-[200px] bg-gray-800 rounded-lg shadow-xl border border-gray-700 py-2 z-50"
+                      onMouseEnter={() => {
+                        if (hoverTimeout) {
+                          clearTimeout(hoverTimeout);
+                          setHoverTimeout(null);
+                        }
+                        setHoveredItem(item.name);
+                      }}
+                    >
                       {item.subItems.map((subItem: any) => {
                         return (
                           <Link
@@ -211,7 +249,7 @@ export default function Sidebar() {
                   {hasActiveSubItem && (
                     <ul className="ml-4 mt-1 space-y-1">
                       {item.subItems.map((subItem: any) => {
-                        const isSubItemActive = pathname?.startsWith(subItem.href);
+                        const isSubItemActive = pathname === subItem.href;
                         return (
                           <li key={subItem.href}>
                             <Link
@@ -266,7 +304,7 @@ export default function Sidebar() {
           <span>Logout</span>
         </button>
         <div className="text-center text-xs text-gray-500 mt-2">
-          Next CMS v1.14.1
+          Next CMS v1.14.2
         </div>
       </div>
     </aside>

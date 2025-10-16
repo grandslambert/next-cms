@@ -91,12 +91,9 @@ export default function PostTypesSettings() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, taxonomies, ...data }: any) => {
+    mutationFn: async ({ id, ...data }: any) => {
+      // Send everything including taxonomies in one request
       const res = await axios.put(`/api/post-types/${id}`, data);
-      // Also update taxonomies
-      if (taxonomies !== undefined) {
-        await axios.put(`/api/post-types/${id}/taxonomies`, { taxonomy_ids: taxonomies });
-      }
       return res.data;
     },
     onSuccess: () => {
@@ -150,10 +147,20 @@ export default function PostTypesSettings() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Clean supports - remove any legacy fields like "categories"
+    const cleanSupports = { ...formData.supports };
+    delete (cleanSupports as any).categories;
+    
+    const cleanedFormData = {
+      ...formData,
+      supports: cleanSupports,
+    };
+    
     if (editingPostType) {
-      updateMutation.mutate({ id: editingPostType.id, ...formData, taxonomies: selectedTaxonomies });
+      updateMutation.mutate({ id: editingPostType.id, ...cleanedFormData, taxonomies: selectedTaxonomies });
     } else {
-      createMutation.mutate(formData);
+      createMutation.mutate(cleanedFormData);
     }
   };
 

@@ -42,19 +42,30 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { slug, label, singular_label, description, icon, url_structure, supports, menu_position, show_in_dashboard, hierarchical } = body;
+    const { slug, label, singular_label, description, icon, url_structure, supports, menu_position, show_in_dashboard, hierarchical, taxonomies } = body;
 
-    // Check if it's a built-in type
-    const [currentType] = await db.query<RowDataPacket[]>(
-      'SELECT name FROM post_types WHERE id = ?',
+    // Get current post type BEFORE updating (for activity log)
+    const [beforeUpdate] = await db.query<RowDataPacket[]>(
+      'SELECT * FROM post_types WHERE id = ?',
       [params.id]
     );
 
-    if (currentType.length === 0) {
+    if (beforeUpdate.length === 0) {
       return NextResponse.json({ error: 'Post type not found' }, { status: 404 });
     }
 
-    const isBuiltIn = currentType[0].name === 'post' || currentType[0].name === 'page';
+    const currentType = beforeUpdate[0];
+    const isBuiltIn = currentType.name === 'post' || currentType.name === 'page';
+
+    // Get current taxonomies for this post type
+    const [beforeTaxonomies] = await db.query<RowDataPacket[]>(
+      `SELECT t.id, t.name, t.label
+       FROM taxonomies t
+       INNER JOIN post_type_taxonomies ptt ON ptt.taxonomy_id = t.id
+       WHERE ptt.post_type_id = ?
+       ORDER BY t.label ASC`,
+      [params.id]
+    );
 
     // Build update query
     let updateQuery = `UPDATE post_types 
@@ -83,10 +94,67 @@ export async function PUT(
 
     await db.query<ResultSetHeader>(updateQuery, updateParams);
 
+    // Update taxonomies if provided
+    if (taxonomies !== undefined) {
+      // Remove existing relationships
+      await db.query<ResultSetHeader>(
+        'DELETE FROM post_type_taxonomies WHERE post_type_id = ?',
+        [params.id]
+      );
+
+      // Add new relationships
+      if (taxonomies.length > 0) {
+        const values = taxonomies.map((taxonomyId: number) => [params.id, taxonomyId]);
+        await db.query<ResultSetHeader>(
+          'INSERT INTO post_type_taxonomies (post_type_id, taxonomy_id) VALUES ?',
+          [values]
+        );
+      }
+    }
+
     const [updated] = await db.query<RowDataPacket[]>(
       'SELECT * FROM post_types WHERE id = ?',
       [params.id]
     );
+
+    // Get updated taxonomies for this post type
+    const [afterTaxonomies] = await db.query<RowDataPacket[]>(
+      `SELECT t.id, t.name, t.label
+       FROM taxonomies t
+       INNER JOIN post_type_taxonomies ptt ON ptt.taxonomy_id = t.id
+       WHERE ptt.post_type_id = ?
+       ORDER BY t.label ASC`,
+      [params.id]
+    );
+
+    // Prepare before/after changes (including taxonomies)
+    const changesBefore = {
+      slug: currentType.slug,
+      label: currentType.label,
+      singular_label: currentType.singular_label,
+      description: currentType.description,
+      icon: currentType.icon,
+      url_structure: currentType.url_structure,
+      supports: JSON.parse(currentType.supports || '{}'),
+      show_in_dashboard: currentType.show_in_dashboard,
+      hierarchical: currentType.hierarchical,
+      menu_position: currentType.menu_position,
+      taxonomies: beforeTaxonomies.map((t: any) => t.label).join(', ') || 'None',
+    };
+
+    const changesAfter = {
+      slug: updated[0].slug,
+      label: updated[0].label,
+      singular_label: updated[0].singular_label,
+      description: updated[0].description,
+      icon: updated[0].icon,
+      url_structure: updated[0].url_structure,
+      supports: JSON.parse(updated[0].supports || '{}'),
+      show_in_dashboard: updated[0].show_in_dashboard,
+      hierarchical: updated[0].hierarchical,
+      menu_position: updated[0].menu_position,
+      taxonomies: afterTaxonomies.map((t: any) => t.label).join(', ') || 'None',
+    };
 
     // Log activity
     const userId = (session.user as any).id;
@@ -99,6 +167,8 @@ export async function PUT(
       details: `Updated post type: ${label}`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
+      changesBefore,
+      changesAfter,
     });
 
     return NextResponse.json({ 

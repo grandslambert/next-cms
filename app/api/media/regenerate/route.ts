@@ -6,6 +6,7 @@ import { writeFile, mkdir, unlink, rename } from 'fs/promises';
 import path from 'path';
 import sharp from 'sharp';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 // Disable sharp cache to prevent file locking
 sharp.cache(false);
@@ -119,6 +120,9 @@ export async function POST(request: NextRequest) {
 
     for (const media of mediaItems) {
       try {
+        // Store before state for activity log
+        const beforeSizes = media.sizes ? JSON.parse(media.sizes) : null;
+        
         // Get the original file path
         const originalPath = path.join(process.cwd(), 'public', media.url);
         
@@ -242,6 +246,21 @@ export async function POST(request: NextRequest) {
           'UPDATE media SET url = ?, filename = ?, sizes = ? WHERE id = ?',
           [sizes.full.url, `${newBaseFilename}${ext}`, JSON.stringify(sizes), media.id]
         );
+
+        // Log activity for this media item
+        const userId = (session.user as any).id;
+        await logActivity({
+          userId,
+          action: 'media_updated',
+          entityType: 'media',
+          entityId: media.id,
+          entityName: media.original_name,
+          details: 'Regenerated image sizes',
+          ipAddress: getClientIp(request),
+          userAgent: getUserAgent(request),
+          changesBefore: { sizes: beforeSizes },
+          changesAfter: { sizes },
+        });
 
         results.success++;
       } catch (error) {
