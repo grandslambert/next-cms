@@ -22,7 +22,10 @@ export async function POST(request: NextRequest) {
       custom_fields,
       parent_id,
       menu_order,
-      author_id
+      author_id,
+      seo_title,
+      seo_description,
+      seo_keywords
     } = body;
 
     // Create a unique key for this autosave
@@ -46,6 +49,9 @@ export async function POST(request: NextRequest) {
           parent_id,
           menu_order,
           author_id,
+          seo_title,
+          seo_description,
+          seo_keywords,
           saved_at: new Date().toISOString()
         })
       ]

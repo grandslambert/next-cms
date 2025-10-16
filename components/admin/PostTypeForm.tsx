@@ -16,6 +16,7 @@ import CustomFieldsBox from '@/components/admin/post-editor/CustomFieldsBox';
 import TaxonomyBox from '@/components/admin/post-editor/TaxonomyBox';
 import RevisionsBox from '@/components/admin/post-editor/RevisionsBox';
 import AutosaveDiffModal from '@/components/admin/post-editor/AutosaveDiffModal';
+import SeoMetadataBox from '@/components/admin/post-editor/SeoMetadataBox';
 
 interface PostTypeFormProps {
   readonly postTypeSlug: string;
@@ -91,6 +92,9 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
   const [previewUrl, setPreviewUrl] = useState('');
   const [customFields, setCustomFields] = useState<Array<{meta_key: string, meta_value: string}>>([]);
   const [scheduledPublishAt, setScheduledPublishAt] = useState<string>('');
+  const [seoTitle, setSeoTitle] = useState('');
+  const [seoDescription, setSeoDescription] = useState('');
+  const [seoKeywords, setSeoKeywords] = useState('');
   const [autosaveStatus, setAutosaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [showAutosaveDiff, setShowAutosaveDiff] = useState(false);
@@ -193,13 +197,37 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
     enabled: isEdit && !!postId,
   });
 
-  // Load custom fields when data is fetched
+  // Load custom fields and SEO data when data is fetched
   useEffect(() => {
     if (customFieldsData?.meta) {
-      setCustomFields(customFieldsData.meta.map((m: any) => ({
-        meta_key: m.meta_key,
-        meta_value: m.meta_value
-      })));
+      const fields = customFieldsData.meta;
+      
+      // Separate SEO fields from regular custom fields
+      const seoFields: Record<string, string> = {};
+      const regularFields: Array<{meta_key: string, meta_value: string}> = [];
+      
+      fields.forEach((field: any) => {
+        if (field.meta_key === '_seo_title') {
+          seoFields.title = field.meta_value;
+        } else if (field.meta_key === '_seo_description') {
+          seoFields.description = field.meta_value;
+        } else if (field.meta_key === '_seo_keywords') {
+          seoFields.keywords = field.meta_value;
+        } else {
+          regularFields.push({
+            meta_key: field.meta_key,
+            meta_value: field.meta_value
+          });
+        }
+      });
+      
+      // Set SEO fields
+      setSeoTitle(seoFields.title || '');
+      setSeoDescription(seoFields.description || '');
+      setSeoKeywords(seoFields.keywords || '');
+      
+      // Set regular custom fields
+      setCustomFields(regularFields);
     }
   }, [customFieldsData]);
 
@@ -401,6 +429,9 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
         parent_id: overrides?.parent_id !== undefined ? overrides.parent_id : parentId,
         menu_order: overrides?.menu_order !== undefined ? overrides.menu_order : menuOrder,
         author_id: overrides?.author_id !== undefined ? overrides.author_id : authorId,
+        seo_title: seoTitle,
+        seo_description: seoDescription,
+        seo_keywords: seoKeywords,
       });
     }, 3000);
 
@@ -422,6 +453,18 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
           });
         });
         await Promise.all(termPromises);
+      }
+
+      // Save custom fields (including SEO fields)
+      const allMeta = [
+        ...customFields.filter(cf => cf.meta_key.trim() !== ''),
+        // Add SEO fields with underscore prefix
+        ...(seoTitle ? [{ meta_key: '_seo_title', meta_value: seoTitle }] : []),
+        ...(seoDescription ? [{ meta_key: '_seo_description', meta_value: seoDescription }] : []),
+        ...(seoKeywords ? [{ meta_key: '_seo_keywords', meta_value: seoKeywords }] : []),
+      ];
+      if (allMeta.length > 0) {
+        await axios.put(`/api/posts/${newPostId}/meta`, { meta: allMeta });
       }
 
       return { ...res.data, newPostId };
@@ -468,10 +511,15 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
         await Promise.all(termPromises);
       }
 
-      // Update custom fields
-      await axios.put(`/api/posts/${postId}/meta`, {
-        meta: customFields.filter(cf => cf.meta_key.trim() !== '')
-      });
+      // Update custom fields (including SEO fields)
+      const allMeta = [
+        ...customFields.filter(cf => cf.meta_key.trim() !== ''),
+        // Add SEO fields with underscore prefix
+        ...(seoTitle ? [{ meta_key: '_seo_title', meta_value: seoTitle }] : []),
+        ...(seoDescription ? [{ meta_key: '_seo_description', meta_value: seoDescription }] : []),
+        ...(seoKeywords ? [{ meta_key: '_seo_keywords', meta_value: seoKeywords }] : []),
+      ];
+      await axios.put(`/api/posts/${postId}/meta`, { meta: allMeta });
       
       return res.data;
     },
@@ -588,9 +636,11 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
     triggerAutosave();
   };
 
-  const handleAuthorChange = (value: number) => {
+  const handleAuthorChange = (value: number | null) => {
     setAuthorId(value);
-    triggerAutosave({ author_id: value });
+    if (value !== null) {
+      triggerAutosave({ author_id: value });
+    }
   };
 
   const handleParentChange = (value: number | null) => {
@@ -601,6 +651,21 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
   const handleMenuOrderChange = (value: number) => {
     setMenuOrder(value);
     triggerAutosave({ menu_order: value });
+  };
+
+  const handleSeoTitleChange = (value: string) => {
+    setSeoTitle(value);
+    triggerAutosave();
+  };
+
+  const handleSeoDescriptionChange = (value: string) => {
+    setSeoDescription(value);
+    triggerAutosave();
+  };
+
+  const handleSeoKeywordsChange = (value: string) => {
+    setSeoKeywords(value);
+    triggerAutosave();
   };
 
   const handleUseAutosave = () => {
@@ -619,6 +684,15 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
       }
       if (autosaveData.author_id !== undefined) {
         setAuthorId(autosaveData.author_id);
+      }
+      if (autosaveData.seo_title !== undefined) {
+        setSeoTitle(autosaveData.seo_title);
+      }
+      if (autosaveData.seo_description !== undefined) {
+        setSeoDescription(autosaveData.seo_description);
+      }
+      if (autosaveData.seo_keywords !== undefined) {
+        setSeoKeywords(autosaveData.seo_keywords);
       }
       setShowAutosaveDiff(false);
       setAutosaveData(null);
@@ -938,6 +1012,16 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
               onFieldChange={handleCustomFieldChange}
             />
           )}
+
+          {/* SEO Metadata */}
+          <SeoMetadataBox
+            seoTitle={seoTitle}
+            seoDescription={seoDescription}
+            seoKeywords={seoKeywords}
+            onSeoTitleChange={handleSeoTitleChange}
+            onSeoDescriptionChange={handleSeoDescriptionChange}
+            onSeoKeywordsChange={handleSeoKeywordsChange}
+          />
         </div>
 
         <div className="space-y-6">
@@ -1026,7 +1110,10 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
           custom_fields: customFields,
           parent_id: parentId,
           menu_order: menuOrder,
-          author_id: authorId
+          author_id: authorId || 0,
+          seo_title: seoTitle,
+          seo_description: seoDescription,
+          seo_keywords: seoKeywords
         }}
         autosaveContent={autosaveData || { 
           title: '', 

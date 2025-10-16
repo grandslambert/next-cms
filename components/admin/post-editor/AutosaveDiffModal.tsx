@@ -8,6 +8,9 @@ interface AutosaveDiffModalProps {
     parent_id: number | null;
     menu_order: number;
     author_id: number;
+    seo_title: string;
+    seo_description: string;
+    seo_keywords: string;
   };
   readonly autosaveContent: {
     title: string;
@@ -17,6 +20,9 @@ interface AutosaveDiffModalProps {
     parent_id?: number | null;
     menu_order?: number;
     author_id?: number;
+    seo_title?: string;
+    seo_description?: string;
+    seo_keywords?: string;
     saved_at: string;
   };
   readonly allPosts?: Array<{id: number, title: string}>;
@@ -49,12 +55,19 @@ export default function AutosaveDiffModal({
   const authorChanged = currentContent.author_id !== (autosaveContent.author_id ?? currentContent.author_id);
   const pageAttributesChanged = parentChanged || menuOrderChanged || authorChanged;
 
+  // Compare SEO fields
+  const seoTitleChanged = currentContent.seo_title !== (autosaveContent.seo_title ?? currentContent.seo_title);
+  const seoDescriptionChanged = currentContent.seo_description !== (autosaveContent.seo_description ?? currentContent.seo_description);
+  const seoKeywordsChanged = currentContent.seo_keywords !== (autosaveContent.seo_keywords ?? currentContent.seo_keywords);
+  const seoMetadataChanged = seoTitleChanged || seoDescriptionChanged || seoKeywordsChanged;
+
   const hasChanges = 
     currentContent.title !== autosaveContent.title ||
     currentContent.content !== autosaveContent.content ||
     currentContent.excerpt !== autosaveContent.excerpt ||
     customFieldsChanged ||
-    pageAttributesChanged;
+    pageAttributesChanged ||
+    seoMetadataChanged;
 
   // Helper functions to get names
   const getParentTitle = (parentId: number | null) => {
@@ -272,6 +285,69 @@ export default function AutosaveDiffModal({
                               <div>
                                 <span className="font-medium text-gray-700">Author:</span>{' '}
                                 <span className="text-gray-900">{getAuthorName(autosaveContent.author_id ?? currentContent.author_id)}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* SEO Metadata Diff */}
+                {seoMetadataChanged && (
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-3">SEO Metadata</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <div className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                          <span className="px-2 py-1 bg-gray-100 rounded text-xs">Current</span>
+                        </div>
+                        <div className="p-4 bg-gray-50 border border-gray-300 rounded-lg">
+                          <div className="space-y-2 text-sm">
+                            {seoTitleChanged && (
+                              <div>
+                                <span className="font-medium text-gray-700">SEO Title:</span>{' '}
+                                <span className="text-gray-900">{currentContent.seo_title || <span className="text-gray-400 italic">Empty</span>}</span>
+                              </div>
+                            )}
+                            {seoDescriptionChanged && (
+                              <div>
+                                <span className="font-medium text-gray-700">SEO Description:</span>{' '}
+                                <span className="text-gray-900">{currentContent.seo_description || <span className="text-gray-400 italic">Empty</span>}</span>
+                              </div>
+                            )}
+                            {seoKeywordsChanged && (
+                              <div>
+                                <span className="font-medium text-gray-700">SEO Keywords:</span>{' '}
+                                <span className="text-gray-900">{currentContent.seo_keywords || <span className="text-gray-400 italic">Empty</span>}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                          <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs">Autosaved</span>
+                        </div>
+                        <div className="p-4 bg-green-50 border border-green-300 rounded-lg">
+                          <div className="space-y-2 text-sm">
+                            {seoTitleChanged && (
+                              <div>
+                                <span className="font-medium text-gray-700">SEO Title:</span>{' '}
+                                <span className="text-gray-900">{autosaveContent.seo_title || <span className="text-gray-400 italic">Empty</span>}</span>
+                              </div>
+                            )}
+                            {seoDescriptionChanged && (
+                              <div>
+                                <span className="font-medium text-gray-700">SEO Description:</span>{' '}
+                                <span className="text-gray-900">{autosaveContent.seo_description || <span className="text-gray-400 italic">Empty</span>}</span>
+                              </div>
+                            )}
+                            {seoKeywordsChanged && (
+                              <div>
+                                <span className="font-medium text-gray-700">SEO Keywords:</span>{' '}
+                                <span className="text-gray-900">{autosaveContent.seo_keywords || <span className="text-gray-400 italic">Empty</span>}</span>
                               </div>
                             )}
                           </div>

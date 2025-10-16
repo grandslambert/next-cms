@@ -5,6 +5,16 @@ All notable changes to Next CMS will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.6] - 2025-10-16
+
+### Added
+- **SEO Metadata Editor**: Per-post SEO fields (title, description, keywords)
+  - Stored in post_meta table using keys: `_seo_title`, `_seo_description`, `_seo_keywords`
+  - Character count indicators for optimal length (60 for title, 160 for description)
+  - Falls back to post title/excerpt if not set
+  - Included in autosave functionality and visual diff modal
+  - Separate from user-editable custom fields
+
 ## [1.3.5] - 2025-10-16
 
 ### Added

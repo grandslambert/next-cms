@@ -2,7 +2,7 @@
 
 A complete Content Management System built with Next.js 14, Tailwind CSS, and MySQL - similar to WordPress.
 
-## Current Version: 1.3.5
+## Current Version: 1.3.6
 
 See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
 
@@ -20,6 +20,7 @@ See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
   - Custom fields (post meta) for unlimited key-value data
   - Scheduled publishing with cron job integration
   - **Autosave with visual diff** - Automatic draft saving every 3 seconds with side-by-side comparison modal
+  - **SEO metadata editor** - Per-post SEO title, description, and keywords with character count guidance
 - 🏷️ **Flexible Taxonomy System** - Create custom taxonomies (categories, tags, etc.) for any post type with hierarchical support
 - 🖼️ **Advanced Media Library** 
   - WordPress-style automatic image resizing with multiple size variants
@@ -493,10 +494,10 @@ Completed features (see CHANGELOG for details):
 - [x] Media library folders with drag and drop
 - [x] Media trash system with restore
 - [x] Autosave with visual diff modal
+- [x] SEO metadata editor per post/page
 
 Planned features:
 - [ ] Comments system with moderation
-- [ ] SEO metadata editor per post/page (title, description, keywords)
 - [ ] Multi-language support (i18n)
 - [ ] AI-generated content suggestions
 - [ ] AI-generated alt text for images
