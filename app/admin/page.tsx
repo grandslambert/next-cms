@@ -62,7 +62,7 @@ export default function AdminDashboard() {
   const { data: mediaData, isLoading: mediaLoading } = useQuery({
     queryKey: ['media'],
     queryFn: async () => {
-      const res = await axios.get('/api/media?limit=5');
+      const res = await axios.get('/api/media?limit=12');
       return res.data;
     },
   });
@@ -250,8 +250,8 @@ export default function AdminDashboard() {
             {mediaLoading ? (
               <LoadingSpinner />
             ) : mediaData?.media && mediaData.media.length > 0 ? (
-              <div className="grid grid-cols-3 gap-4">
-                {mediaData.media.slice(0, 6).map((item: any) => (
+              <div className="grid grid-cols-4 gap-4">
+                {mediaData.media.slice(0, 12).map((item: any) => (
                   <div key={item.id} className="aspect-square rounded-lg overflow-hidden bg-gray-100">
                     {item.mime_type.startsWith('image/') ? (
                       <img

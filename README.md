@@ -2,7 +2,7 @@
 
 A complete Content Management System built with Next.js 14, Tailwind CSS, and MySQL - similar to WordPress.
 
-## Current Version: 1.14.0
+## Current Version: 1.14.1
 
 See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
 

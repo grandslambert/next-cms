@@ -1,10 +1,4 @@
-feat: add activity log and improve autosave system (v1.14.0)
-- Added comprehensive activity log and audit trail for all admin actions
-- Track before/after changes for posts, users, roles, media, taxonomies, terms, settings
-- Activity log details modal with side-by-side diff highlighting
-- New Tools sidebar menu for administrative utilities
-- Fixed autosave state synchronization for accurate content capture
-- Implemented HTML-aware diff preserving formatting while highlighting changes
-- Enhanced sidebar navigation with dual behavior (flyout on hover, expand when active)
-- Added word-level diff highlighting to autosave and activity log modals
-- Improved rich text editor styling for consistent heading display
+fix: show recent media from all folders on dashboard (v1.14.1)
+- Fixed media API folder filtering logic to show all media when no folder_id param provided
+- Updated dashboard to fetch and display 12 most recent images regardless of folder
+- Changed Recent Media grid to 4 columns for better layout

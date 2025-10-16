@@ -62,10 +62,11 @@ export async function GET(request: NextRequest) {
       conditions.push('m.folder_id = ?');
       params.push(parseInt(folderId));
       countParams.push(parseInt(folderId));
-    } else if (folderId === null || searchParams.has('folder_id')) {
-      // If folder_id is explicitly null, show root level only
+    } else if (searchParams.has('folder_id') && !folderId) {
+      // If folder_id param is explicitly provided as null/empty, show root level only
       conditions.push('m.folder_id IS NULL');
     }
+    // If no folder_id param at all, show all media regardless of folder
 
     if (conditions.length > 0) {
       query += ' WHERE ' + conditions.join(' AND ');
@@ -78,9 +79,10 @@ export async function GET(request: NextRequest) {
       }
       if (folderId) {
         countConditions.push('folder_id = ?');
-      } else if (folderId === null || searchParams.has('folder_id')) {
+      } else if (searchParams.has('folder_id') && !folderId) {
         countConditions.push('folder_id IS NULL');
       }
+      // If no folder_id param at all, count all media regardless of folder
       if (countConditions.length > 0) {
         countQuery += ' WHERE ' + countConditions.join(' AND ');
       }
