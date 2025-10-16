@@ -42,6 +42,7 @@ export default function BulkMoveModal({
               📁 {folder.name} {folder.id === currentFolderId && '(Current)'}
               <span className="text-xs text-gray-500 ml-2">
                 {folder.file_count || 0} {folder.file_count === 1 ? 'file' : 'files'}
+                {folder.subfolder_count > 0 && `, ${folder.subfolder_count} ${folder.subfolder_count === 1 ? 'folder' : 'folders'}`}
               </span>
             </button>
           ))}

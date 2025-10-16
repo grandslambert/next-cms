@@ -138,6 +138,7 @@ export default function MediaGrid({
             </span>
             <span className="text-xs text-gray-600 mt-1">
               {folder.file_count || 0} {folder.file_count === 1 ? 'file' : 'files'}
+              {folder.subfolder_count > 0 && `, ${folder.subfolder_count} ${folder.subfolder_count === 1 ? 'folder' : 'folders'}`}
             </span>
           </button>
           

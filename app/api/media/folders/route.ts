@@ -21,9 +21,11 @@ export async function GET(request: NextRequest) {
 
     let query = `
       SELECT mf.*, 
-             COUNT(m.id) as file_count
+             COUNT(DISTINCT m.id) as file_count,
+             COUNT(DISTINCT sub.id) as subfolder_count
       FROM media_folders mf
-      LEFT JOIN media m ON m.folder_id = mf.id
+      LEFT JOIN media m ON m.folder_id = mf.id AND m.deleted_at IS NULL
+      LEFT JOIN media_folders sub ON sub.parent_id = mf.id
     `;
     const params: any[] = [];
 
@@ -32,7 +34,7 @@ export async function GET(request: NextRequest) {
         query += ' WHERE mf.parent_id IS NULL';
       } else {
         query += ' WHERE mf.parent_id = ?';
-        params.push(parseInt(parentId));
+        params.push(Number.parseInt(parentId));
       }
     }
 

@@ -34,7 +34,7 @@ export default function MediaSelector({ isOpen, onClose, onSelect, currentMediaI
   const { data, isLoading } = useQuery({
     queryKey: ['media', currentFolderId],
     queryFn: async () => {
-      const folderParam = currentFolderId === null ? '' : `&folder_id=${currentFolderId}`;
+      const folderParam = currentFolderId === null ? '&folder_id=' : `&folder_id=${currentFolderId}`;
       const res = await axios.get(`/api/media?limit=100${folderParam}`);
       return res.data;
     },

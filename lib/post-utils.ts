@@ -50,7 +50,7 @@ export async function getPostByFullPath(segments: string[], postTypeSlug: string
       query += ' AND pt.slug = ?';
       params.push(postTypeSlug);
     } else {
-      query += ' AND pt.slug = ""';
+      query += ' AND (pt.slug = "" OR pt.slug IS NULL)';
     }
     
     if (year) {

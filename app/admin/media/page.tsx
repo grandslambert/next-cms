@@ -57,7 +57,7 @@ export default function MediaPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['media', currentFolderId, showTrash],
     queryFn: async () => {
-      const folderParam = currentFolderId === null ? '' : `&folder_id=${currentFolderId}`;
+      const folderParam = currentFolderId === null ? '&folder_id=' : `&folder_id=${currentFolderId}`;
       const trashParam = showTrash ? '&trash=true' : '';
       const res = await axios.get(`/api/media?limit=100${folderParam}${trashParam}`);
       return res.data;
