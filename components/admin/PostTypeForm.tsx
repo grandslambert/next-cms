@@ -406,10 +406,21 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
     parent_id?: number | null;
     menu_order?: number;
     author_id?: number;
+    title?: string;
+    content?: string;
+    excerpt?: string;
+    seo_title?: string;
+    seo_description?: string;
+    seo_keywords?: string;
   }) => {
     // CRITICAL CHECK - autosave system must be ready (old autosave dealt with, data loaded)
     if (!autosaveSystemReady) return;
-    if (!title && !content && !excerpt) return; // Don't autosave empty content
+    
+    const currentTitle = overrides?.title !== undefined ? overrides.title : title;
+    const currentContent = overrides?.content !== undefined ? overrides.content : content;
+    const currentExcerpt = overrides?.excerpt !== undefined ? overrides.excerpt : excerpt;
+    
+    if (!currentTitle && !currentContent && !currentExcerpt) return; // Don't autosave empty content
     
     // Clear existing timer
     if (autosaveTimerRef) {
@@ -422,16 +433,16 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
       autosaveMutation.mutate({
         post_id: postId || null,
         post_type: postTypeSlug,
-        title,
-        content,
-        excerpt,
+        title: currentTitle,
+        content: currentContent,
+        excerpt: currentExcerpt,
         custom_fields: customFields,
         parent_id: overrides?.parent_id !== undefined ? overrides.parent_id : parentId,
         menu_order: overrides?.menu_order !== undefined ? overrides.menu_order : menuOrder,
         author_id: overrides?.author_id !== undefined ? overrides.author_id : authorId,
-        seo_title: seoTitle,
-        seo_description: seoDescription,
-        seo_keywords: seoKeywords,
+        seo_title: overrides?.seo_title !== undefined ? overrides.seo_title : seoTitle,
+        seo_description: overrides?.seo_description !== undefined ? overrides.seo_description : seoDescription,
+        seo_keywords: overrides?.seo_keywords !== undefined ? overrides.seo_keywords : seoKeywords,
       });
     }, 3000);
 
@@ -655,17 +666,17 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
 
   const handleSeoTitleChange = (value: string) => {
     setSeoTitle(value);
-    triggerAutosave();
+    triggerAutosave({ seo_title: value });
   };
 
   const handleSeoDescriptionChange = (value: string) => {
     setSeoDescription(value);
-    triggerAutosave();
+    triggerAutosave({ seo_description: value });
   };
 
   const handleSeoKeywordsChange = (value: string) => {
     setSeoKeywords(value);
-    triggerAutosave();
+    triggerAutosave({ seo_keywords: value });
   };
 
   const handleUseAutosave = () => {
@@ -877,8 +888,9 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
                     type="text"
                     value={title}
                     onChange={(e) => {
-                      setTitle(e.target.value);
-                      triggerAutosave();
+                      const newValue = e.target.value;
+                      setTitle(newValue);
+                      triggerAutosave({ title: newValue });
                     }}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                     placeholder="Enter title"
@@ -978,8 +990,8 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
                   value={content} 
                   onChange={(value) => {
                     setContent(value);
-                    triggerAutosave();
-                  }} 
+                    triggerAutosave({ content: value });
+                  }}
                 />
               </div>
             )}
@@ -994,8 +1006,9 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
                 id="post-excerpt"
                 value={excerpt}
                 onChange={(e) => {
-                  setExcerpt(e.target.value);
-                  triggerAutosave();
+                  const newValue = e.target.value;
+                  setExcerpt(newValue);
+                  triggerAutosave({ excerpt: newValue });
                 }}
                 rows={3}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"

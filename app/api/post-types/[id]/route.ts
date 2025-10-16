@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import db from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function GET(
   request: NextRequest,
@@ -87,6 +88,19 @@ export async function PUT(
       [params.id]
     );
 
+    // Log activity
+    const userId = (session.user as any).id;
+    await logActivity({
+      userId,
+      action: 'post_type_updated',
+      entityType: 'post_type',
+      entityId: Number.parseInt(params.id),
+      entityName: label,
+      details: `Updated post type: ${label}`,
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+    });
+
     return NextResponse.json({ 
       postType: {
         ...updated[0],
@@ -136,6 +150,19 @@ export async function DELETE(
         error: `Cannot delete post type with ${postCount[0].count} existing posts` 
       }, { status: 400 });
     }
+
+    // Log activity before deleting
+    const userId = (session.user as any).id;
+    await logActivity({
+      userId,
+      action: 'post_type_deleted',
+      entityType: 'post_type',
+      entityId: Number.parseInt(params.id),
+      entityName: postType[0].label,
+      details: `Deleted post type: ${postType[0].label} (${postType[0].name})`,
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+    });
 
     await db.query<ResultSetHeader>('DELETE FROM post_types WHERE id = ?', [params.id]);
 

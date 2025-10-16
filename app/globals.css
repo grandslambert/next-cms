@@ -40,6 +40,55 @@
   @apply ring-2 ring-primary-500 ring-opacity-50;
 }
 
+/* Editor content styling - make headings and formatting visible while editing */
+.wysiwyg-editor [contenteditable] h1 {
+  @apply text-3xl font-bold mt-4 mb-2;
+}
+
+.wysiwyg-editor [contenteditable] h2 {
+  @apply text-2xl font-bold mt-3 mb-2;
+}
+
+.wysiwyg-editor [contenteditable] h3 {
+  @apply text-xl font-bold mt-3 mb-2;
+}
+
+.wysiwyg-editor [contenteditable] h4 {
+  @apply text-lg font-bold mt-2 mb-2;
+}
+
+.wysiwyg-editor [contenteditable] h5 {
+  @apply text-base font-bold mt-2 mb-1;
+}
+
+.wysiwyg-editor [contenteditable] h6 {
+  @apply text-sm font-bold mt-2 mb-1;
+}
+
+.wysiwyg-editor [contenteditable] p {
+  @apply mb-3;
+}
+
+.wysiwyg-editor [contenteditable] ul {
+  @apply list-disc list-inside mb-3 ml-4;
+}
+
+.wysiwyg-editor [contenteditable] ol {
+  @apply list-decimal list-inside mb-3 ml-4;
+}
+
+.wysiwyg-editor [contenteditable] blockquote {
+  @apply border-l-4 border-gray-300 pl-4 italic my-3;
+}
+
+.wysiwyg-editor [contenteditable] strong {
+  @apply font-bold;
+}
+
+.wysiwyg-editor [contenteditable] em {
+  @apply italic;
+}
+
 /* Content Body Styles (for public pages) */
 .content-body {
   @apply text-gray-800 leading-relaxed;

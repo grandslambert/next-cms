@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import db from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function DELETE(
   request: NextRequest,
@@ -19,7 +20,7 @@ export async function DELETE(
 
     // Check if post exists and get author
     const [existingPost] = await db.query<RowDataPacket[]>(
-      'SELECT author_id, post_type, status FROM posts WHERE id = ?',
+      'SELECT author_id, post_type, status, title FROM posts WHERE id = ?',
       [params.id]
     );
 
@@ -45,6 +46,18 @@ export async function DELETE(
     if (!isOwner && !canDeleteOthers) {
       return NextResponse.json({ error: 'You do not have permission to delete others\' posts' }, { status: 403 });
     }
+
+    // Log activity before deleting
+    await logActivity({
+      userId: Number.parseInt(userId),
+      action: 'post_deleted',
+      entityType: 'post',
+      entityId: Number.parseInt(params.id),
+      entityName: post.title,
+      details: `Permanently deleted ${post.post_type}: "${post.title}"`,
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+    });
 
     // Permanently delete the post from database
     await db.query<ResultSetHeader>('DELETE FROM posts WHERE id = ?', [params.id]);

@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import db from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function GET(
   request: NextRequest,
@@ -48,6 +49,19 @@ export async function PUT(
       [params.id]
     );
 
+    // Log activity
+    const userId = (session.user as any).id;
+    await logActivity({
+      userId,
+      action: 'media_updated',
+      entityType: 'media',
+      entityId: Number.parseInt(params.id),
+      entityName: updated[0].original_name || updated[0].filename,
+      details: `Updated media: ${updated[0].original_name || updated[0].filename}`,
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+    });
+
     return NextResponse.json({ media: updated[0] });
   } catch (error) {
     console.error('Error updating media:', error);
@@ -75,6 +89,19 @@ export async function DELETE(
       'UPDATE media SET deleted_at = NOW() WHERE id = ?',
       [params.id]
     );
+
+    // Log activity
+    const userId = (session.user as any).id;
+    await logActivity({
+      userId,
+      action: 'media_trashed',
+      entityType: 'media',
+      entityId: Number.parseInt(params.id),
+      entityName: media.original_name || media.filename,
+      details: `Moved media to trash: ${media.original_name || media.filename}`,
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+    });
 
     return NextResponse.json({ message: 'Media moved to trash successfully' });
   } catch (error) {

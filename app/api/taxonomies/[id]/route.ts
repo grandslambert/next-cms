@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import db from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function GET(
   request: NextRequest,
@@ -59,6 +60,19 @@ export async function PUT(
       [params.id]
     );
 
+    // Log activity
+    const userId = (session.user as any).id;
+    await logActivity({
+      userId,
+      action: 'taxonomy_updated',
+      entityType: 'taxonomy',
+      entityId: Number.parseInt(params.id),
+      entityName: label,
+      details: `Updated taxonomy: ${label}`,
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+    });
+
     return NextResponse.json({ taxonomy: updated[0] });
   } catch (error) {
     console.error('Error updating taxonomy:', error);
@@ -103,6 +117,19 @@ export async function DELETE(
         error: `Cannot delete taxonomy "${taxonomy[0].name}" because it has ${termCount[0].count} associated terms.` 
       }, { status: 400 });
     }
+
+    // Log activity before deleting
+    const userId = (session.user as any).id;
+    await logActivity({
+      userId,
+      action: 'taxonomy_deleted',
+      entityType: 'taxonomy',
+      entityId: Number.parseInt(params.id),
+      entityName: taxonomy[0].name,
+      details: `Deleted taxonomy: ${taxonomy[0].name}`,
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+    });
 
     await db.query<ResultSetHeader>('DELETE FROM taxonomies WHERE id = ?', [params.id]);
 

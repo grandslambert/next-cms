@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import db from '@/lib/db';
 import { slugify } from '@/lib/utils';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function GET(request: NextRequest) {
   try {
@@ -82,6 +83,19 @@ export async function POST(request: NextRequest) {
        WHERE t.id = ?`,
       [result.insertId]
     );
+
+    // Log activity
+    const userId = (session.user as any).id;
+    await logActivity({
+      userId,
+      action: 'term_created',
+      entityType: 'term',
+      entityId: result.insertId,
+      entityName: name,
+      details: `Created term: ${name} in ${newTerm[0].taxonomy_name}`,
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+    });
 
     return NextResponse.json({ term: newTerm[0] }, { status: 201 });
   } catch (error: any) {

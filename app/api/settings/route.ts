@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import db from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function GET(request: NextRequest) {
   try {
@@ -72,6 +73,20 @@ export async function PUT(request: NextRequest) {
         [key, settingValue, settingType, settingValue, settingType]
       );
     }
+
+    // Log activity
+    const userId = (session.user as any).id;
+    const settingKeys = Object.keys(settings).join(', ');
+    await logActivity({
+      userId,
+      action: 'settings_updated',
+      entityType: 'settings',
+      entityId: null,
+      entityName: 'System Settings',
+      details: `Updated settings: ${settingKeys}`,
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {

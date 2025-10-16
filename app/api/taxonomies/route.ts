@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import db from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function GET() {
   try {
@@ -56,6 +57,19 @@ export async function POST(request: NextRequest) {
       'SELECT * FROM taxonomies WHERE id = ?',
       [result.insertId]
     );
+
+    // Log activity
+    const userId = (session.user as any).id;
+    await logActivity({
+      userId,
+      action: 'taxonomy_created',
+      entityType: 'taxonomy',
+      entityId: result.insertId,
+      entityName: label,
+      details: `Created taxonomy: ${label} (${name})`,
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+    });
 
     return NextResponse.json({ taxonomy: newTaxonomy[0] }, { status: 201 });
   } catch (error: any) {

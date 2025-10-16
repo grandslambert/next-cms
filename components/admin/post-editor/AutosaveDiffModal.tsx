@@ -81,6 +81,95 @@ export default function AutosaveDiffModal({
     return author?.name || `ID: ${authorId}`;
   };
 
+  // HTML-aware diff that preserves formatting and adds highlighting
+  const highlightHtmlDiff = (beforeHtml: string, afterHtml: string) => {
+    if (!beforeHtml || !afterHtml) return afterHtml;
+
+    // Parse HTML into DOM
+    const beforeDiv = document.createElement('div');
+    const afterDiv = document.createElement('div');
+    beforeDiv.innerHTML = beforeHtml;
+    afterDiv.innerHTML = afterHtml;
+
+    // Get text content for word-level comparison
+    const beforeText = beforeDiv.textContent || '';
+    
+    // Build a set of words from the before text for fast lookup
+    const beforeWords = new Set(beforeText.split(/\s+/).filter(w => w.length > 0));
+
+    // Walk through the after DOM and highlight text nodes
+    const highlightTextNodes = (node: Node) => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const text = node.textContent || '';
+        if (!text.trim()) return; // Skip whitespace-only nodes
+
+        const words = text.split(/(\s+)/);
+        const hasChanges = words.some(word => word.trim() && !beforeWords.has(word.trim()));
+
+        if (hasChanges) {
+          // Create a wrapper for this text node
+          const wrapper = document.createElement('span');
+          
+          for (const word of words) {
+            if (!word.trim()) {
+              // Preserve whitespace
+              wrapper.appendChild(document.createTextNode(word));
+            } else if (!beforeWords.has(word.trim())) {
+              // Highlight changed/new words
+              const highlight = document.createElement('mark');
+              highlight.className = 'bg-yellow-200 px-0.5';
+              highlight.textContent = word;
+              wrapper.appendChild(highlight);
+            } else {
+              // Keep unchanged words as is
+              wrapper.appendChild(document.createTextNode(word));
+            }
+          }
+
+          // Replace the text node with our wrapper
+          node.parentNode?.replaceChild(wrapper, node);
+        }
+      } else if (node.nodeType === Node.ELEMENT_NODE) {
+        // Recursively process child nodes
+        const children = Array.from(node.childNodes);
+        for (const child of children) {
+          highlightTextNodes(child);
+        }
+      }
+    };
+
+    highlightTextNodes(afterDiv);
+    return afterDiv.innerHTML;
+  };
+
+  // Word-level diff highlighting for plain text
+  const highlightTextDiff = (beforeText: string, afterText: string) => {
+    if (!beforeText || !afterText || typeof beforeText !== 'string' || typeof afterText !== 'string') {
+      return afterText;
+    }
+
+    // Split into words
+    const beforeWords = beforeText.split(/(\s+)/);
+    const afterWords = afterText.split(/(\s+)/);
+    
+    // Find added/changed words
+    const result: JSX.Element[] = [];
+    afterWords.forEach((word, idx) => {
+      if (beforeWords[idx] !== word && word.trim() !== '') {
+        // This word is different - highlight it
+        result.push(
+          <span key={idx} className="bg-yellow-200 px-1 rounded">
+            {word}
+          </span>
+        );
+      } else {
+        result.push(<span key={idx}>{word}</span>);
+      }
+    });
+
+    return <>{result}</>;
+  };
+
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       {/* Backdrop - no click handler, modal must be decided */}
@@ -124,10 +213,12 @@ export default function AutosaveDiffModal({
                       </div>
                       <div>
                         <div className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-                          <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs">Autosaved</span>
+                          <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs">Autosaved (with changes highlighted)</span>
                         </div>
                         <div className="p-4 bg-green-50 border border-green-300 rounded-lg min-h-[60px]">
-                          <p className="text-sm text-gray-900">{autosaveContent.title || <span className="text-gray-400 italic">Empty</span>}</p>
+                          <p className="text-sm text-gray-900">
+                            {autosaveContent.title ? highlightTextDiff(currentContent.title || '', autosaveContent.title) : <span className="text-gray-400 italic">Empty</span>}
+                          </p>
                         </div>
                       </div>
                     </div>
@@ -143,16 +234,21 @@ export default function AutosaveDiffModal({
                         <div className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
                           <span className="px-2 py-1 bg-gray-100 rounded text-xs">Current</span>
                         </div>
-                        <div className="p-4 bg-gray-50 border border-gray-300 rounded-lg min-h-[200px] max-h-[300px] overflow-y-auto">
-                          <div className="text-sm text-gray-900 prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: currentContent.content || '<span class="text-gray-400 italic">Empty</span>' }} />
+                        <div className="p-4 bg-gray-50 border border-gray-300 rounded-lg min-h-[100px] max-h-[300px] overflow-y-auto">
+                          <div className="text-sm text-gray-900 content-body" dangerouslySetInnerHTML={{ __html: currentContent.content || '<span class="text-gray-400 italic">Empty</span>' }} />
                         </div>
                       </div>
                       <div>
                         <div className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-                          <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs">Autosaved</span>
+                          <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs">Autosaved (with changes highlighted)</span>
                         </div>
-                        <div className="p-4 bg-green-50 border border-green-300 rounded-lg min-h-[200px] max-h-[300px] overflow-y-auto">
-                          <div className="text-sm text-gray-900 prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: autosaveContent.content || '<span class="text-gray-400 italic">Empty</span>' }} />
+                        <div className="p-4 bg-green-50 border border-green-300 rounded-lg min-h-[100px] max-h-[300px] overflow-y-auto">
+                          <div 
+                            className="text-sm text-gray-900 content-body" 
+                            dangerouslySetInnerHTML={{ 
+                              __html: autosaveContent.content ? highlightHtmlDiff(currentContent.content || '', autosaveContent.content) : '<span class="text-gray-400 italic">Empty</span>' 
+                            }} 
+                          />
                         </div>
                       </div>
                     </div>
@@ -174,10 +270,12 @@ export default function AutosaveDiffModal({
                       </div>
                       <div>
                         <div className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-                          <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs">Autosaved</span>
+                          <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs">Autosaved (with changes highlighted)</span>
                         </div>
                         <div className="p-4 bg-green-50 border border-green-300 rounded-lg min-h-[80px]">
-                          <p className="text-sm text-gray-900 whitespace-pre-wrap">{autosaveContent.excerpt || <span className="text-gray-400 italic">Empty</span>}</p>
+                          <p className="text-sm text-gray-900 whitespace-pre-wrap">
+                            {autosaveContent.excerpt ? highlightTextDiff(currentContent.excerpt || '', autosaveContent.excerpt) : <span className="text-gray-400 italic">Empty</span>}
+                          </p>
                         </div>
                       </div>
                     </div>

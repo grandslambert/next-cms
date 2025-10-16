@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import db from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function GET() {
   try {
@@ -69,6 +70,19 @@ export async function POST(request: NextRequest) {
       'SELECT * FROM post_types WHERE id = ?',
       [result.insertId]
     );
+
+    // Log activity
+    const userId = (session.user as any).id;
+    await logActivity({
+      userId,
+      action: 'post_type_created',
+      entityType: 'post_type',
+      entityId: result.insertId,
+      entityName: label,
+      details: `Created post type: ${label} (${name})`,
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+    });
 
     return NextResponse.json({ 
       postType: {

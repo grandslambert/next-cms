@@ -1,9 +1,10 @@
-feat: add SEO metadata editor per post (v1.3.6)
-- Added SEO fields: title (60 char), description (160 char), keywords (500 char)
-- Stored in post_meta table with underscore prefix (_seo_title, etc.)
-- Character count indicators show optimal length guidance
-- Falls back to post title/excerpt when SEO fields are empty
-- Integrated with autosave system for all three SEO fields
-- SEO changes displayed in autosave visual diff modal
-- Separate from user-editable custom fields
-- Auto-focus on custom field name input when adding new field
+feat: add activity log and improve autosave system (v1.4.0)
+- Added comprehensive activity log and audit trail for all admin actions
+- Track before/after changes for posts, users, roles, media, taxonomies, terms, settings
+- Activity log details modal with side-by-side diff highlighting
+- New Tools sidebar menu for administrative utilities
+- Fixed autosave state synchronization for accurate content capture
+- Implemented HTML-aware diff preserving formatting while highlighting changes
+- Enhanced sidebar navigation with dual behavior (flyout on hover, expand when active)
+- Added word-level diff highlighting to autosave and activity log modals
+- Improved rich text editor styling for consistent heading display

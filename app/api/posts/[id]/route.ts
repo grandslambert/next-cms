@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import db from '@/lib/db';
 import { slugify } from '@/lib/utils';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function GET(
   request: NextRequest,
@@ -161,6 +162,42 @@ export async function PUT(
       [params.id]
     );
 
+    // Log activity
+    const action = status === 'published' && post.status !== 'published' 
+      ? 'post_published' 
+      : status === 'scheduled' 
+      ? 'post_scheduled' 
+      : 'post_updated';
+    
+    await logActivity({
+      userId,
+      action,
+      entityType: 'post',
+      entityId: Number.parseInt(params.id),
+      entityName: title || post.title,
+      details: `Updated ${post.post_type}: "${title || post.title}"`,
+      changesBefore: {
+        title: post.title,
+        content: post.content,
+        excerpt: post.excerpt,
+        status: post.status,
+        featured_image_id: post.featured_image_id,
+        parent_id: post.parent_id,
+        menu_order: post.menu_order,
+      },
+      changesAfter: {
+        title: title || post.title,
+        content: content !== undefined ? content : post.content,
+        excerpt: excerpt !== undefined ? excerpt : post.excerpt,
+        status: status || post.status,
+        featured_image_id: featured_image_id !== undefined ? featured_image_id : post.featured_image_id,
+        parent_id: parent_id !== undefined ? parent_id : post.parent_id,
+        menu_order: menu_order !== undefined ? menu_order : post.menu_order,
+      },
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+    });
+
     return NextResponse.json({ post: updatedPost[0] });
   } catch (error: any) {
     console.error('Error updating post:', error);
@@ -213,6 +250,18 @@ export async function DELETE(
       'UPDATE posts SET status = ? WHERE id = ?',
       ['trash', params.id]
     );
+
+    // Log activity
+    await logActivity({
+      userId,
+      action: 'post_trashed',
+      entityType: 'post',
+      entityId: Number.parseInt(params.id),
+      entityName: post.title,
+      details: `Moved ${post.post_type} to trash: "${post.title}"`,
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+    });
 
     return NextResponse.json({ success: true, message: 'Post moved to trash' });
   } catch (error) {

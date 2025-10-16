@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import db from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function GET(
   request: NextRequest,
@@ -77,6 +78,32 @@ export async function PUT(
       );
     }
 
+    // Get updated role for logging
+    const [updatedRole] = await db.query<RowDataPacket[]>(
+      'SELECT * FROM roles WHERE id = ?',
+      [params.id]
+    );
+
+    // Log activity
+    const userId = (session.user as any).id;
+    await logActivity({
+      userId,
+      action: 'role_updated',
+      entityType: 'role',
+      entityId: Number.parseInt(params.id),
+      entityName: updatedRole[0].display_name,
+      details: `Updated role: ${updatedRole[0].display_name} (${updatedRole[0].name})`,
+      changesBefore: beforeChanges,
+      changesAfter: {
+        name: updatedRole[0].name,
+        display_name: updatedRole[0].display_name,
+        description: updatedRole[0].description,
+        permissions: updatedRole[0].permissions,
+      },
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+    });
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error updating role:', error);
@@ -119,6 +146,19 @@ export async function DELETE(
         error: `Cannot delete role: ${users[0].count} user(s) are assigned to this role` 
       }, { status: 400 });
     }
+
+    // Log activity before deleting
+    const userId = (session.user as any).id;
+    await logActivity({
+      userId,
+      action: 'role_deleted',
+      entityType: 'role',
+      entityId: Number.parseInt(params.id),
+      entityName: role.display_name,
+      details: `Deleted role: ${role.display_name} (${role.name})`,
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+    });
 
     await db.query<ResultSetHeader>(
       'DELETE FROM roles WHERE id = ?',

@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import db from '@/lib/db';
 import bcrypt from 'bcryptjs';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function GET(request: NextRequest) {
   try {
@@ -58,6 +59,19 @@ export async function POST(request: NextRequest) {
        WHERE u.id = ?`,
       [result.insertId]
     );
+
+    // Log activity
+    const currentUserId = (session.user as any).id;
+    await logActivity({
+      userId: currentUserId,
+      action: 'user_created',
+      entityType: 'user',
+      entityId: result.insertId,
+      entityName: username,
+      details: `Created user: ${username} (${first_name} ${last_name})`,
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+    });
 
     return NextResponse.json({ user: newUser[0] }, { status: 201 });
   } catch (error: any) {

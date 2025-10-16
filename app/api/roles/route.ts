@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import db from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function GET() {
   try {
@@ -46,6 +47,19 @@ export async function POST(request: NextRequest) {
       'INSERT INTO roles (name, display_name, description, permissions, is_system) VALUES (?, ?, ?, ?, false)',
       [name, display_name, description || null, JSON.stringify(permissions)]
     );
+
+    // Log activity
+    const userId = (session.user as any).id;
+    await logActivity({
+      userId,
+      action: 'role_created',
+      entityType: 'role',
+      entityId: result.insertId,
+      entityName: display_name,
+      details: `Created role: ${display_name} (${name})`,
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+    });
 
     return NextResponse.json({ 
       id: result.insertId,

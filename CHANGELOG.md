@@ -5,6 +5,57 @@ All notable changes to Next CMS will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [1.4.0] - 2025-10-16
+
+### Added
+- **Activity Log & Audit Trail**: Comprehensive tracking of all user actions
+  - Tracks ALL admin operations: posts, users, roles, media, taxonomies, terms, post types, settings
+  - **Before/after change tracking** - Stores complete state before and after updates
+  - **Details modal** - View full change history with side-by-side comparison (before in red, after in green)
+  - Stores user ID, action type, entity details, IP address, and user agent
+  - Admin page with filtering by user, action type, and entity type
+  - Search functionality across entity names and details
+  - Pagination support for large log sets
+  - Color-coded action badges for visual clarity
+  - Accessible via **Tools → Activity Log** (new Tools menu in sidebar)
+  - Requires manage_users permission
+  - Automatically logs all critical system operations
+
+### Fixed
+- **Autosave System**: Fixed state synchronization issues preventing accurate content capture
+  - Autosave now receives fresh values directly from onChange handlers, bypassing React state delays
+  - All content fields (title, content, excerpt, SEO fields) now use override parameters
+  - Ensures HTML formatting changes (H2, bold, etc.) are immediately captured
+  - Eliminates race conditions between state updates and autosave timer
+
+### Changed
+- **Autosave Diff Modal**: HTML-aware diff with preserved formatting
+  - Implements recursive DOM tree walking to highlight text nodes
+  - Preserves all HTML structure (headings, bold, italic, lists) while highlighting changes
+  - Single unified view showing formatted content with word-level highlighting
+  - Changed/added words highlighted in yellow within their formatted context
+  - Matches professional CMS diff tools (WordPress, Drupal)
+  - Title and excerpt also use word-level highlighting
+- **Sidebar Navigation**: Improved submenu UX with dual behavior
+  - Submenus fly out to the right on hover for quick access
+  - Expand below parent when active to show current location
+  - Arrow indicators: ▶ for flyout (hover), ▼ for expanded (active)
+  - Cleaner, more compact navigation when browsing
+- **Activity Log Change Tracking**: Enhanced to capture complete content changes
+  - Post updates now track title, content, excerpt, status, featured image, parent, menu order
+  - All before/after queries execute before updates to capture accurate state
+  - More comprehensive change details for better auditing
+- **Diff Highlighting**: Word-level change highlighting in both autosave and activity log modals
+  - Changed/added words highlighted in yellow for easy identification
+  - Applied to title, excerpt, and all text fields in activity log
+  - Matches professional CMS diff behavior
+- **Rich Text Editor Styling**: Added proper heading and formatting styles
+  - H1-H6 headings now display with appropriate sizes and weights
+  - Lists, blockquotes, bold, and italic properly styled
+  - Consistent styling in editor and preview
+
 ## [1.3.6] - 2025-10-16
 
 ### Added
@@ -14,6 +65,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Falls back to post title/excerpt if not set
   - Included in autosave functionality and visual diff modal
   - Separate from user-editable custom fields
+- **Custom Fields UX**: Auto-focus on field name input when adding a new custom field
 
 ## [1.3.5] - 2025-10-16
 

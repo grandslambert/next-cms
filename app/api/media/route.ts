@@ -6,6 +6,7 @@ import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 import sharp from 'sharp';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 // Get image sizes from settings
 async function getImageSizes() {
@@ -201,6 +202,18 @@ export async function POST(request: NextRequest) {
         [result.insertId]
       );
 
+      // Log activity
+      await logActivity({
+        userId,
+        action: 'media_uploaded',
+        entityType: 'media',
+        entityId: result.insertId,
+        entityName: file.name,
+        details: `Uploaded image: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`,
+        ipAddress: getClientIp(request),
+        userAgent: getUserAgent(request),
+      });
+
       return NextResponse.json({ media: newMedia[0] }, { status: 201 });
     } else {
       // Non-image files - just save original
@@ -220,6 +233,18 @@ export async function POST(request: NextRequest) {
         'SELECT * FROM media WHERE id = ?',
         [result.insertId]
       );
+
+      // Log activity
+      await logActivity({
+        userId,
+        action: 'media_uploaded',
+        entityType: 'media',
+        entityId: result.insertId,
+        entityName: file.name,
+        details: `Uploaded file: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`,
+        ipAddress: getClientIp(request),
+        userAgent: getUserAgent(request),
+      });
 
       return NextResponse.json({ media: newMedia[0] }, { status: 201 });
     }

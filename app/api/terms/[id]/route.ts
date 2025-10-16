@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import db from '@/lib/db';
 import { slugify } from '@/lib/utils';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function GET(
   request: NextRequest,
@@ -89,6 +90,19 @@ export async function PUT(
       [params.id]
     );
 
+    // Log activity
+    const userId = (session.user as any).id;
+    await logActivity({
+      userId,
+      action: 'term_updated',
+      entityType: 'term',
+      entityId: Number.parseInt(params.id),
+      entityName: name,
+      details: `Updated term: ${name} in ${updated[0].taxonomy_name}`,
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+    });
+
     return NextResponse.json({ term: updated[0] });
   } catch (error: any) {
     console.error('Error updating term:', error);
@@ -106,6 +120,21 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Get term details for logging
+    const [termRows] = await db.query<RowDataPacket[]>(
+      `SELECT t.name, tax.name as taxonomy_name
+       FROM terms t
+       INNER JOIN taxonomies tax ON t.taxonomy_id = tax.id
+       WHERE t.id = ?`,
+      [params.id]
+    );
+
+    if (termRows.length === 0) {
+      return NextResponse.json({ error: 'Term not found' }, { status: 404 });
+    }
+
+    const term = termRows[0];
+
     // Check if term has children
     const [children] = await db.query<RowDataPacket[]>(
       'SELECT COUNT(*) as count FROM terms WHERE parent_id = ?',
@@ -117,6 +146,19 @@ export async function DELETE(
         error: 'Cannot delete term that has child terms. Delete children first.' 
       }, { status: 400 });
     }
+
+    // Log activity before deleting
+    const userId = (session.user as any).id;
+    await logActivity({
+      userId,
+      action: 'term_deleted',
+      entityType: 'term',
+      entityId: Number.parseInt(params.id),
+      entityName: term.name,
+      details: `Deleted term: ${term.name} from ${term.taxonomy_name}`,
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+    });
 
     await db.query<ResultSetHeader>('DELETE FROM terms WHERE id = ?', [params.id]);
 

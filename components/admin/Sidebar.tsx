@@ -41,6 +41,14 @@ const staticMenuItems = [
       { name: 'Media', href: '/admin/settings/media', icon: '🖼️', permission: 'manage_settings' },
     ]
   },
+  { 
+    name: 'Tools', 
+    icon: '🛠️', 
+    position: 35,
+    subItems: [
+      { name: 'Activity Log', href: '/admin/activity-log', icon: '📋', permission: 'manage_users' },
+    ]
+  },
   { name: 'View Site', href: '/', icon: '🌐', external: true, position: 99 }, // No permission required
 ];
 
@@ -164,6 +172,7 @@ export default function Sidebar() {
               return (
                 <li 
                   key={item.name}
+                  className="relative"
                   onMouseEnter={() => setHoveredItem(item.name)}
                   onMouseLeave={() => setHoveredItem(null)}
                 >
@@ -177,9 +186,29 @@ export default function Sidebar() {
                   >
                     <span className="text-xl">{item.icon}</span>
                     <span className="flex-1">{item.name}</span>
-                    <span className="text-sm">{showSubItems ? '▼' : '▶'}</span>
+                    <span className="text-sm">{hasActiveSubItem ? '▼' : '▶'}</span>
                   </div>
-                  {showSubItems && (
+                  
+                  {/* Flyout submenu - ONLY on hover (not when active) */}
+                  {isHovered && !hasActiveSubItem && (
+                    <div className="absolute left-full top-0 ml-1 min-w-[200px] bg-gray-800 rounded-lg shadow-xl border border-gray-700 py-2 z-50">
+                      {item.subItems.map((subItem: any) => {
+                        return (
+                          <Link
+                            key={subItem.href}
+                            href={subItem.href}
+                            className="flex items-center space-x-3 px-4 py-2 transition-colors text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
+                          >
+                            <span>{subItem.icon}</span>
+                            <span>{subItem.name}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Expanded submenu - ONLY when a subitem is active */}
+                  {hasActiveSubItem && (
                     <ul className="ml-4 mt-1 space-y-1">
                       {item.subItems.map((subItem: any) => {
                         const isSubItemActive = pathname?.startsWith(subItem.href);
@@ -237,7 +266,7 @@ export default function Sidebar() {
           <span>Logout</span>
         </button>
         <div className="text-center text-xs text-gray-500 mt-2">
-          Next CMS v1.3.6
+          Next CMS v1.4.0
         </div>
       </div>
     </aside>

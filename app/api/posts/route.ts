@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import db from '@/lib/db';
 import { slugify } from '@/lib/utils';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function GET(request: NextRequest) {
   try {
@@ -140,6 +141,18 @@ export async function POST(request: NextRequest) {
       'SELECT * FROM posts WHERE id = ?',
       [result.insertId]
     );
+
+    // Log activity
+    await logActivity({
+      userId,
+      action: status === 'published' ? 'post_published' : 'post_created',
+      entityType: 'post',
+      entityId: result.insertId,
+      entityName: title,
+      details: `Created ${post_type || 'post'}: "${title}" with status: ${status || 'draft'}`,
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+    });
 
     return NextResponse.json({ post: newPost[0] }, { status: 201 });
   } catch (error: any) {

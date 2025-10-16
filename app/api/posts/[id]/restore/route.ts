@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import db from '@/lib/db';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function POST(
   request: NextRequest,
@@ -19,7 +20,7 @@ export async function POST(
 
     // Check if post exists and get author
     const [existingPost] = await db.query<RowDataPacket[]>(
-      'SELECT author_id, post_type, status FROM posts WHERE id = ?',
+      'SELECT author_id, post_type, status, title FROM posts WHERE id = ?',
       [params.id]
     );
 
@@ -51,6 +52,18 @@ export async function POST(
       'UPDATE posts SET status = ? WHERE id = ?',
       ['draft', params.id]
     );
+
+    // Log activity
+    await logActivity({
+      userId: Number.parseInt(userId),
+      action: 'post_restored',
+      entityType: 'post',
+      entityId: Number.parseInt(params.id),
+      entityName: post.title,
+      details: `Restored ${post.post_type} from trash: "${post.title}"`,
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+    });
 
     return NextResponse.json({ success: true, message: 'Post restored from trash' });
   } catch (error) {

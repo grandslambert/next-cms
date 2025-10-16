@@ -2,7 +2,7 @@
 
 A complete Content Management System built with Next.js 14, Tailwind CSS, and MySQL - similar to WordPress.
 
-## Current Version: 1.3.6
+## Current Version: 1.4.0
 
 See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
 
@@ -43,6 +43,7 @@ See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
   - Content workflow with pending review status
   - Author reassignment capability
   - Role-based admin interface visibility
+  - **Activity log and audit trail** - Comprehensive tracking with before/after change comparison
 - 🔍 **Advanced Post List Features**
   - Powerful search across title and content (debounced)
   - Column filters for title, author, status, taxonomies, and date
@@ -495,6 +496,7 @@ Completed features (see CHANGELOG for details):
 - [x] Media trash system with restore
 - [x] Autosave with visual diff modal
 - [x] SEO metadata editor per post/page
+- [x] Activity log and audit trail
 
 Planned features:
 - [ ] Comments system with moderation
@@ -509,7 +511,6 @@ Planned features:
 - [ ] Duplicate post/page functionality
 - [ ] Post templates for consistent formatting
 - [ ] Collaborative editing with real-time updates
-- [ ] Activity log and audit trail
 - [ ] Two-factor authentication (2FA)
 - [ ] OAuth providers (Google, GitHub, etc.)
 - [ ] API rate limiting

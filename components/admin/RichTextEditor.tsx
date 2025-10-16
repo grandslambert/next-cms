@@ -13,8 +13,8 @@ const Editor = dynamic(() => import('react-simple-wysiwyg').then(mod => mod.defa
 });
 
 interface RichTextEditorProps {
-  value: string;
-  onChange: (value: string) => void;
+  readonly value: string;
+  readonly onChange: (value: string) => void;
 }
 
 export default function RichTextEditor({ value, onChange }: RichTextEditorProps) {
