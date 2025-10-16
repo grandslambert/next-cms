@@ -28,11 +28,15 @@ export async function GET(request: NextRequest) {
       `SELECT mi.*,
               pt.label as post_type_label,
               tax.label as taxonomy_label,
-              p.title as post_title
+              p.title as post_title,
+              terms.name as term_name,
+              tax_for_term.label as term_taxonomy_label
        FROM menu_items mi
        LEFT JOIN post_types pt ON mi.type = 'post_type' AND mi.object_id = pt.id
        LEFT JOIN taxonomies tax ON mi.type = 'taxonomy' AND mi.object_id = tax.id
        LEFT JOIN posts p ON mi.type = 'post' AND mi.object_id = p.id
+       LEFT JOIN terms ON mi.type = 'term' AND mi.object_id = terms.id
+       LEFT JOIN taxonomies tax_for_term ON terms.taxonomy_id = tax_for_term.id
        WHERE mi.menu_id = ? 
        ORDER BY mi.menu_order ASC, mi.id ASC`,
       [menuId]

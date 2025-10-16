@@ -306,6 +306,18 @@ export default function Sidebar() {
       </nav>
 
       <div className="p-4 border-t border-gray-700">
+        <Link
+          href="/admin/help"
+          className={cn(
+            'w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors mb-2',
+            pathname === '/admin/help'
+              ? 'bg-primary-600 text-white'
+              : 'text-gray-300 hover:bg-gray-800'
+          )}
+        >
+          <span className="text-xl">❓</span>
+          <span>Help</span>
+        </Link>
         <button
           onClick={() => signOut({ callbackUrl: '/admin/login' })}
           className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-300 hover:bg-gray-800 transition-colors mb-2"
@@ -314,7 +326,7 @@ export default function Sidebar() {
           <span>Logout</span>
         </button>
         <div className="text-center text-xs text-gray-500 mt-2">
-          Next CMS v1.15.0
+          Next CMS v1.16.0
         </div>
       </div>
     </aside>

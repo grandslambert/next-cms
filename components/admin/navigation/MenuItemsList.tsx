@@ -13,6 +13,8 @@ interface MenuItem {
   post_title?: string;
   post_type_label?: string;
   taxonomy_label?: string;
+  term_name?: string;
+  term_taxonomy_label?: string;
   title_attr?: string;
   css_classes?: string;
   xfn?: string;
@@ -92,6 +94,9 @@ export default function MenuItemsList({
                 } else if (item.type === 'taxonomy') {
                   displayLabel = item.taxonomy_label || `Taxonomy #${item.object_id}`;
                   displayType = 'Taxonomy Archive';
+                } else if (item.type === 'term') {
+                  displayLabel = item.term_name || `Term #${item.object_id}`;
+                  displayType = item.term_taxonomy_label || 'Term';
                 } else if (item.type === 'custom') {
                   displayLabel = item.custom_url;
                   displayType = 'Custom Link';
@@ -185,6 +190,7 @@ export default function MenuItemsList({
                           {item.type === 'post' && item.post_title && `Post: ${item.post_title}`}
                           {item.type === 'post_type' && item.post_type_label && `Post Type Archive: ${item.post_type_label}`}
                           {item.type === 'taxonomy' && item.taxonomy_label && `Taxonomy Archive: ${item.taxonomy_label}`}
+                          {item.type === 'term' && item.term_name && `${item.term_taxonomy_label || 'Term'}: ${item.term_name}`}
                           {item.type === 'custom' && 'Custom Link'}
                         </div>
 

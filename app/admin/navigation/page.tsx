@@ -26,6 +26,8 @@ export default function NavigationPage() {
   const [isAddingItem, setIsAddingItem] = useState(false);
   const [postTypeFilter, setPostTypeFilter] = useState('');
   const [postSearchQuery, setPostSearchQuery] = useState('');
+  const [taxonomyFilter, setTaxonomyFilter] = useState<number | null>(null);
+  const [termSearchQuery, setTermSearchQuery] = useState('');
   const [draggedItem, setDraggedItem] = useState<any>(null);
   const [dropTarget, setDropTarget] = useState<number | null>(null);
   const [dragIndent, setDragIndent] = useState(0);
@@ -162,6 +164,18 @@ export default function NavigationPage() {
       return res.data;
     },
     enabled: !!postTypeFilter,
+  });
+
+  // Fetch terms for selected taxonomy
+  const { data: termsData } = useQuery({
+    queryKey: ['terms-for-menu', taxonomyFilter, termSearchQuery],
+    queryFn: async () => {
+      if (!taxonomyFilter) return { terms: [] };
+      const searchParam = termSearchQuery ? `&search=${encodeURIComponent(termSearchQuery)}` : '';
+      const res = await axios.get(`/api/terms?taxonomy_id=${taxonomyFilter}&limit=50${searchParam}`);
+      return res.data;
+    },
+    enabled: !!taxonomyFilter,
   });
 
   // Fetch menu locations
@@ -473,7 +487,7 @@ export default function NavigationPage() {
     
     // Add to local state with temporary negative ID
     const tempId = -(Date.now());
-    const newItem = {
+    const newItem: any = {
       id: tempId,
       menu_id: selectedMenuId,
       parent_id: null,
@@ -481,6 +495,33 @@ export default function NavigationPage() {
       ...payload,
       isNew: true, // Flag to identify new items
     };
+
+    // Populate display labels for immediate display
+    if (payload.type === 'post_type') {
+      const postType = postTypesData?.postTypes?.find((pt: any) => pt.id === payload.object_id);
+      if (postType) {
+        newItem.post_type_label = postType.label;
+      }
+    } else if (payload.type === 'taxonomy') {
+      const taxonomy = taxonomiesData?.taxonomies?.find((tax: any) => tax.id === payload.object_id);
+      if (taxonomy) {
+        newItem.taxonomy_label = taxonomy.label;
+      }
+    } else if (payload.type === 'term') {
+      const term = termsData?.terms?.find((t: any) => t.id === payload.object_id);
+      if (term) {
+        newItem.term_name = term.name;
+        const taxonomy = taxonomiesData?.taxonomies?.find((tax: any) => tax.id === term.taxonomy_id);
+        if (taxonomy) {
+          newItem.term_taxonomy_label = taxonomy.label;
+        }
+      }
+    } else if (payload.type === 'post') {
+      const post = postsData?.posts?.find((p: any) => p.id === payload.object_id);
+      if (post) {
+        newItem.post_title = post.title;
+      }
+    }
     
     setLocalMenuItems(prev => [...prev, newItem]);
     setHasUnsavedChanges(true);
@@ -585,14 +626,19 @@ export default function NavigationPage() {
                     postTypesData={postTypesData}
                     taxonomiesData={taxonomiesData}
                     postsData={postsData}
+                    termsData={termsData}
                     onSubmit={handleAddItem}
                     onCancel={() => {
                       setIsAddingItem(false);
                       setPostTypeFilter('');
                       setPostSearchQuery('');
+                      setTaxonomyFilter(null);
+                      setTermSearchQuery('');
                     }}
                     onPostTypeFilterChange={setPostTypeFilter}
                     onPostSearchChange={setPostSearchQuery}
+                    onTaxonomyFilterChange={setTaxonomyFilter}
+                    onTermSearchChange={setTermSearchQuery}
                   />
                 )}
                 
