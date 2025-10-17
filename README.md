@@ -284,18 +284,19 @@ Built with love using:
 
 ## 🗺️ Roadmap
 
-- [ ] Theme system
-- [ ] Plugin architecture
-- [ ] REST API for headless CMS
-- [ ] GraphQL API
-- [ ] Advanced caching
-- [ ] CDN integration
-- [ ] Multi-language support
-- [ ] Advanced SEO tools
-- [ ] Analytics dashboard
-- [ ] Email templates
-- [ ] Webhooks
-- [ ] Import/Export improvements
+- [ ] [Content Preview & Views](./roadmap/content-preview-views.md) - Visual content previews for headless workflows
+- [ ] [Plugin architecture](./roadmap/plugin-architecture.md) - Extensible plugin system for adding functionality
+- [ ] [REST API for headless CMS](./roadmap/rest-api-headless.md) - Complete REST API for decoupled applications
+- [ ] [GraphQL API](./roadmap/graphql-api.md) - Flexible GraphQL API with subscriptions
+- [ ] [Advanced caching](./roadmap/advanced-caching.md) - Multi-layer caching for performance
+- [ ] [CDN integration](./roadmap/cdn-integration.md) - Global content delivery network support
+- [ ] [Multi-language support](./roadmap/multi-language-support.md) - Comprehensive i18n and localization
+- [ ] [Advanced SEO tools](./roadmap/advanced-seo-tools.md) - SEO analysis, schema markup, and optimization
+- [ ] [Analytics dashboard](./roadmap/analytics-dashboard.md) - Built-in traffic and content analytics
+- [ ] [Email templates](./roadmap/email-templates.md) - Email system with newsletter management
+- [ ] [Webhooks](./roadmap/webhooks.md) - Real-time event notifications for integrations
+- [ ] [Import/Export improvements](./roadmap/import-export-improvements.md) - Enhanced data migration and backup tools
+- [ ] [Backup & Restore](./roadmap/backup-restore.md) - Automated backups with cloud storage and point-in-time recovery
 
 ---
 
