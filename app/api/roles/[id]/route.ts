@@ -136,7 +136,18 @@ export async function PUT(
       userAgent: getUserAgent(request),
     });
 
-    return NextResponse.json({ success: true });
+    // Check if the current user's role was edited
+    const currentUserRoleId = (session.user as any).roleId;
+    const shouldUpdateSession = currentUserRoleId === Number.parseInt(params.id);
+
+    return NextResponse.json({ 
+      success: true,
+      shouldUpdateSession,
+      role: {
+        ...updatedRole[0],
+        permissions: JSON.parse(updatedRole[0].permissions)
+      }
+    });
   } catch (error) {
     console.error('Error updating role:', error);
     return NextResponse.json({ error: 'Failed to update role' }, { status: 500 });

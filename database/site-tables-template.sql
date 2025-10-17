@@ -257,10 +257,10 @@ CREATE TABLE IF NOT EXISTS {PREFIX}settings (
 INSERT INTO {PREFIX}post_types (id, name, slug, label, singular_label, description, icon, url_structure, supports, show_in_dashboard, hierarchical, menu_position) 
 VALUES 
   (1, 'post', 'blog', 'Posts', 'Post', 'Regular blog posts', '📝', 'default',
-   '{"title": true, "content": true, "excerpt": true, "featured_image": true}',
+   '{"title": true, "content": true, "excerpt": true, "featured_image": true, "custom_fields": true}',
    TRUE, FALSE, 5),
   (2, 'page', '', 'Pages', 'Page', 'Static pages', '📄', 'default',
-   '{"title": true, "content": true, "featured_image": true}',
+   '{"title": true, "content": true, "featured_image": true, "custom_fields": true}',
    TRUE, TRUE, 10)
 ON DUPLICATE KEY UPDATE 
   label = VALUES(label),

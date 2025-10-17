@@ -59,14 +59,17 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS user_meta (
   id INT AUTO_INCREMENT PRIMARY KEY,
   user_id INT NOT NULL,
+  site_id INT NOT NULL,
   meta_key VARCHAR(255) NOT NULL,
   meta_value TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
   INDEX idx_user_id (user_id),
+  INDEX idx_site_id (site_id),
   INDEX idx_meta_key (meta_key),
-  UNIQUE KEY unique_user_meta (user_id, meta_key)
+  UNIQUE KEY unique_user_site_meta (user_id, site_id, meta_key)
 );
 
 -- Site Users table (maps users to sites with roles)
@@ -450,10 +453,10 @@ LIMIT 1;
 INSERT INTO site_1_post_types (id, name, slug, label, singular_label, description, icon, url_structure, supports, show_in_dashboard, hierarchical, menu_position) 
 VALUES 
   (1, 'post', 'blog', 'Posts', 'Post', 'Regular blog posts', '📝', 'default',
-   '{"title": true, "content": true, "excerpt": true, "featured_image": true}',
+   '{"title": true, "content": true, "excerpt": true, "featured_image": true, "custom_fields": true}',
    TRUE, FALSE, 5),
   (2, 'page', '', 'Pages', 'Page', 'Static pages', '📄', 'default',
-   '{"title": true, "content": true, "featured_image": true}',
+   '{"title": true, "content": true, "featured_image": true, "custom_fields": true}',
    TRUE, TRUE, 10)
 ON DUPLICATE KEY UPDATE 
   label = VALUES(label),

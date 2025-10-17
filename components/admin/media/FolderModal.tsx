@@ -1,3 +1,5 @@
+import { useEffect } from 'react';
+
 interface FolderModalProps {
   isOpen: boolean;
   mode: 'create' | 'rename';
@@ -17,6 +19,20 @@ export default function FolderModal({
   onSubmit,
   onNameChange,
 }: FolderModalProps) {
+  // Handle ESC key to close modal
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('keydown', handleEscape);
+      return () => document.removeEventListener('keydown', handleEscape);
+    }
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const title = mode === 'create' ? 'Create New Folder' : 'Rename Folder';

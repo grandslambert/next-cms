@@ -16,6 +16,18 @@ export default function SiteUsersModal({ site, onClose }: SiteUsersModalProps) {
   const [selectedRoleId, setSelectedRoleId] = useState('');
   const queryClient = useQueryClient();
 
+  // Handle ESC key to close modal
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [onClose]);
+
   // Fetch users assigned to this site
   const { data: siteUsersData, isLoading: loadingSiteUsers } = useQuery({
     queryKey: ['site-users', site.id],

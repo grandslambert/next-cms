@@ -12,6 +12,7 @@ export async function POST(request: NextRequest) {
     }
 
     const userId = (session.user as any).id;
+    const siteId = (session.user as any).currentSiteId || 1;
     const body = await request.json();
     const { 
       post_id, 
@@ -23,6 +24,9 @@ export async function POST(request: NextRequest) {
       parent_id,
       menu_order,
       author_id,
+      featured_image_id,
+      featured_image_url,
+      selected_terms,
       seo_title,
       seo_description,
       seo_keywords
@@ -35,11 +39,12 @@ export async function POST(request: NextRequest) {
 
     // Store autosave in user_meta
     await db.execute<ResultSetHeader>(
-      `INSERT INTO user_meta (user_id, meta_key, meta_value, updated_at) 
-       VALUES (?, ?, ?, NOW())
+      `INSERT INTO user_meta (user_id, site_id, meta_key, meta_value, updated_at) 
+       VALUES (?, ?, ?, ?, NOW())
        ON DUPLICATE KEY UPDATE meta_value = VALUES(meta_value), updated_at = NOW()`,
       [
         userId,
+        siteId,
         autosaveKey,
         JSON.stringify({
           title,
@@ -49,6 +54,9 @@ export async function POST(request: NextRequest) {
           parent_id,
           menu_order,
           author_id,
+          featured_image_id,
+          featured_image_url,
+          selected_terms,
           seo_title,
           seo_description,
           seo_keywords,
@@ -75,6 +83,7 @@ export async function GET(request: NextRequest) {
     }
 
     const userId = (session.user as any).id;
+    const siteId = (session.user as any).currentSiteId || 1;
     const searchParams = request.nextUrl.searchParams;
     const postId = searchParams.get('post_id');
     const postType = searchParams.get('post_type');
@@ -84,8 +93,8 @@ export async function GET(request: NextRequest) {
       : `autosave_new_${postType}_user_${userId}`;
 
     const [rows] = await db.query<any[]>(
-      'SELECT meta_value FROM user_meta WHERE user_id = ? AND meta_key = ?',
-      [userId, autosaveKey]
+      'SELECT meta_value FROM user_meta WHERE user_id = ? AND site_id = ? AND meta_key = ?',
+      [userId, siteId, autosaveKey]
     );
 
     if (rows.length === 0) {
@@ -112,6 +121,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     const userId = (session.user as any).id;
+    const siteId = (session.user as any).currentSiteId || 1;
     const searchParams = request.nextUrl.searchParams;
     const postId = searchParams.get('post_id');
     const postType = searchParams.get('post_type');
@@ -121,8 +131,8 @@ export async function DELETE(request: NextRequest) {
       : `autosave_new_${postType}_user_${userId}`;
 
     await db.execute<ResultSetHeader>(
-      'DELETE FROM user_meta WHERE user_id = ? AND meta_key = ?',
-      [userId, autosaveKey]
+      'DELETE FROM user_meta WHERE user_id = ? AND site_id = ? AND meta_key = ?',
+      [userId, siteId, autosaveKey]
     );
 
     return NextResponse.json({ success: true });

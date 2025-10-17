@@ -1,3 +1,5 @@
+import { useEffect } from 'react';
+
 interface BulkMoveModalProps {
   readonly isOpen: boolean;
   readonly selectedCount: number;
@@ -15,6 +17,20 @@ export default function BulkMoveModal({
   onClose,
   onMove,
 }: BulkMoveModalProps) {
+  // Handle ESC key to close modal
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('keydown', handleEscape);
+      return () => document.removeEventListener('keydown', handleEscape);
+    }
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   return (

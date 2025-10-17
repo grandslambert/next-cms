@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
@@ -10,8 +10,16 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const siteId = (session.user as any).currentSiteId || 1;
+    const postTypesTable = getSiteTable(siteId, 'post_types');
+
     const [rows] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM post_types WHERE id = ?',
+      `SELECT * FROM ${postTypesTable} WHERE id = ?`,
       [params.id]
     );
 
@@ -37,16 +45,24 @@ export async function PUT(
 ) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user || (session.user as any).role !== 'admin') {
-      return NextResponse.json({ error: 'Unauthorized - Admin only' }, { status: 401 });
+    const permissions = (session?.user as any)?.permissions || {};
+    const isSuperAdmin = (session?.user as any)?.isSuperAdmin || false;
+
+    if (!session?.user || (!isSuperAdmin && !permissions.manage_post_types)) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    const siteId = (session.user as any).currentSiteId || 1;
+    const postTypesTable = getSiteTable(siteId, 'post_types');
+    const taxonomiesTable = getSiteTable(siteId, 'taxonomies');
+    const postTypeTaxonomiesTable = getSiteTable(siteId, 'post_type_taxonomies');
 
     const body = await request.json();
     const { slug, label, singular_label, description, icon, url_structure, supports, menu_position, show_in_dashboard, hierarchical, taxonomies } = body;
 
     // Get current post type BEFORE updating (for activity log)
     const [beforeUpdate] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM post_types WHERE id = ?',
+      `SELECT * FROM ${postTypesTable} WHERE id = ?`,
       [params.id]
     );
 
@@ -60,15 +76,15 @@ export async function PUT(
     // Get current taxonomies for this post type
     const [beforeTaxonomies] = await db.query<RowDataPacket[]>(
       `SELECT t.id, t.name, t.label
-       FROM taxonomies t
-       INNER JOIN post_type_taxonomies ptt ON ptt.taxonomy_id = t.id
+       FROM ${taxonomiesTable} t
+       INNER JOIN ${postTypeTaxonomiesTable} ptt ON ptt.taxonomy_id = t.id
        WHERE ptt.post_type_id = ?
        ORDER BY t.label ASC`,
       [params.id]
     );
 
     // Build update query
-    let updateQuery = `UPDATE post_types 
+    let updateQuery = `UPDATE ${postTypesTable} 
        SET label = ?, singular_label = ?, description = ?, icon = ?, url_structure = ?, supports = ?, show_in_dashboard = ?, hierarchical = ?, menu_position = ?`;
     let updateParams: any[] = [
       label,
@@ -84,7 +100,7 @@ export async function PUT(
 
     // Only allow slug changes for non-built-in types
     if (slug !== undefined && !isBuiltIn) {
-      updateQuery = `UPDATE post_types 
+      updateQuery = `UPDATE ${postTypesTable} 
          SET slug = ?, label = ?, singular_label = ?, description = ?, icon = ?, url_structure = ?, supports = ?, show_in_dashboard = ?, hierarchical = ?, menu_position = ?`;
       updateParams = [slug, ...updateParams];
     }
@@ -98,7 +114,7 @@ export async function PUT(
     if (taxonomies !== undefined) {
       // Remove existing relationships
       await db.query<ResultSetHeader>(
-        'DELETE FROM post_type_taxonomies WHERE post_type_id = ?',
+        `DELETE FROM ${postTypeTaxonomiesTable} WHERE post_type_id = ?`,
         [params.id]
       );
 
@@ -106,22 +122,22 @@ export async function PUT(
       if (taxonomies.length > 0) {
         const values = taxonomies.map((taxonomyId: number) => [params.id, taxonomyId]);
         await db.query<ResultSetHeader>(
-          'INSERT INTO post_type_taxonomies (post_type_id, taxonomy_id) VALUES ?',
+          `INSERT INTO ${postTypeTaxonomiesTable} (post_type_id, taxonomy_id) VALUES ?`,
           [values]
         );
       }
     }
 
     const [updated] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM post_types WHERE id = ?',
+      `SELECT * FROM ${postTypesTable} WHERE id = ?`,
       [params.id]
     );
 
     // Get updated taxonomies for this post type
     const [afterTaxonomies] = await db.query<RowDataPacket[]>(
       `SELECT t.id, t.name, t.label
-       FROM taxonomies t
-       INNER JOIN post_type_taxonomies ptt ON ptt.taxonomy_id = t.id
+       FROM ${taxonomiesTable} t
+       INNER JOIN ${postTypeTaxonomiesTable} ptt ON ptt.taxonomy_id = t.id
        WHERE ptt.post_type_id = ?
        ORDER BY t.label ASC`,
       [params.id]
@@ -167,6 +183,7 @@ export async function PUT(
       details: `Updated post type: ${label}`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
+      siteId,
       changesBefore,
       changesAfter,
     });
@@ -189,13 +206,20 @@ export async function DELETE(
 ) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user || (session.user as any).role !== 'admin') {
-      return NextResponse.json({ error: 'Unauthorized - Admin only' }, { status: 401 });
+    const permissions = (session?.user as any)?.permissions || {};
+    const isSuperAdmin = (session?.user as any)?.isSuperAdmin || false;
+
+    if (!session?.user || (!isSuperAdmin && !permissions.manage_post_types)) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    const siteId = (session.user as any).currentSiteId || 1;
+    const postTypesTable = getSiteTable(siteId, 'post_types');
+    const postsTable = getSiteTable(siteId, 'posts');
 
     // Check if it's a built-in post type
     const [postType] = await db.query<RowDataPacket[]>(
-      'SELECT name FROM post_types WHERE id = ?',
+      `SELECT name, label FROM ${postTypesTable} WHERE id = ?`,
       [params.id]
     );
 
@@ -210,10 +234,9 @@ export async function DELETE(
     }
 
     // Check if any posts use this post type
-    const postsTable = getSiteTable(siteId, 'posts');
     const [postCount] = await db.query<RowDataPacket[]>(
-      `SELECT COUNT(*) as count FROM ${postsTable} WHERE post_type = ?`,
-      [postType[0].name]
+      `SELECT COUNT(*) as count FROM ${postsTable} WHERE post_type_id = ?`,
+      [params.id]
     );
 
     if (postCount[0].count > 0) {
@@ -233,9 +256,10 @@ export async function DELETE(
       details: `Deleted post type: ${postType[0].label} (${postType[0].name})`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
+      siteId,
     });
 
-    await db.query<ResultSetHeader>('DELETE FROM post_types WHERE id = ?', [params.id]);
+    await db.query<ResultSetHeader>(`DELETE FROM ${postTypesTable} WHERE id = ?`, [params.id]);
 
     return NextResponse.json({ success: true });
   } catch (error) {

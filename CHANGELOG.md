@@ -7,6 +7,90 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.1] - 2025-10-17
+
+### Added
+- **Modal ESC Key Support** - All modals can now be dismissed with the ESC key
+  - ActivityLogDetailsModal
+  - SiteUsersModal
+  - EditMediaModal
+  - FolderModal
+  - MoveMediaModal
+  - BulkMoveModal
+  - AutosaveDiffModal (ESC defaults to keeping current content)
+- **Custom Fields as Post Type Option** - Custom fields now controlled by post type supports
+  - Added `custom_fields` to post type supports options
+  - Available in Post Type editor UI as a checkbox
+  - Posts have custom fields enabled by default
+  - Pages don't have custom fields by default
+  - Custom fields now available when creating new posts (not just when editing)
+  - Admins can enable/disable custom fields per post type
+- **Automatic Session Refresh** - Permissions update immediately without logout/login
+  - When editing a role, users with that role get instant permission updates
+  - Session automatically refreshes permissions from database
+  - Correctly loads permissions from `site_users` table (site-specific roles)
+  - Sidebar re-renders to show/hide menu items based on new permissions
+  - Includes support for site role overrides
+  - Toast notification confirms when your permissions are updated
+  - Works for all permission changes including new post types access
+  - No need to log out and back in to see permission changes
+
+### Fixed
+- **Post Types JSON** - Fixed invalid JSON syntax in pages post type supports field
+  - Removed extra closing brace `}}` that was causing save errors
+  - Fixed in both `schema.sql` and `site-tables-template.sql`
+- **Post Types API** - Fixed post types not saving (multi-site compatibility)
+  - Updated `/api/post-types/[id]` to use site-prefixed tables
+  - GET, PUT, and DELETE methods now properly query `site_{id}_post_types`
+  - Added proper permission checks (manage_post_types or super admin)
+  - Fixed taxonomy relationships to use site-prefixed tables
+  - Activity logging now includes siteId
+- **Post Types Form** - Fixed TypeScript errors in post types editor
+  - Fixed type mismatches for boolean/null values in supports field
+  - Fixed disabled field type coercion
+- **User Meta** - Fixed user meta to be site-aware
+  - User preferences (column visibility, items per page) now stored per-site
+  - Added `site_id` column to `user_meta` table
+  - Updated unique constraint to `(user_id, site_id, meta_key)`
+  - Users can have different preferences for each site
+- **Permission Refresh** - Fixed session refresh to use site-specific roles
+  - Now correctly queries `site_users` table for user's role on current site
+  - Previously used global `users.role_id` instead of site-specific role
+  - Fixes issue where permissions didn't update when editing roles on multi-site installations
+  - Properly loads site role overrides after they're created
+- **Site Role Overrides Loading** - Fixed site role overrides not loading in multiple scenarios
+  - **Login**: Now loads site role overrides when user first logs in
+  - **Site Switching**: Now loads site role overrides when switching between sites
+  - **Permission Refresh**: Now loads site role overrides when role is edited
+  - Previously only loaded base role permissions, ignoring site-specific customizations
+  - Fixes custom post types not appearing in sidebar/dashboard despite being added to role permissions
+  - All three auth flows (login, site switch, permission refresh) now consistently load overrides
+- **Page Attributes Box** - Fixed author field not showing when creating new posts
+  - Author field now visible when creating posts (previously only shown when editing)
+  - Administrators can now set the author when creating a post
+  - Prevents empty Page Attributes box for non-hierarchical post types
+- **Autosave** - Fixed autosave not working after multi-site user_meta changes
+  - Updated autosave API to include `site_id` in all user_meta queries
+  - Autosaves now properly scoped per site
+  - Fixed POST, GET, and DELETE methods
+- **Autosave Triggers** - Fixed autosave not triggering for all field changes
+  - Autosave now triggers when featured image is selected or removed
+  - Autosave now triggers when taxonomies (categories/tags) are added or removed
+  - Previously only triggered on text field changes (title, content, excerpt)
+- **Autosave Featured Image & Taxonomies** - Fixed featured image and taxonomies not being saved/restored
+  - Added `featured_image_id` and `featured_image_url` to autosave data
+  - Added `selected_terms` (taxonomies) to autosave data
+  - Fixed React state timing issue by passing values directly to triggerAutosave
+  - Featured image and taxonomies now properly saved when autosaving
+  - Featured image and taxonomies now properly restored when loading autosave
+  - Updated both frontend (PostTypeForm) and backend (autosave API)
+- **Autosave Diff Modal** - Added featured image and taxonomy comparison to autosave modal
+  - Modal now shows side-by-side comparison when featured image changes
+  - Modal now shows side-by-side comparison when taxonomies (categories/tags) change
+  - Featured image displays as actual image thumbnails for easy visual comparison
+  - Taxonomies display as color-coded badges showing selected terms per taxonomy
+  - Previously only showed text fields (title, content, excerpt)
+
 ## [2.1.0] - 2025-10-17
 
 ### Added

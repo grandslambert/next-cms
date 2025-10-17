@@ -405,6 +405,9 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
     parent_id?: number | null;
     menu_order?: number;
     author_id?: number;
+    featured_image_id?: number | null;
+    featured_image_url?: string;
+    selected_terms?: {[taxonomyId: number]: number[]};
     title?: string;
     content?: string;
     excerpt?: string;
@@ -439,6 +442,9 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
         parent_id: overrides?.parent_id !== undefined ? overrides.parent_id : parentId,
         menu_order: overrides?.menu_order !== undefined ? overrides.menu_order : menuOrder,
         author_id: overrides?.author_id !== undefined ? overrides.author_id : authorId,
+        featured_image_id: overrides?.featured_image_id !== undefined ? overrides.featured_image_id : featuredImageId,
+        featured_image_url: overrides?.featured_image_url !== undefined ? overrides.featured_image_url : featuredImageUrl,
+        selected_terms: overrides?.selected_terms !== undefined ? overrides.selected_terms : selectedTerms,
         seo_title: overrides?.seo_title !== undefined ? overrides.seo_title : seoTitle,
         seo_description: overrides?.seo_description !== undefined ? overrides.seo_description : seoDescription,
         seo_keywords: overrides?.seo_keywords !== undefined ? overrides.seo_keywords : seoKeywords,
@@ -694,6 +700,15 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
       }
       if (autosaveData.author_id !== undefined) {
         setAuthorId(autosaveData.author_id);
+      }
+      if (autosaveData.featured_image_id !== undefined) {
+        setFeaturedImageId(autosaveData.featured_image_id);
+      }
+      if (autosaveData.featured_image_url !== undefined) {
+        setFeaturedImageUrl(autosaveData.featured_image_url);
+      }
+      if (autosaveData.selected_terms !== undefined) {
+        setSelectedTerms(autosaveData.selected_terms);
       }
       if (autosaveData.seo_title !== undefined) {
         setSeoTitle(autosaveData.seo_title);
@@ -1068,7 +1083,7 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
             </div>
           )}
 
-          {isEdit && (
+          {postTypeData?.supports?.custom_fields === true && (
             <CustomFieldsBox
               customFields={customFields}
               onAddField={handleAddCustomField}
@@ -1096,6 +1111,7 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
               onRemoveImage={() => {
                 setFeaturedImageId(null);
                 setFeaturedImageUrl('');
+                triggerAutosave({ featured_image_id: null, featured_image_url: '' });
               }}
             />
           )}
@@ -1160,7 +1176,11 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
               taxonomy={taxonomyData.taxonomy}
               terms={taxonomyData.terms}
               selectedTerms={selectedTerms[taxonomyData.taxonomyId] || []}
-              onTermsChange={(termIds) => setSelectedTerms(prev => ({ ...prev, [taxonomyData.taxonomyId]: termIds }))}
+              onTermsChange={(termIds) => {
+                const newSelectedTerms = { ...selectedTerms, [taxonomyData.taxonomyId]: termIds };
+                setSelectedTerms(newSelectedTerms);
+                triggerAutosave({ selected_terms: newSelectedTerms });
+              }}
               onTermAdded={() => queryClient.invalidateQueries({ queryKey: ['all-terms'] })}
             />
           ))}
@@ -1183,6 +1203,7 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
           onSelect={(id, url) => {
             setFeaturedImageId(id);
             setFeaturedImageUrl(url);
+            triggerAutosave({ featured_image_id: id, featured_image_url: url });
           }}
           currentMediaId={featuredImageId || undefined}
         />
@@ -1199,6 +1220,9 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
           parent_id: parentId,
           menu_order: menuOrder,
           author_id: authorId || 0,
+          featured_image_id: featuredImageId,
+          featured_image_url: featuredImageUrl,
+          selected_terms: selectedTerms,
           seo_title: seoTitle,
           seo_description: seoDescription,
           seo_keywords: seoKeywords
@@ -1212,6 +1236,7 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
         }}
         allPosts={allPostsData?.posts || []}
         users={usersData?.users || []}
+        allTerms={allTermsData || []}
         onUseCurrent={handleKeepCurrent}
         onUseAutosave={handleUseAutosave}
       />

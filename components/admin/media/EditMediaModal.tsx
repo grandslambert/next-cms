@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { formatDate } from '@/lib/utils';
 
 interface EditMediaModalProps {
@@ -29,6 +30,20 @@ export default function EditMediaModal({
   onCopyUrl,
   onRegenerate,
 }: EditMediaModalProps) {
+  // Handle ESC key to close modal
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('keydown', handleEscape);
+      return () => document.removeEventListener('keydown', handleEscape);
+    }
+  }, [isOpen, onClose]);
+
   if (!isOpen || !media) return null;
 
   return (

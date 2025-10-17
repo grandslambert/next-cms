@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import toast from 'react-hot-toast';
@@ -23,6 +25,8 @@ const CORE_PERMISSIONS = [
 ];
 
 export default function RolesPage() {
+  const router = useRouter();
+  const { update } = useSession();
   const { isLoading: permissionLoading, isSuperAdmin } = usePermission('manage_roles');
   const [editingRole, setEditingRole] = useState<any>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -71,9 +75,17 @@ export default function RolesPage() {
       const res = await axios.put(`/api/roles/${id}`, data);
       return res.data;
     },
-    onSuccess: () => {
+    onSuccess: async (response) => {
       queryClient.invalidateQueries({ queryKey: ['roles'] });
       toast.success('Role updated successfully');
+      
+      // If the current user's role was edited, refresh their session
+      if (response.shouldUpdateSession) {
+        await update();
+        router.refresh(); // Force page re-render to update sidebar
+        toast.success('Your permissions have been updated', { icon: '🔄' });
+      }
+      
       setEditingRole(null);
       resetForm();
     },
