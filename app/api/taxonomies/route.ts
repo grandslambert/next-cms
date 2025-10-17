@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function GET() {
   try {
+    const session = await getServerSession(authOptions);
+    const siteId = (session?.user as any)?.currentSiteId || 1;
+    const taxonomiesTable = getSiteTable(siteId, 'taxonomies');
+    
     const [rows] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM taxonomies ORDER BY menu_position ASC, label ASC'
+      `SELECT * FROM ${taxonomiesTable} ORDER BY menu_position ASC, label ASC`
     );
     return NextResponse.json({ taxonomies: rows });
   } catch (error) {
@@ -23,6 +27,10 @@ export async function POST(request: NextRequest) {
     if (!session?.user || (session.user as any).role !== 'admin') {
       return NextResponse.json({ error: 'Unauthorized - Admin only' }, { status: 401 });
     }
+
+    const userId = (session.user as any).id;
+    const siteId = (session.user as any).currentSiteId || 1;
+    const taxonomiesTable = getSiteTable(siteId, 'taxonomies');
 
     const body = await request.json();
     const { name, label, singular_label, description, hierarchical, show_in_menu, show_in_dashboard, menu_position } = body;
@@ -39,7 +47,7 @@ export async function POST(request: NextRequest) {
     }
 
     const [result] = await db.query<ResultSetHeader>(
-      `INSERT INTO taxonomies (name, label, singular_label, description, hierarchical, show_in_menu, show_in_dashboard, menu_position)
+      `INSERT INTO ${taxonomiesTable} (name, label, singular_label, description, hierarchical, show_in_menu, show_in_dashboard, menu_position)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         name,
@@ -54,12 +62,11 @@ export async function POST(request: NextRequest) {
     );
 
     const [newTaxonomy] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM taxonomies WHERE id = ?',
+      `SELECT * FROM ${taxonomiesTable} WHERE id = ?`,
       [result.insertId]
     );
 
     // Log activity
-    const userId = (session.user as any).id;
     await logActivity({
       userId,
       action: 'taxonomy_created',
@@ -69,6 +76,7 @@ export async function POST(request: NextRequest) {
       details: `Created taxonomy: ${label} (${name})`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
+      siteId,
     });
 
     return NextResponse.json({ taxonomy: newTaxonomy[0] }, { status: 201 });

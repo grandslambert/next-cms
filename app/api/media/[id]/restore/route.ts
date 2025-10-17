@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { ResultSetHeader, RowDataPacket } from 'mysql2';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
@@ -16,24 +16,27 @@ export async function POST(
     }
 
     const permissions = (session.user as any).permissions || {};
+    const userId = (session.user as any).id;
+    const siteId = (session.user as any).currentSiteId || 1;
+    const mediaTable = getSiteTable(siteId, 'media');
+    
     if (!permissions.manage_media) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     // Get media info before restoring
     const [mediaRows] = await db.query<RowDataPacket[]>(
-      'SELECT original_name, filename FROM media WHERE id = ?',
+      `SELECT original_name, filename FROM ${mediaTable} WHERE id = ?`,
       [params.id]
     );
 
     // Restore from trash
     await db.execute<ResultSetHeader>(
-      'UPDATE media SET deleted_at = NULL WHERE id = ?',
+      `UPDATE ${mediaTable} SET deleted_at = NULL WHERE id = ?`,
       [params.id]
     );
 
     // Log activity
-    const userId = (session.user as any).id;
     if (mediaRows.length > 0) {
       await logActivity({
         userId,
@@ -44,6 +47,7 @@ export async function POST(
         details: `Restored media from trash: ${mediaRows[0].original_name || mediaRows[0].filename}`,
         ipAddress: getClientIp(request),
         userAgent: getUserAgent(request),
+        siteId,
       });
     }
 

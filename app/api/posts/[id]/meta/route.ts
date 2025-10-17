@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 
 export async function GET(
@@ -14,9 +14,12 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const siteId = (session.user as any).currentSiteId || 1;
+    const postMetaTable = getSiteTable(siteId, 'post_meta');
+
     // Fetch custom fields for this post
     const [meta] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM post_meta WHERE post_id = ? ORDER BY meta_key',
+      `SELECT * FROM ${postMetaTable} WHERE post_id = ? ORDER BY meta_key`,
       [params.id]
     );
 
@@ -38,11 +41,15 @@ export async function PUT(
     }
 
     const userId = (session.user as any).id;
+    const isSuperAdmin = (session.user as any)?.isSuperAdmin || false;
     const permissions = (session.user as any).permissions || {};
+    const siteId = (session.user as any).currentSiteId || 1;
+    const postsTable = getSiteTable(siteId, 'posts');
+    const postMetaTable = getSiteTable(siteId, 'post_meta');
 
     // Check if post exists and user has permission to edit
     const [existingPost] = await db.query<RowDataPacket[]>(
-      'SELECT author_id, post_type FROM posts WHERE id = ?',
+      `SELECT author_id, post_type FROM ${postsTable} WHERE id = ?`,
       [params.id]
     );
 
@@ -51,8 +58,8 @@ export async function PUT(
     }
 
     const post = existingPost[0];
-    const isOwner = post.author_id === parseInt(userId);
-    const canManageOthers = permissions.manage_others_posts === true;
+    const isOwner = post.author_id === Number.parseInt(userId);
+    const canManageOthers = isSuperAdmin || permissions.manage_others_posts === true;
 
     if (!isOwner && !canManageOthers) {
       return NextResponse.json({ error: 'You can only edit your own posts' }, { status: 403 });
@@ -67,7 +74,7 @@ export async function PUT(
 
     // Delete all existing meta for this post
     await db.query<ResultSetHeader>(
-      'DELETE FROM post_meta WHERE post_id = ?',
+      `DELETE FROM ${postMetaTable} WHERE post_id = ?`,
       [params.id]
     );
 
@@ -78,7 +85,7 @@ export async function PUT(
       if (validMeta.length > 0) {
         const values = validMeta.map(m => [params.id, m.meta_key.trim(), m.meta_value || '']);
         await db.query<ResultSetHeader>(
-          'INSERT INTO post_meta (post_id, meta_key, meta_value) VALUES ?',
+          `INSERT INTO ${postMetaTable} (post_id, meta_key, meta_value) VALUES ?`,
           [values]
         );
       }
@@ -86,7 +93,7 @@ export async function PUT(
 
     // Fetch updated meta
     const [updatedMeta] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM post_meta WHERE post_id = ? ORDER BY meta_key',
+      `SELECT * FROM ${postMetaTable} WHERE post_id = ? ORDER BY meta_key`,
       [params.id]
     );
 

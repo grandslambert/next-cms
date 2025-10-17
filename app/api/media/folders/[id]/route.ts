@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 
 export async function GET(
@@ -15,12 +15,15 @@ export async function GET(
     }
 
     const permissions = (session.user as any).permissions || {};
+    const siteId = (session.user as any).currentSiteId || 1;
+    const mediaFoldersTable = getSiteTable(siteId, 'media_folders');
+    
     if (!permissions.manage_media) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const [rows] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM media_folders WHERE id = ?',
+      `SELECT * FROM ${mediaFoldersTable} WHERE id = ?`,
       [params.id]
     );
 
@@ -46,6 +49,9 @@ export async function PUT(
     }
 
     const permissions = (session.user as any).permissions || {};
+    const siteId = (session.user as any).currentSiteId || 1;
+    const mediaFoldersTable = getSiteTable(siteId, 'media_folders');
+    
     if (!permissions.manage_media) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
@@ -59,7 +65,7 @@ export async function PUT(
 
     // Check if folder exists
     const [existing] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM media_folders WHERE id = ?',
+      `SELECT * FROM ${mediaFoldersTable} WHERE id = ?`,
       [params.id]
     );
 
@@ -68,17 +74,17 @@ export async function PUT(
     }
 
     // Prevent circular references
-    if (parent_id && parent_id === parseInt(params.id)) {
+    if (parent_id && parent_id === Number.parseInt(params.id)) {
       return NextResponse.json({ error: 'A folder cannot be its own parent' }, { status: 400 });
     }
 
     await db.execute<ResultSetHeader>(
-      'UPDATE media_folders SET name = ?, parent_id = ? WHERE id = ?',
+      `UPDATE ${mediaFoldersTable} SET name = ?, parent_id = ? WHERE id = ?`,
       [name.trim(), parent_id || null, params.id]
     );
 
     const [updated] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM media_folders WHERE id = ?',
+      `SELECT * FROM ${mediaFoldersTable} WHERE id = ?`,
       [params.id]
     );
 
@@ -100,13 +106,17 @@ export async function DELETE(
     }
 
     const permissions = (session.user as any).permissions || {};
+    const siteId = (session.user as any).currentSiteId || 1;
+    const mediaFoldersTable = getSiteTable(siteId, 'media_folders');
+    const mediaTable = getSiteTable(siteId, 'media');
+    
     if (!permissions.manage_media) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     // Check if folder has any media files
     const [mediaFiles] = await db.query<RowDataPacket[]>(
-      'SELECT COUNT(*) as count FROM media WHERE folder_id = ?',
+      `SELECT COUNT(*) as count FROM ${mediaTable} WHERE folder_id = ?`,
       [params.id]
     );
 
@@ -119,7 +129,7 @@ export async function DELETE(
 
     // Check if folder has subfolders
     const [subfolders] = await db.query<RowDataPacket[]>(
-      'SELECT COUNT(*) as count FROM media_folders WHERE parent_id = ?',
+      `SELECT COUNT(*) as count FROM ${mediaFoldersTable} WHERE parent_id = ?`,
       [params.id]
     );
 
@@ -131,7 +141,7 @@ export async function DELETE(
     }
 
     await db.execute<ResultSetHeader>(
-      'DELETE FROM media_folders WHERE id = ?',
+      `DELETE FROM ${mediaFoldersTable} WHERE id = ?`,
       [params.id]
     );
 

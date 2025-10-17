@@ -4,14 +4,18 @@ import { formatDate, truncate } from '@/lib/utils';
 import { getImageUrl } from '@/lib/image-utils';
 import { getPostByFullPath } from '@/lib/post-utils';
 import { buildPostUrls } from '@/lib/post-url-builder';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
 
+// For public routes, default to site 1 (can be enhanced with domain-based routing later)
+const PUBLIC_SITE_ID = 1;
+
 // Helper function to check and get taxonomy
-async function getTaxonomy(taxonomySlug: string) {
+async function getTaxonomy(taxonomySlug: string, siteId: number = PUBLIC_SITE_ID) {
   try {
+    const taxonomiesTable = getSiteTable(siteId, 'taxonomies');
     const [rows] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM taxonomies WHERE name = ?',
+      `SELECT * FROM ${taxonomiesTable} WHERE name = ?`,
       [taxonomySlug]
     );
     return rows[0] || null;
@@ -22,15 +26,19 @@ async function getTaxonomy(taxonomySlug: string) {
 }
 
 // Helper function to get taxonomy terms
-async function getTerms(taxonomyId: number) {
+async function getTerms(taxonomyId: number, siteId: number = PUBLIC_SITE_ID) {
   try {
+    const termsTable = getSiteTable(siteId, 'terms');
+    const termRelationshipsTable = getSiteTable(siteId, 'term_relationships');
+    const postsTable = getSiteTable(siteId, 'posts');
+    
     const [rows] = await db.query<RowDataPacket[]>(
       `SELECT t.*, COUNT(tr.post_id) as post_count,
               parent.name as parent_name, parent.slug as parent_slug
-       FROM terms t
-       LEFT JOIN term_relationships tr ON t.id = tr.term_id
-       LEFT JOIN posts p ON tr.post_id = p.id AND p.status = 'published'
-       LEFT JOIN terms parent ON t.parent_id = parent.id
+       FROM ${termsTable} t
+       LEFT JOIN ${termRelationshipsTable} tr ON t.id = tr.term_id
+       LEFT JOIN ${postsTable} p ON tr.post_id = p.id AND p.status = 'published'
+       LEFT JOIN ${termsTable} parent ON t.parent_id = parent.id
        WHERE t.taxonomy_id = ?
        GROUP BY t.id
        ORDER BY t.parent_id ASC, t.name ASC`,
@@ -44,10 +52,11 @@ async function getTerms(taxonomyId: number) {
 }
 
 // Helper function to get a specific term
-async function getTerm(taxonomyId: number, termSlug: string) {
+async function getTerm(taxonomyId: number, termSlug: string, siteId: number = PUBLIC_SITE_ID) {
   try {
+    const termsTable = getSiteTable(siteId, 'terms');
     const [rows] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM terms WHERE taxonomy_id = ? AND slug = ?',
+      `SELECT * FROM ${termsTable} WHERE taxonomy_id = ? AND slug = ?`,
       [taxonomyId, termSlug]
     );
     return rows[0] || null;
@@ -58,17 +67,22 @@ async function getTerm(taxonomyId: number, termSlug: string) {
 }
 
 // Helper function to get posts by term
-async function getPostsByTerm(termId: number) {
+async function getPostsByTerm(termId: number, siteId: number = PUBLIC_SITE_ID) {
   try {
+    const termRelationshipsTable = getSiteTable(siteId, 'term_relationships');
+    const postsTable = getSiteTable(siteId, 'posts');
+    const mediaTable = getSiteTable(siteId, 'media');
+    const postTypesTable = getSiteTable(siteId, 'post_types');
+    
     const [rows] = await db.query<RowDataPacket[]>(
       `SELECT p.*, CONCAT(u.first_name, ' ', u.last_name) as author_name,
               m.url as featured_image, m.sizes as featured_image_sizes,
               pt.url_structure, pt.hierarchical, pt.slug as post_type_slug
-       FROM term_relationships tr
-       JOIN posts p ON tr.post_id = p.id
+       FROM ${termRelationshipsTable} tr
+       JOIN ${postsTable} p ON tr.post_id = p.id
        LEFT JOIN users u ON p.author_id = u.id
-       LEFT JOIN media m ON p.featured_image_id = m.id
-       LEFT JOIN post_types pt ON p.post_type = pt.name
+       LEFT JOIN ${mediaTable} m ON p.featured_image_id = m.id
+       LEFT JOIN ${postTypesTable} pt ON p.post_type = pt.name
        WHERE tr.term_id = ? AND p.status = 'published'
        ORDER BY p.published_at DESC`,
       [termId]
@@ -81,13 +95,14 @@ async function getPostsByTerm(termId: number) {
 }
 
 // Helper function to build term hierarchy
-async function getTermHierarchy(termId: number): Promise<any[]> {
+async function getTermHierarchy(termId: number, siteId: number = PUBLIC_SITE_ID): Promise<any[]> {
   const hierarchy: any[] = [];
   let currentId: number | null = termId;
+  const termsTable = getSiteTable(siteId, 'terms');
 
   while (currentId) {
     const [rows] = await db.query<RowDataPacket[]>(
-      'SELECT id, name, slug, parent_id FROM terms WHERE id = ?',
+      `SELECT id, name, slug, parent_id FROM ${termsTable} WHERE id = ?`,
       [currentId]
     );
 
@@ -153,11 +168,13 @@ function TermCard({ term, taxonomySlug, level = 0 }: { term: any; taxonomySlug: 
   );
 }
 
-async function getPostBySlug(segments: string[]) {
+async function getPostBySlug(segments: string[], siteId: number = PUBLIC_SITE_ID) {
   try {
+    const postTypesTable = getSiteTable(siteId, 'post_types');
+    
     // Determine if first segment is a post type slug
     const [postTypes] = await db.query<RowDataPacket[]>(
-      'SELECT name, slug, url_structure FROM post_types WHERE slug != ""'
+      `SELECT name, slug, url_structure FROM ${postTypesTable} WHERE slug != ""`
     );
     
     const postTypeMap = new Map(postTypes.map((pt: any) => [pt.slug, { name: pt.name, structure: pt.url_structure }]));

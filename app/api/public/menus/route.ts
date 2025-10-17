@@ -1,19 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
 
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const location = searchParams.get('location');
+    const siteIdParam = searchParams.get('site_id');
+    
+    // For public routes, allow site_id parameter or default to site 1
+    // In production, this could be determined by domain
+    const siteId = siteIdParam ? Number.parseInt(siteIdParam) : 1;
 
     if (!location) {
       return NextResponse.json({ error: 'location parameter is required' }, { status: 400 });
     }
 
+    const menusTable = getSiteTable(siteId, 'menus');
+    const menuItemsTable = getSiteTable(siteId, 'menu_items');
+    const menuItemMetaTable = getSiteTable(siteId, 'menu_item_meta');
+    const postTypesTable = getSiteTable(siteId, 'post_types');
+    const taxonomiesTable = getSiteTable(siteId, 'taxonomies');
+    const postsTable = getSiteTable(siteId, 'posts');
+
     // Get the menu for this location
     const [menuRows] = await db.query<RowDataPacket[]>(
-      'SELECT id, name FROM menus WHERE location = ?',
+      `SELECT id, name FROM ${menusTable} WHERE location = ?`,
       [location]
     );
 
@@ -33,10 +45,10 @@ export async function GET(request: NextRequest) {
               tax.label as taxonomy_label,
               p.slug as post_slug,
               p.title as post_title
-       FROM menu_items mi
-       LEFT JOIN post_types pt ON mi.type = 'post_type' AND mi.object_id = pt.id
-       LEFT JOIN taxonomies tax ON mi.type = 'taxonomy' AND mi.object_id = tax.id
-       LEFT JOIN posts p ON mi.type = 'post' AND mi.object_id = p.id
+       FROM ${menuItemsTable} mi
+       LEFT JOIN ${postTypesTable} pt ON mi.type = 'post_type' AND mi.object_id = pt.id
+       LEFT JOIN ${taxonomiesTable} tax ON mi.type = 'taxonomy' AND mi.object_id = tax.id
+       LEFT JOIN ${postsTable} p ON mi.type = 'post' AND mi.object_id = p.id
        WHERE mi.menu_id = ? 
        ORDER BY mi.menu_order ASC, mi.id ASC`,
       [menu.id]
@@ -46,7 +58,7 @@ export async function GET(request: NextRequest) {
     if (itemRows.length > 0) {
       const [metaRows] = await db.query<RowDataPacket[]>(
         `SELECT menu_item_id, meta_key, meta_value 
-         FROM menu_item_meta 
+         FROM ${menuItemMetaTable} 
          WHERE menu_item_id IN (?)`,
         [itemRows.map((r: any) => r.id)]
       );

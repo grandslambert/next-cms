@@ -106,6 +106,11 @@ export default function RolesPage() {
   };
 
   const handleEdit = (role: any) => {
+    // Prevent editing super admin role
+    if (role.name === 'super_admin') {
+      toast.error('Super Administrator role cannot be edited');
+      return;
+    }
     setEditingRole(role);
     setFormData({
       name: role.name,
@@ -117,6 +122,11 @@ export default function RolesPage() {
   };
 
   const handleClone = (role: any) => {
+    // Prevent cloning super admin role
+    if (role.name === 'super_admin') {
+      toast.error('Super Administrator role cannot be cloned');
+      return;
+    }
     setEditingRole(null);
     setIsCreating(true);
     setFormData({
@@ -284,28 +294,36 @@ export default function RolesPage() {
                       </div>
                     </div>
                     <div className="flex flex-col space-y-2 ml-4">
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={() => handleEdit(role)}
-                          className="px-3 py-1 text-sm border border-gray-300 text-gray-700 rounded hover:bg-gray-50"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleClone(role)}
-                          className="px-3 py-1 text-sm border border-blue-300 text-blue-700 rounded hover:bg-blue-50"
-                          title="Clone this role"
-                        >
-                          Clone
-                        </button>
-                      </div>
-                      {!role.is_system && (
-                        <button
-                          onClick={() => handleDelete(role)}
-                          className="px-3 py-1 text-sm border border-red-300 text-red-700 rounded hover:bg-red-50 w-full"
-                        >
-                          Delete
-                        </button>
+                      {role.name !== 'super_admin' ? (
+                        <>
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => handleEdit(role)}
+                              className="px-3 py-1 text-sm border border-gray-300 text-gray-700 rounded hover:bg-gray-50"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleClone(role)}
+                              className="px-3 py-1 text-sm border border-blue-300 text-blue-700 rounded hover:bg-blue-50"
+                              title="Clone this role"
+                            >
+                              Clone
+                            </button>
+                          </div>
+                          {!role.is_system && (
+                            <button
+                              onClick={() => handleDelete(role)}
+                              className="px-3 py-1 text-sm border border-red-300 text-red-700 rounded hover:bg-red-50 w-full"
+                            >
+                              Delete
+                            </button>
+                          )}
+                        </>
+                      ) : (
+                        <div className="px-3 py-1 text-xs text-gray-500 text-center border border-gray-200 rounded bg-gray-50">
+                          Protected Role
+                        </div>
                       )}
                     </div>
                   </div>
@@ -447,6 +465,9 @@ export default function RolesPage() {
       <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
         <h3 className="text-sm font-semibold text-blue-900 mb-2">About Roles & Permissions</h3>
         <ul className="text-sm text-blue-800 space-y-1">
+          <li>
+            <strong>Super Administrator:</strong> Has unrestricted access to all features and bypasses all permission checks. Cannot be edited or cloned.
+          </li>
           <li>
             <strong>System Roles:</strong> Admin, Editor, and Author are built-in and cannot be deleted. You can modify their permissions.
           </li>

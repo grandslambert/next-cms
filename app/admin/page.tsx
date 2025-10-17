@@ -4,6 +4,8 @@ import { useSession } from 'next-auth/react';
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 
 // Loading spinner component
 const LoadingSpinner = () => (
@@ -49,7 +51,16 @@ const TaxonomyCount = ({ taxonomyId }: { taxonomyId: number }) => {
 
 export default function AdminDashboard() {
   const { data: session } = useSession();
+  const router = useRouter();
   const permissions = (session?.user as any)?.permissions || {};
+  const isSuperAdmin = (session?.user as any)?.isSuperAdmin || false;
+
+  // Redirect super admins to Sites management
+  useEffect(() => {
+    if (isSuperAdmin) {
+      router.push('/admin/sites');
+    }
+  }, [isSuperAdmin, router]);
 
   const { data: postsData, isLoading: postsLoading } = useQuery({
     queryKey: ['recent-posts-all-types'],
@@ -73,7 +84,7 @@ export default function AdminDashboard() {
       const res = await axios.get('/api/users');
       return res.data;
     },
-    enabled: !!permissions.manage_users,
+    enabled: isSuperAdmin || !!permissions.manage_users,
   });
 
   const { data: postTypesData, isLoading: postTypesLoading } = useQuery({
@@ -94,12 +105,16 @@ export default function AdminDashboard() {
 
   // Filter post types to show in dashboard based on user permissions
   const dashboardPostTypes = postTypesData?.postTypes?.filter((pt: any) => {
+    // Super admin can see all post types
+    if (isSuperAdmin) return pt.show_in_dashboard;
     const hasPermission = permissions[`manage_posts_${pt.name}`];
     return pt.show_in_dashboard && hasPermission;
   }) || [];
 
   // Filter taxonomies to show in dashboard based on user permissions
   const dashboardTaxonomies = taxonomiesData?.taxonomies?.filter((tax: any) => {
+    // Super admin can see all taxonomies
+    if (isSuperAdmin) return tax.show_in_dashboard;
     const hasPermission = permissions.manage_taxonomies;
     return tax.show_in_dashboard && hasPermission;
   }) || [];
@@ -155,7 +170,7 @@ export default function AdminDashboard() {
                   </Link>
                 ))}
 
-                {permissions.manage_media && (
+                {(isSuperAdmin || permissions.manage_media) && (
                   <Link href="/admin/media" className="group">
                     <div className="text-center p-4 rounded-lg transition-colors hover:bg-gray-50">
                       <div className="text-4xl mb-2">🖼️</div>
@@ -165,7 +180,7 @@ export default function AdminDashboard() {
                   </Link>
                 )}
 
-                {permissions.manage_users && (
+                {(isSuperAdmin || permissions.manage_users) && (
                   <Link href="/admin/users" className="group">
                     <div className="text-center p-4 rounded-lg transition-colors hover:bg-gray-50">
                       <div className="text-4xl mb-2">👥</div>
@@ -222,6 +237,8 @@ export default function AdminDashboard() {
             ) : (() => {
               // Filter posts by user permissions
               const filteredPosts = postsData?.posts?.filter((post: any) => {
+                // Super admin can see all posts
+                if (isSuperAdmin) return true;
                 return permissions[`manage_posts_${post.post_type}`];
               }) || [];
 

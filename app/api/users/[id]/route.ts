@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import bcrypt from 'bcryptjs';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
@@ -44,7 +44,10 @@ export async function PUT(
 ) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user || !(session.user as any).permissions?.manage_users) {
+    const isSuperAdmin = (session?.user as any)?.isSuperAdmin || false;
+    const hasPermission = (session?.user as any)?.permissions?.manage_users || false;
+    
+    if (!session?.user || (!isSuperAdmin && !hasPermission)) {
       return NextResponse.json({ error: 'Unauthorized - Admin only' }, { status: 401 });
     }
 
@@ -57,15 +60,19 @@ export async function PUT(
     const body = await request.json();
     const { username, first_name, last_name, email, password, role_id } = body;
 
-    if (!username || !first_name || !email || !role_id) {
+    if (!username || !first_name || !email || role_id === undefined || role_id === null) {
       return NextResponse.json({ error: 'Username, first name, email, and role are required' }, { status: 400 });
     }
 
     // If password is provided, validate and hash it; otherwise keep existing
     if (password?.trim()) {
+      // Get site ID for multi-site support
+      const siteId = (session.user as any).currentSiteId || 1;
+      const settingsTable = getSiteTable(siteId, 'settings');
+      
       // Fetch password requirements
       const [pwSettings] = await db.query<RowDataPacket[]>(
-        `SELECT setting_key, setting_value FROM settings 
+        `SELECT setting_key, setting_value FROM ${settingsTable} 
          WHERE setting_key IN (
            'password_min_length',
            'password_require_uppercase',
@@ -178,7 +185,10 @@ export async function DELETE(
 ) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user || !(session.user as any).permissions?.manage_users) {
+    const isSuperAdmin = (session?.user as any)?.isSuperAdmin || false;
+    const hasPermission = (session?.user as any)?.permissions?.manage_users || false;
+    
+    if (!session?.user || (!isSuperAdmin && !hasPermission)) {
       return NextResponse.json({ error: 'Unauthorized - Admin only' }, { status: 401 });
     }
 

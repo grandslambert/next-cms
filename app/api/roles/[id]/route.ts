@@ -46,7 +46,7 @@ export async function PUT(
 
     // Check if role is a system role
     const [existingRoles] = await db.query<RowDataPacket[]>(
-      'SELECT is_system FROM roles WHERE id = ?',
+      'SELECT name, display_name, description, permissions, is_system FROM roles WHERE id = ?',
       [params.id]
     );
 
@@ -54,8 +54,21 @@ export async function PUT(
       return NextResponse.json({ error: 'Role not found' }, { status: 404 });
     }
 
+    // Prevent editing super admin role
+    if (existingRoles[0].name === 'super_admin') {
+      return NextResponse.json({ error: 'Super Administrator role cannot be modified' }, { status: 403 });
+    }
+
     const body = await request.json();
     const { name, display_name, description, permissions } = body;
+
+    // Get role data before update for logging
+    const beforeChanges = {
+      name: existingRoles[0].name,
+      display_name: existingRoles[0].display_name,
+      description: existingRoles[0].description,
+      permissions: existingRoles[0].permissions,
+    };
 
     // System roles can only have their permissions updated
     if (existingRoles[0].is_system) {
@@ -123,7 +136,7 @@ export async function DELETE(
 
     // Check if role is a system role
     const [roles] = await db.query<RowDataPacket[]>(
-      'SELECT is_system FROM roles WHERE id = ?',
+      'SELECT name, display_name, is_system FROM roles WHERE id = ?',
       [params.id]
     );
 
@@ -154,8 +167,8 @@ export async function DELETE(
       action: 'role_deleted',
       entityType: 'role',
       entityId: Number.parseInt(params.id),
-      entityName: role.display_name,
-      details: `Deleted role: ${role.display_name} (${role.name})`,
+      entityName: roles[0].display_name,
+      details: `Deleted role: ${roles[0].display_name} (${roles[0].name})`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
     });

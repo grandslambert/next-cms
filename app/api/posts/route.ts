@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { slugify } from '@/lib/utils';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
@@ -19,13 +19,18 @@ export async function GET(request: NextRequest) {
     const userId = session ? (session.user as any).id : null;
     const permissions = session ? (session.user as any).permissions || {} : {};
     const canViewOthers = permissions.view_others_posts === true;
+    
+    // Get site context
+    const siteId = (session?.user as any)?.currentSiteId || 1;
+    const postsTable = getSiteTable(siteId, 'posts');
+    const mediaTable = getSiteTable(siteId, 'media');
 
     let query = `
       SELECT p.*, CONCAT(u.first_name, ' ', u.last_name) as author_name,
              m.url as featured_image_url, m.sizes as featured_image_sizes
-      FROM posts p 
+      FROM ${postsTable} p 
       LEFT JOIN users u ON p.author_id = u.id
-      LEFT JOIN media m ON p.featured_image_id = m.id
+      LEFT JOIN ${mediaTable} m ON p.featured_image_id = m.id
       WHERE 1=1
     `;
     const params: any[] = [];
@@ -64,7 +69,7 @@ export async function GET(request: NextRequest) {
     const [rows] = await db.query<RowDataPacket[]>(query, params);
 
     // Get total count
-    let countQuery = 'SELECT COUNT(*) as total FROM posts WHERE 1=1';
+    let countQuery = `SELECT COUNT(*) as total FROM ${postsTable} WHERE 1=1`;
     const countParams: any[] = [];
     
     // Only filter by post_type if it's not 'all'
@@ -120,6 +125,9 @@ export async function POST(request: NextRequest) {
     }
 
     const permissions = (session.user as any).permissions || {};
+    const userId = (session.user as any).id;
+    const siteId = (session.user as any).currentSiteId || 1;
+    console.log('📝 [POST CREATE] Creating post in site:', siteId, 'by user:', (session.user as any).email);
 
     // Check if user can publish (required for both immediate and scheduled publishing)
     if ((status === 'published' || status === 'scheduled') && !permissions.can_publish) {
@@ -128,7 +136,7 @@ export async function POST(request: NextRequest) {
 
     // Use custom slug if provided, otherwise generate from title
     const slug = customSlug || slugify(title);
-    const userId = (session.user as any).id;
+    const postsTable = getSiteTable(siteId, 'posts');
     
     // Handle published_at and scheduled_publish_at based on status
     let publishedAt = null;
@@ -144,13 +152,13 @@ export async function POST(request: NextRequest) {
     }
 
     const [result] = await db.query<ResultSetHeader>(
-      `INSERT INTO posts (post_type, title, slug, content, excerpt, featured_image_id, parent_id, menu_order, status, author_id, published_at, scheduled_publish_at)
+      `INSERT INTO ${postsTable} (post_type, title, slug, content, excerpt, featured_image_id, parent_id, menu_order, status, author_id, published_at, scheduled_publish_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [post_type || 'post', title, slug, content || '', excerpt || '', featured_image_id || null, parent_id || null, menu_order || 0, status || 'draft', userId, publishedAt, scheduledPublishAt]
     );
 
     const [newPost] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM posts WHERE id = ?',
+      `SELECT * FROM ${postsTable} WHERE id = ?`,
       [result.insertId]
     );
 
@@ -164,6 +172,7 @@ export async function POST(request: NextRequest) {
       details: `Created ${post_type || 'post'}: "${title}" with status: ${status || 'draft'}`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
+      siteId,
     });
 
     return NextResponse.json({ post: newPost[0] }, { status: 201 });

@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function GET(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    const siteId = (session?.user as any)?.currentSiteId || 1;
+    const settingsTable = getSiteTable(siteId, 'settings');
+    
     const [rows] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM settings'
+      `SELECT * FROM ${settingsTable}`
     );
 
     // Convert to key-value object
@@ -43,6 +47,9 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized - Admin only' }, { status: 401 });
     }
 
+    const siteId = (session.user as any).currentSiteId || 1;
+    const settingsTable = getSiteTable(siteId, 'settings');
+
     const body = await request.json();
     const { settings } = body;
 
@@ -52,7 +59,7 @@ export async function PUT(request: NextRequest) {
 
     // Fetch current settings BEFORE updating (for activity log)
     const [currentRows] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM settings'
+      `SELECT * FROM ${settingsTable}`
     );
 
     const beforeSettings: any = {};
@@ -89,7 +96,7 @@ export async function PUT(request: NextRequest) {
       }
 
       await db.query<ResultSetHeader>(
-        `INSERT INTO settings (setting_key, setting_value, setting_type) 
+        `INSERT INTO ${settingsTable} (setting_key, setting_value, setting_type) 
          VALUES (?, ?, ?)
          ON DUPLICATE KEY UPDATE setting_value = ?, setting_type = ?`,
         [key, settingValue, settingType, settingValue, settingType]
@@ -125,6 +132,7 @@ export async function PUT(request: NextRequest) {
       userAgent: getUserAgent(request),
       changesBefore: Object.keys(changesBefore).length > 0 ? changesBefore : undefined,
       changesAfter: Object.keys(changesAfter).length > 0 ? changesAfter : undefined,
+      siteId,
     });
 
     return NextResponse.json({ success: true });

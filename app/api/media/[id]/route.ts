@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
@@ -10,8 +10,12 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    const session = await getServerSession(authOptions);
+    const siteId = (session?.user as any)?.currentSiteId || 1;
+    const mediaTable = getSiteTable(siteId, 'media');
+    
     const [rows] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM media WHERE id = ?',
+      `SELECT * FROM ${mediaTable} WHERE id = ?`,
       [params.id]
     );
 
@@ -36,12 +40,16 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const userId = (session.user as any).id;
+    const siteId = (session.user as any).currentSiteId || 1;
+    const mediaTable = getSiteTable(siteId, 'media');
+
     const body = await request.json();
     const { title, alt_text } = body;
 
     // Get current values before update
     const [current] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM media WHERE id = ?',
+      `SELECT * FROM ${mediaTable} WHERE id = ?`,
       [params.id]
     );
 
@@ -60,17 +68,16 @@ export async function PUT(
     };
 
     await db.query<ResultSetHeader>(
-      'UPDATE media SET title = ?, alt_text = ? WHERE id = ?',
+      `UPDATE ${mediaTable} SET title = ?, alt_text = ? WHERE id = ?`,
       [title || null, alt_text || null, params.id]
     );
 
     const [updated] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM media WHERE id = ?',
+      `SELECT * FROM ${mediaTable} WHERE id = ?`,
       [params.id]
     );
 
     // Log activity with before/after values
-    const userId = (session.user as any).id;
     await logActivity({
       userId,
       action: 'media_updated',
@@ -82,6 +89,7 @@ export async function PUT(
       changesAfter: after,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
+      siteId,
     });
 
     return NextResponse.json({ media: updated[0] });
@@ -102,13 +110,17 @@ export async function DELETE(
     }
 
     const permissions = (session.user as any).permissions || {};
+    const userId = (session.user as any).id;
+    const siteId = (session.user as any).currentSiteId || 1;
+    const mediaTable = getSiteTable(siteId, 'media');
+    
     if (!permissions.manage_media) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     // Get media info before deleting
     const [media] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM media WHERE id = ?',
+      `SELECT * FROM ${mediaTable} WHERE id = ?`,
       [params.id]
     );
 
@@ -118,12 +130,11 @@ export async function DELETE(
 
     // Soft delete - move to trash
     await db.execute<ResultSetHeader>(
-      'UPDATE media SET deleted_at = NOW() WHERE id = ?',
+      `UPDATE ${mediaTable} SET deleted_at = NOW() WHERE id = ?`,
       [params.id]
     );
 
     // Log activity
-    const userId = (session.user as any).id;
     await logActivity({
       userId,
       action: 'media_trashed',
@@ -133,6 +144,7 @@ export async function DELETE(
       details: `Moved media to trash: ${media[0].original_name || media[0].filename}`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
+      siteId,
     });
 
     return NextResponse.json({ message: 'Media moved to trash successfully' });

@@ -210,8 +210,9 @@ export async function DELETE(
     }
 
     // Check if any posts use this post type
+    const postsTable = getSiteTable(siteId, 'posts');
     const [postCount] = await db.query<RowDataPacket[]>(
-      'SELECT COUNT(*) as count FROM posts WHERE post_type = ?',
+      `SELECT COUNT(*) as count FROM ${postsTable} WHERE post_type = ?`,
       [postType[0].name]
     );
 

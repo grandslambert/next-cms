@@ -7,9 +7,12 @@ import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
 import { cn } from '@/lib/utils';
 import { useState, useEffect } from 'react';
+import SiteSwitcher from './SiteSwitcher';
+import SwitchBackButton from './SwitchBackButton';
 
 const staticMenuItems = [
   { name: 'Dashboard', href: '/admin', icon: '📊', position: 0, permission: 'view_dashboard' },
+  { name: 'Sites', href: '/admin/sites', icon: '🌐', position: 1, superAdminOnly: true },
   { name: 'Media', href: '/admin/media', icon: '🖼️', position: 20, permission: 'manage_media' },
   { 
     name: 'Users', 
@@ -63,20 +66,43 @@ const staticMenuItems = [
   },
 ];
 
-const hasPermission = (permissions: any, requiredPermission: string | undefined): boolean => {
+const hasPermission = (permissions: any, requiredPermission: string | undefined, isSuperAdmin: boolean = false): boolean => {
+  // Super admins bypass all permission checks
+  if (isSuperAdmin) return true;
   if (!requiredPermission) return true; // No permission required
   if (!permissions) return false;
   return permissions[requiredPermission] === true;
 };
 
-const getStaticMenuItemsWithTaxonomies = (taxonomiesData: any, permissions: any) => {
-  const items = [...staticMenuItems].filter(item => hasPermission(permissions, item.permission));
+const getStaticMenuItemsWithTaxonomies = (taxonomiesData: any, permissions: any, isSuperAdmin: boolean) => {
+  // Super admin only sees Sites and Users
+  if (isSuperAdmin) {
+    return [
+      { name: 'Sites', href: '/admin/sites', icon: '🌐', position: 0 },
+      { 
+        name: 'Users', 
+        href: '#',
+        icon: '👥', 
+        position: 1,
+        subItems: [
+          { name: 'All Users', href: '/admin/users', icon: '👤', permission: 'manage_users' },
+          { name: 'Roles', href: '/admin/users/roles', icon: '🎭', permission: 'manage_roles' },
+        ]
+      },
+    ];
+  }
+
+  const items = [...staticMenuItems].filter(item => {
+    // Filter super admin only items
+    if ((item as any).superAdminOnly && !isSuperAdmin) return false;
+    return hasPermission(permissions, item.permission, isSuperAdmin);
+  });
   
   // Filter subitems based on permissions
   const filteredItems = items.map(item => {
     if (item.subItems) {
       const filteredSubItems = item.subItems.filter((subItem: any) => 
-        hasPermission(permissions, subItem.permission)
+        hasPermission(permissions, subItem.permission, isSuperAdmin)
       );
       return { ...item, subItems: filteredSubItems };
     }
@@ -84,7 +110,7 @@ const getStaticMenuItemsWithTaxonomies = (taxonomiesData: any, permissions: any)
   });
   
   // Create Taxonomies submenu if there are taxonomies to show
-  if (taxonomiesData?.taxonomies && hasPermission(permissions, 'manage_taxonomies')) {
+  if (taxonomiesData?.taxonomies && hasPermission(permissions, 'manage_taxonomies', isSuperAdmin)) {
     const taxonomySubItems = taxonomiesData.taxonomies
       .filter((taxonomy: any) => taxonomy.show_in_menu)
       .map((taxonomy: any) => ({
@@ -114,6 +140,8 @@ export default function Sidebar() {
   const [hoverTimeout, setHoverTimeout] = useState<NodeJS.Timeout | null>(null);
   const { data: session } = useSession();
   const permissions = (session?.user as any)?.permissions || {};
+  const isSuperAdmin = (session?.user as any)?.isSuperAdmin || false;
+  const isSwitched = (session?.user as any)?.isSwitched || false;
   
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -143,10 +171,10 @@ export default function Sidebar() {
   });
 
   // Build menu items including custom post types
-  const menuItems = getStaticMenuItemsWithTaxonomies(taxonomiesData, permissions);
+  const menuItems = getStaticMenuItemsWithTaxonomies(taxonomiesData, permissions, isSuperAdmin);
   
-  // Add post types (visible to users with specific post type permissions)
-  if (postTypesData?.postTypes) {
+  // Add post types (visible to users with specific post type permissions, but not super admins)
+  if (!isSuperAdmin && postTypesData?.postTypes) {
     postTypesData.postTypes.forEach((postType: any) => {
       const postTypePermission = `manage_posts_${postType.name}`;
       if (permissions[postTypePermission]) {
@@ -162,7 +190,12 @@ export default function Sidebar() {
   }
 
   // Sort by position
-  menuItems.sort((a, b) => a.position - b.position);
+  if (!isSuperAdmin) {
+    menuItems.sort((a, b) => a.position - b.position);
+  }
+
+  const userName = session?.user?.name || session?.user?.email;
+  const userRole = (session?.user as any)?.role || 'user';
 
   return (
     <aside className="w-64 bg-gray-900 text-white min-h-screen flex flex-col">
@@ -178,6 +211,13 @@ export default function Sidebar() {
           🌐
         </Link>
       </div>
+
+      {/* Site Switcher at top (not shown for super admins) */}
+      {!isSuperAdmin && (
+        <div className="px-4 py-3 border-b border-gray-700">
+          <SiteSwitcher />
+        </div>
+      )}
 
       <nav className="flex-1 px-4">
         <ul className="space-y-2">
@@ -307,7 +347,38 @@ export default function Sidebar() {
         </ul>
       </nav>
 
-      <div className="p-4 border-t border-gray-700">
+              <div className="p-4 border-t border-gray-700">
+                {/* User Info */}
+                <div className="mb-3 px-4 py-3 bg-gray-800 rounded-lg">
+                  {isSwitched && (
+                    <div className="mb-3 px-3 py-2 bg-yellow-900 border border-yellow-700 rounded-lg">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-yellow-300 text-lg">⚠️</span>
+                        <div className="flex-1">
+                          <div className="text-xs font-semibold text-yellow-200">Testing Mode</div>
+                          <div className="text-xs text-yellow-300">Viewing as another user</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex items-center space-x-3">
+                    <div className={`w-10 h-10 rounded-full ${isSwitched ? 'bg-yellow-600' : 'bg-primary-600'} flex items-center justify-center text-white font-semibold flex-shrink-0`}>
+                      {userName?.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-white truncate">{userName}</div>
+                      <div className="text-xs text-gray-400 capitalize">{userRole}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Switch Back Button (when in testing mode) */}
+                {isSwitched && (
+                  <div className="mb-3">
+                    <SwitchBackButton />
+                  </div>
+                )}
+
         <Link
           href="/admin/help"
           className={cn(

@@ -3,6 +3,7 @@ import { getMenuByLocation } from '@/lib/menu-helpers';
 
 interface MenuProps {
   location: string;
+  siteId?: number;
   className?: string;
   itemClassName?: string;
   linkClassName?: string;
@@ -11,12 +12,13 @@ interface MenuProps {
 
 export default async function Menu({
   location,
+  siteId = 1, // Default to site 1 for public-facing menus
   className = '',
   itemClassName = '',
   linkClassName = 'hover:text-primary-600 transition-colors',
   submenuClassName = 'absolute left-0 top-full mt-2 bg-white shadow-lg rounded-lg py-2 min-w-[200px] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10',
 }: MenuProps) {
-  const menuItems = await getMenuByLocation(location);
+  const menuItems = await getMenuByLocation(location, siteId);
 
   if (!menuItems.length) {
     return null;

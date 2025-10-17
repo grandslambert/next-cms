@@ -1,17 +1,18 @@
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
 
 // Build full slug path including parent slugs for hierarchical posts
-export async function buildSlugPath(postId: number | string): Promise<string> {
+export async function buildSlugPath(postId: number | string, siteId: number = 1): Promise<string> {
   try {
     const path: string[] = [];
     let currentId: number | string | null = postId;
     let iterations = 0;
     const maxIterations = 10; // Prevent infinite loops
+    const postsTable = getSiteTable(siteId, 'posts');
     
     while (currentId && iterations < maxIterations) {
       const [rows] = await db.query<RowDataPacket[]>(
-        'SELECT slug, parent_id FROM posts WHERE id = ?',
+        `SELECT slug, parent_id FROM ${postsTable} WHERE id = ?`,
         [currentId]
       );
       
@@ -30,17 +31,21 @@ export async function buildSlugPath(postId: number | string): Promise<string> {
 }
 
 // Get post by full slug path (handles hierarchical slugs)
-export async function getPostByFullPath(segments: string[], postTypeSlug: string = '', year?: string, month?: string, day?: string) {
+export async function getPostByFullPath(segments: string[], postTypeSlug: string = '', year?: string, month?: string, day?: string, siteId: number = 1) {
   try {
+    const postsTable = getSiteTable(siteId, 'posts');
+    const mediaTable = getSiteTable(siteId, 'media');
+    const postTypesTable = getSiteTable(siteId, 'post_types');
+    
     // The last segment is always the final post slug
     const finalSlug = segments[segments.length - 1];
     
     let query = `SELECT p.*, CONCAT(u.first_name, ' ', u.last_name) as author_name,
             m.url as featured_image, m.sizes as featured_image_sizes
-     FROM posts p 
+     FROM ${postsTable} p 
      LEFT JOIN users u ON p.author_id = u.id
-     LEFT JOIN media m ON p.featured_image_id = m.id
-     LEFT JOIN post_types pt ON p.post_type = pt.name
+     LEFT JOIN ${mediaTable} m ON p.featured_image_id = m.id
+     LEFT JOIN ${postTypesTable} pt ON p.post_type = pt.name
      WHERE p.slug = ? 
        AND p.status = 'published'`;
     

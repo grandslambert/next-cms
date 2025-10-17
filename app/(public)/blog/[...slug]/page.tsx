@@ -1,20 +1,27 @@
 import { notFound } from 'next/navigation';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
 import { formatDate } from '@/lib/utils';
 import { getImageUrl } from '@/lib/image-utils';
 
-async function getPost(slug: string, year?: string, month?: string, day?: string) {
+// For public routes, default to site 1 (can be enhanced with domain-based routing later)
+const PUBLIC_SITE_ID = 1;
+
+async function getPost(slug: string, year?: string, month?: string, day?: string, siteId: number = PUBLIC_SITE_ID) {
   try {
+    const postsTable = getSiteTable(siteId, 'posts');
+    const mediaTable = getSiteTable(siteId, 'media');
+    const postTypesTable = getSiteTable(siteId, 'post_types');
+    
     // First try to match with date constraints if provided
     if (year) {
       let query = `SELECT p.*, CONCAT(u.first_name, ' ', u.last_name) as author_name,
               m.url as featured_image, m.sizes as featured_image_sizes,
               pt.url_structure
-       FROM posts p 
+       FROM ${postsTable} p 
        LEFT JOIN users u ON p.author_id = u.id
-       LEFT JOIN media m ON p.featured_image_id = m.id
-       LEFT JOIN post_types pt ON p.post_type = pt.name
+       LEFT JOIN ${mediaTable} m ON p.featured_image_id = m.id
+       LEFT JOIN ${postTypesTable} pt ON p.post_type = pt.name
        WHERE p.slug = ? 
          AND p.post_type = 'post'
          AND p.status = 'published'
@@ -41,10 +48,10 @@ async function getPost(slug: string, year?: string, month?: string, day?: string
       `SELECT p.*, CONCAT(u.first_name, ' ', u.last_name) as author_name,
               m.url as featured_image, m.sizes as featured_image_sizes,
               pt.url_structure
-       FROM posts p 
+       FROM ${postsTable} p 
        LEFT JOIN users u ON p.author_id = u.id
-       LEFT JOIN media m ON p.featured_image_id = m.id
-       LEFT JOIN post_types pt ON p.post_type = pt.name
+       LEFT JOIN ${mediaTable} m ON p.featured_image_id = m.id
+       LEFT JOIN ${postTypesTable} pt ON p.post_type = pt.name
        WHERE p.slug = ? 
          AND p.post_type = 'post'
          AND pt.url_structure = 'default'

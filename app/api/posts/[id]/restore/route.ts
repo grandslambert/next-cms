@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function POST(
@@ -17,10 +17,15 @@ export async function POST(
 
     const userId = (session.user as any).id;
     const permissions = (session.user as any).permissions || {};
+    const isSuperAdmin = (session.user as any)?.isSuperAdmin || false;
+    const siteId = (session.user as any).currentSiteId || 1;
+    
+    // Get site-prefixed table name
+    const postsTable = getSiteTable(siteId, 'posts');
 
     // Check if post exists and get author
     const [existingPost] = await db.query<RowDataPacket[]>(
-      'SELECT author_id, post_type, status, title FROM posts WHERE id = ?',
+      `SELECT author_id, post_type, status, title FROM ${postsTable} WHERE id = ?`,
       [params.id]
     );
 
@@ -34,9 +39,9 @@ export async function POST(
       return NextResponse.json({ error: 'Post is not in trash' }, { status: 400 });
     }
 
-    const isOwner = post.author_id === parseInt(userId);
-    const canDelete = permissions.can_delete === true;
-    const canDeleteOthers = permissions.can_delete_others === true;
+    const isOwner = post.author_id === Number.parseInt(userId);
+    const canDelete = isSuperAdmin || permissions.can_delete === true;
+    const canDeleteOthers = isSuperAdmin || permissions.can_delete_others === true;
 
     // Check if user can restore this post (same permissions as delete)
     if (isOwner && !canDelete) {
@@ -49,7 +54,7 @@ export async function POST(
 
     // Restore post to draft status
     await db.query<ResultSetHeader>(
-      'UPDATE posts SET status = ? WHERE id = ?',
+      `UPDATE ${postsTable} SET status = ? WHERE id = ?`,
       ['draft', params.id]
     );
 
@@ -58,6 +63,7 @@ export async function POST(
       userId: Number.parseInt(userId),
       action: 'post_restored',
       entityType: 'post',
+      siteId,
       entityId: Number.parseInt(params.id),
       entityName: post.title,
       details: `Restored ${post.post_type} from trash: "${post.title}"`,

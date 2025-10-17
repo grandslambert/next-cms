@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { unlink } from 'fs/promises';
 import path from 'path';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
@@ -17,13 +17,18 @@ export async function DELETE(
     }
 
     const permissions = (session.user as any).permissions || {};
+    const siteId = (session.user as any).currentSiteId || 1;
+    const mediaTable = getSiteTable(siteId, 'media');
+    const postsTable = getSiteTable(siteId, 'posts');
+    const termsTable = getSiteTable(siteId, 'terms');
+    
     if (!permissions.manage_media) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     // Get media info
     const [rows] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM media WHERE id = ? AND deleted_at IS NOT NULL',
+      `SELECT * FROM ${mediaTable} WHERE id = ? AND deleted_at IS NOT NULL`,
       [params.id]
     );
 
@@ -35,11 +40,11 @@ export async function DELETE(
 
     // Check usage before permanent deletion
     const [postCount] = await db.query<RowDataPacket[]>(
-      'SELECT COUNT(*) as count FROM posts WHERE featured_image_id = ?',
+      `SELECT COUNT(*) as count FROM ${postsTable} WHERE featured_image_id = ?`,
       [params.id]
     );
     const [termCount] = await db.query<RowDataPacket[]>(
-      'SELECT COUNT(*) as count FROM terms WHERE image_id = ?',
+      `SELECT COUNT(*) as count FROM ${termsTable} WHERE image_id = ?`,
       [params.id]
     );
 
@@ -76,7 +81,7 @@ export async function DELETE(
     }
 
     // Permanently delete from database (foreign keys will automatically clear references)
-    await db.query<ResultSetHeader>('DELETE FROM media WHERE id = ?', [params.id]);
+    await db.query<ResultSetHeader>(`DELETE FROM ${mediaTable} WHERE id = ?`, [params.id]);
 
     return NextResponse.json({ 
       success: true,

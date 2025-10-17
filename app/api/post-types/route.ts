@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function GET() {
   try {
+    const session = await getServerSession(authOptions);
+    const siteId = (session?.user as any)?.currentSiteId || 1;
+    const postTypesTable = getSiteTable(siteId, 'post_types');
+    
     const [rows] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM post_types ORDER BY menu_position ASC, name ASC'
+      `SELECT * FROM ${postTypesTable} ORDER BY menu_position ASC, name ASC`
     );
     
     // Parse JSON supports field
@@ -31,6 +35,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized - Admin only' }, { status: 401 });
     }
 
+    const siteId = (session.user as any).currentSiteId || 1;
+    const postTypesTable = getSiteTable(siteId, 'post_types');
+
     const body = await request.json();
     const { name, slug, label, singular_label, description, icon, url_structure, supports, menu_position, show_in_dashboard, hierarchical } = body;
 
@@ -49,7 +56,7 @@ export async function POST(request: NextRequest) {
     const postTypeSlug = slug || name;
 
     const [result] = await db.query<ResultSetHeader>(
-      `INSERT INTO post_types (name, slug, label, singular_label, description, icon, url_structure, supports, show_in_dashboard, hierarchical, menu_position)
+      `INSERT INTO ${postTypesTable} (name, slug, label, singular_label, description, icon, url_structure, supports, show_in_dashboard, hierarchical, menu_position)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         name,
@@ -67,7 +74,7 @@ export async function POST(request: NextRequest) {
     );
 
     const [newPostType] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM post_types WHERE id = ?',
+      `SELECT * FROM ${postTypesTable} WHERE id = ?`,
       [result.insertId]
     );
 
@@ -82,6 +89,7 @@ export async function POST(request: NextRequest) {
       details: `Created post type: ${label} (${name})`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
+      siteId,
     });
 
     return NextResponse.json({ 

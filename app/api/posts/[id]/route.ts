@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { slugify } from '@/lib/utils';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
@@ -11,12 +11,17 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    const session = await getServerSession(authOptions);
+    const siteId = (session?.user as any)?.currentSiteId || 1;
+    const postsTable = getSiteTable(siteId, 'posts');
+    const mediaTable = getSiteTable(siteId, 'media');
+    
     const [rows] = await db.query<RowDataPacket[]>(
       `SELECT p.*, CONCAT(u.first_name, ' ', u.last_name) as author_name,
               m.url as featured_image_url, m.sizes as featured_image_sizes
-       FROM posts p 
+       FROM ${postsTable} p 
        LEFT JOIN users u ON p.author_id = u.id
-       LEFT JOIN media m ON p.featured_image_id = m.id
+       LEFT JOIN ${mediaTable} m ON p.featured_image_id = m.id
        WHERE p.id = ?`,
       [params.id]
     );
@@ -44,10 +49,15 @@ export async function PUT(
 
     const userId = (session.user as any).id;
     const permissions = (session.user as any).permissions || {};
+    const siteId = (session.user as any).currentSiteId || 1;
+    const postsTable = getSiteTable(siteId, 'posts');
+    const postMetaTable = getSiteTable(siteId, 'post_meta');
+    const postRevisionsTable = getSiteTable(siteId, 'post_revisions');
+    const settingsTable = getSiteTable(siteId, 'settings');
 
     // Check if post exists and get author + current content for revision
     const [existingPost] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM posts WHERE id = ?',
+      `SELECT * FROM ${postsTable} WHERE id = ?`,
       [params.id]
     );
 
@@ -113,16 +123,16 @@ export async function PUT(
 
     // Get max_revisions setting
     const [settingsResult] = await db.query<RowDataPacket[]>(
-      'SELECT setting_value FROM settings WHERE setting_key = ?',
+      `SELECT setting_value FROM ${settingsTable} WHERE setting_key = ?`,
       ['max_revisions']
     );
-    const maxRevisions = settingsResult.length > 0 ? parseInt(settingsResult[0].setting_value) : 10;
+    const maxRevisions = settingsResult.length > 0 ? Number.parseInt(settingsResult[0].setting_value) : 10;
 
     // Save revision before updating (only if revisions are enabled)
     if (maxRevisions > 0) {
       // Get current custom fields
       const [currentMeta] = await db.query<RowDataPacket[]>(
-        'SELECT meta_key, meta_value FROM post_meta WHERE post_id = ?',
+        `SELECT meta_key, meta_value FROM ${postMetaTable} WHERE post_id = ?`,
         [params.id]
       );
       
@@ -132,17 +142,17 @@ export async function PUT(
       });
 
       await db.query<ResultSetHeader>(
-        'INSERT INTO post_revisions (post_id, title, content, excerpt, custom_fields, author_id) VALUES (?, ?, ?, ?, ?, ?)',
+        `INSERT INTO ${postRevisionsTable} (post_id, title, content, excerpt, custom_fields, author_id) VALUES (?, ?, ?, ?, ?, ?)`,
         [params.id, post.title, post.content, post.excerpt, JSON.stringify(customFieldsObj), userId]
       );
 
       // Clean up old revisions - keep only the most recent maxRevisions
       await db.query<ResultSetHeader>(
-        `DELETE FROM post_revisions 
+        `DELETE FROM ${postRevisionsTable} 
          WHERE post_id = ? 
          AND id NOT IN (
            SELECT id FROM (
-             SELECT id FROM post_revisions 
+             SELECT id FROM ${postRevisionsTable} 
              WHERE post_id = ? 
              ORDER BY created_at DESC 
              LIMIT ?
@@ -153,12 +163,12 @@ export async function PUT(
     }
 
     await db.query<ResultSetHeader>(
-      `UPDATE posts SET ${updateFields.join(', ')} WHERE id = ?`,
+      `UPDATE ${postsTable} SET ${updateFields.join(', ')} WHERE id = ?`,
       updateValues
     );
 
     const [updatedPost] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM posts WHERE id = ?',
+      `SELECT * FROM ${postsTable} WHERE id = ?`,
       [params.id]
     );
 
@@ -196,6 +206,7 @@ export async function PUT(
       },
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
+      siteId,
     });
 
     return NextResponse.json({ post: updatedPost[0] });
@@ -220,10 +231,12 @@ export async function DELETE(
 
     const userId = (session.user as any).id;
     const permissions = (session.user as any).permissions || {};
+    const siteId = (session.user as any).currentSiteId || 1;
+    const postsTable = getSiteTable(siteId, 'posts');
 
     // Check if post exists and get author
     const [existingPost] = await db.query<RowDataPacket[]>(
-      'SELECT author_id, post_type FROM posts WHERE id = ?',
+      `SELECT author_id, post_type, title FROM ${postsTable} WHERE id = ?`,
       [params.id]
     );
 
@@ -232,7 +245,7 @@ export async function DELETE(
     }
 
     const post = existingPost[0];
-    const isOwner = post.author_id === parseInt(userId);
+    const isOwner = post.author_id === Number.parseInt(userId);
     const canDelete = permissions.can_delete === true;
     const canDeleteOthers = permissions.can_delete_others === true;
 
@@ -247,7 +260,7 @@ export async function DELETE(
 
     // Move post to trash instead of permanently deleting
     await db.query<ResultSetHeader>(
-      'UPDATE posts SET status = ? WHERE id = ?',
+      `UPDATE ${postsTable} SET status = ? WHERE id = ?`,
       ['trash', params.id]
     );
 
@@ -261,6 +274,7 @@ export async function DELETE(
       details: `Moved ${post.post_type} to trash: "${post.title}"`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
+      siteId,
     });
 
     return NextResponse.json({ success: true, message: 'Post moved to trash' });

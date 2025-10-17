@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
@@ -9,10 +9,12 @@ export async function GET() {
   try {
     // Note: This endpoint is public (no auth check) because it's used on the login page
     // Only safe settings (hide_default_user, password requirements) are exposed
+    // Use default site (site 1) for authentication settings on login page
+    const settingsTable = getSiteTable(1, 'settings');
     
     // Fetch authentication settings
     const [settings] = await db.query<RowDataPacket[]>(
-      `SELECT setting_key, setting_value FROM settings 
+      `SELECT setting_key, setting_value FROM ${settingsTable} 
        WHERE setting_key IN (
          'auth_hide_default_user',
          'password_min_length',
@@ -73,8 +75,9 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const isSuperAdmin = (session.user as any)?.isSuperAdmin || false;
     const userPermissions = (session.user as any).permissions || {};
-    if (!userPermissions.manage_settings) {
+    if (!isSuperAdmin && !userPermissions.manage_settings) {
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
     }
 
@@ -88,6 +91,10 @@ export async function PUT(request: NextRequest) {
       );
     }
 
+    // Get site ID for multi-site support
+    const siteId = (session.user as any).currentSiteId || 1;
+    const settingsTable = getSiteTable(siteId, 'settings');
+
     // Save each setting
     const settingsToSave = [
       { key: 'auth_hide_default_user', value: body.hide_default_user ? '1' : '0' },
@@ -100,7 +107,7 @@ export async function PUT(request: NextRequest) {
 
     for (const setting of settingsToSave) {
       await db.query(
-        'INSERT INTO settings (setting_key, setting_value, setting_type) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)',
+        `INSERT INTO ${settingsTable} (setting_key, setting_value, setting_type) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)`,
         [setting.key, setting.value, 'string']
       );
     }
@@ -115,6 +122,7 @@ export async function PUT(request: NextRequest) {
       details: 'Updated authentication and password requirements',
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
+      siteId,
     });
 
     return NextResponse.json({ success: true });

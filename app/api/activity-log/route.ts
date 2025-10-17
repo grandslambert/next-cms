@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,6 +11,8 @@ export async function GET(request: NextRequest) {
     }
 
     const permissions = (session.user as any).permissions || {};
+    const siteId = (session.user as any).currentSiteId || 1;
+    const activityLogTable = getSiteTable(siteId, 'activity_log');
     
     // Only admins can view activity logs (or users with manage_users permission)
     if (!permissions.manage_users) {
@@ -55,7 +57,7 @@ export async function GET(request: NextRequest) {
 
     // Get total count
     const [countResult] = await db.query<any[]>(
-      `SELECT COUNT(*) as total FROM activity_log al ${whereClause}`,
+      `SELECT COUNT(*) as total FROM ${activityLogTable} al ${whereClause}`,
       params
     );
     const total = countResult[0].total;
@@ -67,7 +69,7 @@ export async function GET(request: NextRequest) {
         u.username,
         u.first_name,
         u.last_name
-       FROM activity_log al
+       FROM ${activityLogTable} al
        LEFT JOIN users u ON al.user_id = u.id
        ${whereClause}
        ORDER BY al.created_at DESC

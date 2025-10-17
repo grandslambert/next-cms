@@ -1,13 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { slugify } from '@/lib/utils';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function GET(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    const siteId = (session?.user as any)?.currentSiteId || 1;
+    const termsTable = getSiteTable(siteId, 'terms');
+    const taxonomiesTable = getSiteTable(siteId, 'taxonomies');
+    const mediaTable = getSiteTable(siteId, 'media');
+    
     const searchParams = request.nextUrl.searchParams;
     const taxonomyId = searchParams.get('taxonomy_id');
     const taxonomyName = searchParams.get('taxonomy');
@@ -15,9 +21,9 @@ export async function GET(request: NextRequest) {
     let query = `
       SELECT t.*, tax.name as taxonomy_name, tax.hierarchical,
              m.url as image_url, m.sizes as image_sizes
-      FROM terms t
-      INNER JOIN taxonomies tax ON t.taxonomy_id = tax.id
-      LEFT JOIN media m ON t.image_id = m.id
+      FROM ${termsTable} t
+      INNER JOIN ${taxonomiesTable} tax ON t.taxonomy_id = tax.id
+      LEFT JOIN ${mediaTable} m ON t.image_id = m.id
     `;
     const params: any[] = [];
 
@@ -47,6 +53,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const userId = (session.user as any).id;
+    const siteId = (session.user as any).currentSiteId || 1;
+    const termsTable = getSiteTable(siteId, 'terms');
+    const taxonomiesTable = getSiteTable(siteId, 'taxonomies');
+    const mediaTable = getSiteTable(siteId, 'media');
+
     const body = await request.json();
     const { taxonomy_id, name, description, image_id, parent_id } = body;
 
@@ -58,7 +70,7 @@ export async function POST(request: NextRequest) {
 
     // Check if slug already exists for this taxonomy
     const [existing] = await db.query<RowDataPacket[]>(
-      'SELECT id FROM terms WHERE taxonomy_id = ? AND slug = ?',
+      `SELECT id FROM ${termsTable} WHERE taxonomy_id = ? AND slug = ?`,
       [taxonomy_id, slug]
     );
 
@@ -69,7 +81,7 @@ export async function POST(request: NextRequest) {
     }
 
     const [result] = await db.query<ResultSetHeader>(
-      `INSERT INTO terms (taxonomy_id, name, slug, description, image_id, parent_id)
+      `INSERT INTO ${termsTable} (taxonomy_id, name, slug, description, image_id, parent_id)
        VALUES (?, ?, ?, ?, ?, ?)`,
       [taxonomy_id, name, slug, description || '', image_id || null, parent_id || null]
     );
@@ -77,15 +89,14 @@ export async function POST(request: NextRequest) {
     const [newTerm] = await db.query<RowDataPacket[]>(
       `SELECT t.*, tax.name as taxonomy_name, tax.hierarchical,
               m.url as image_url, m.sizes as image_sizes
-       FROM terms t
-       INNER JOIN taxonomies tax ON t.taxonomy_id = tax.id
-       LEFT JOIN media m ON t.image_id = m.id
+       FROM ${termsTable} t
+       INNER JOIN ${taxonomiesTable} tax ON t.taxonomy_id = tax.id
+       LEFT JOIN ${mediaTable} m ON t.image_id = m.id
        WHERE t.id = ?`,
       [result.insertId]
     );
 
     // Log activity
-    const userId = (session.user as any).id;
     await logActivity({
       userId,
       action: 'term_created',
@@ -95,6 +106,7 @@ export async function POST(request: NextRequest) {
       details: `Created term: ${name} in ${newTerm[0].taxonomy_name}`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
+      siteId,
     });
 
     return NextResponse.json({ term: newTerm[0] }, { status: 201 });

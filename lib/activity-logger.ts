@@ -1,4 +1,4 @@
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { ResultSetHeader } from 'mysql2';
 
 export type ActivityAction = 
@@ -39,6 +39,7 @@ interface LogActivityParams {
   changesAfter?: Record<string, any> | null;
   ipAddress?: string | null;
   userAgent?: string | null;
+  siteId?: number; // Site context for multi-site support
 }
 
 export async function logActivity({
@@ -52,6 +53,7 @@ export async function logActivity({
   changesAfter = null,
   ipAddress = null,
   userAgent = null,
+  siteId = 1, // Default to site 1 for backwards compatibility
 }: LogActivityParams): Promise<void> {
   try {
     // Convert details to JSON string if it's an object
@@ -63,8 +65,11 @@ export async function logActivity({
     const changesBeforeStr = changesBefore ? JSON.stringify(changesBefore) : null;
     const changesAfterStr = changesAfter ? JSON.stringify(changesAfter) : null;
 
+    // Use site-specific activity log table
+    const activityLogTable = getSiteTable(siteId, 'activity_log');
+
     await db.execute<ResultSetHeader>(
-      `INSERT INTO activity_log (user_id, action, entity_type, entity_id, entity_name, details, changes_before, changes_after, ip_address, user_agent)
+      `INSERT INTO ${activityLogTable} (user_id, action, entity_type, entity_id, entity_name, details, changes_before, changes_after, ip_address, user_agent)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [userId, action, entityType, entityId, entityName, detailsStr, changesBeforeStr, changesAfterStr, ipAddress, userAgent]
     );

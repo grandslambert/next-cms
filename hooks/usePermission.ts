@@ -6,12 +6,18 @@ export function usePermission(requiredPermission: string | string[], redirectTo:
   const { data: session, status } = useSession();
   const router = useRouter();
   const permissions = (session?.user as any)?.permissions || {};
+  const isSuperAdmin = (session?.user as any)?.isSuperAdmin || false;
 
   useEffect(() => {
     if (status === 'loading') return;
 
     if (!session) {
       router.push('/admin/login');
+      return;
+    }
+
+    // Super admin always has permission
+    if (isSuperAdmin) {
       return;
     }
 
@@ -22,15 +28,19 @@ export function usePermission(requiredPermission: string | string[], redirectTo:
     if (!hasPermission) {
       router.push(redirectTo);
     }
-  }, [session, status, permissions, requiredPermission, redirectTo, router]);
+  }, [session, status, permissions, requiredPermission, redirectTo, router, isSuperAdmin]);
 
-  const hasPermission = Array.isArray(requiredPermission)
-    ? requiredPermission.some(perm => permissions[perm] === true)
-    : permissions[requiredPermission] === true;
+  // Super admin always has permission
+  const hasPermission = isSuperAdmin || (
+    Array.isArray(requiredPermission)
+      ? requiredPermission.some(perm => permissions[perm] === true)
+      : permissions[requiredPermission] === true
+  );
 
   return {
     hasPermission,
     permissions,
+    isSuperAdmin,
     isLoading: status === 'loading',
   };
 }

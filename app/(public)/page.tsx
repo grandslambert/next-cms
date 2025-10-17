@@ -1,13 +1,17 @@
 import Link from 'next/link';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
 import { formatDate, truncate } from '@/lib/utils';
 import { getImageUrl } from '@/lib/image-utils';
 import { buildPostUrls } from '@/lib/post-url-builder';
 
-async function getSettings() {
+// For public routes, default to site 1 (can be enhanced with domain-based routing later)
+const PUBLIC_SITE_ID = 1;
+
+async function getSettings(siteId: number = PUBLIC_SITE_ID) {
   try {
-    const [rows] = await db.query<RowDataPacket[]>('SELECT * FROM settings');
+    const settingsTable = getSiteTable(siteId, 'settings');
+    const [rows] = await db.query<RowDataPacket[]>(`SELECT * FROM ${settingsTable}`);
     const settings: any = {};
     rows.forEach((row: any) => {
       settings[row.setting_key] = row.setting_value;
@@ -22,16 +26,20 @@ async function getSettings() {
   }
 }
 
-async function getRecentPosts() {
+async function getRecentPosts(siteId: number = PUBLIC_SITE_ID) {
   try {
+    const postsTable = getSiteTable(siteId, 'posts');
+    const mediaTable = getSiteTable(siteId, 'media');
+    const postTypesTable = getSiteTable(siteId, 'post_types');
+    
     const [rows] = await db.query<RowDataPacket[]>(
       `SELECT p.*, CONCAT(u.first_name, ' ', u.last_name) as author_name,
               m.url as featured_image, m.sizes as featured_image_sizes,
               pt.url_structure, pt.hierarchical, pt.slug as post_type_slug
-       FROM posts p 
+       FROM ${postsTable} p 
        LEFT JOIN users u ON p.author_id = u.id
-       LEFT JOIN media m ON p.featured_image_id = m.id
-       LEFT JOIN post_types pt ON p.post_type = pt.name
+       LEFT JOIN ${mediaTable} m ON p.featured_image_id = m.id
+       LEFT JOIN ${postTypesTable} pt ON p.post_type = pt.name
        WHERE p.status = 'published'
        ORDER BY p.published_at DESC
        LIMIT 6`
@@ -45,7 +53,7 @@ async function getRecentPosts() {
 
 export default async function HomePage() {
   const posts = await getRecentPosts();
-  const postsWithUrls = await buildPostUrls(posts);
+  const postsWithUrls = await buildPostUrls(posts, PUBLIC_SITE_ID);
   const settings = await getSettings();
 
   return (
