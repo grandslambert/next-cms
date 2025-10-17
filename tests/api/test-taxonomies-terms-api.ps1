@@ -2,16 +2,21 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "Taxonomies & Terms API - Test Suite" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 
+# Load environment variables from .env file
+. (Join-Path $PSScriptRoot "load-env.ps1")
+
 # Configuration
 $baseUrl = "http://localhost:3000/api/v1"
 $testUser = $env:TEST_USER
 $testPass = $env:TEST_PASS
 
 if (-not $testUser -or -not $testPass) {
-    Write-Host "ERROR: TEST_USER and TEST_PASS environment variables must be set" -ForegroundColor Red
-    Write-Host "Set them with:" -ForegroundColor Yellow
-    Write-Host '  $env:TEST_USER = "your_username"' -ForegroundColor Yellow
-    Write-Host '  $env:TEST_PASS = "your_password"' -ForegroundColor Yellow
+    Write-Host "`nERROR: TEST_USER and TEST_PASS must be configured" -ForegroundColor Red
+    Write-Host "`nOptions:" -ForegroundColor Yellow
+    Write-Host "  1. Add TEST_USER and TEST_PASS to your .env file" -ForegroundColor Gray
+    Write-Host "  2. Set environment variables:" -ForegroundColor Gray
+    Write-Host '     $env:TEST_USER = "your_username"' -ForegroundColor Gray
+    Write-Host '     $env:TEST_PASS = "your_password"' -ForegroundColor Gray
     exit 1
 }
 

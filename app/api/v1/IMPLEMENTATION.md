@@ -125,14 +125,85 @@ curl http://localhost:3000/api/v1/health
 - [x] Activity logging for all operations
 - [x] Multi-site awareness
 
-## 🚧 Next Steps
+## ✅ Phase 4: Taxonomies & Terms API (COMPLETED)
 
-### Phase 4: Additional Content Endpoints
-- [ ] Pages API
-- [ ] Media API
-- [ ] Taxonomies API
-- [ ] Terms API
-- [ ] Menus API
+### Taxonomies API - Implemented
+- [x] List taxonomies (`GET /api/v1/taxonomies`)
+- [x] Get single taxonomy (`GET /api/v1/taxonomies/:id`)
+- [x] Create taxonomy (`POST /api/v1/taxonomies`)
+- [x] Update taxonomy (`PUT /api/v1/taxonomies/:id`)
+- [x] Partial update taxonomy (`PATCH /api/v1/taxonomies/:id`)
+- [x] Delete taxonomy (`DELETE /api/v1/taxonomies/:id`)
+- [x] Term count for each taxonomy
+- [x] Associated post types retrieval
+- [x] Protection for default taxonomies (category, tag)
+- [x] Permission checking (`manage_taxonomies`)
+- [x] Activity logging
+
+### Terms API - Implemented
+- [x] List terms (`GET /api/v1/terms`)
+- [x] Get single term (`GET /api/v1/terms/:id`)
+- [x] Create term (`POST /api/v1/terms`)
+- [x] Update term (`PUT /api/v1/terms/:id`)
+- [x] Partial update term (`PATCH /api/v1/terms/:id`)
+- [x] Delete term (`DELETE /api/v1/terms/:id`)
+- [x] Filter by taxonomy (ID or name)
+- [x] Filter by parent (hierarchical support)
+- [x] Search in name and description
+- [x] Relationship includes (parent, children, image, meta, posts)
+- [x] Automatic slug generation
+- [x] Meta fields support
+- [x] Hierarchical parent-child relationships
+- [x] Children deletion protection
+- [x] Permission checking (`manage_taxonomies`)
+- [x] Activity logging
+
+## ✅ Phase 4 (Part 2): Additional Content Endpoints (COMPLETED)
+
+### Media API - Completed
+- [x] List media (`GET /api/v1/media`)
+- [x] Get single media (`GET /api/v1/media/:id`)
+- [x] Update media metadata (`PATCH /api/v1/media/:id`)
+- [x] Delete media (`DELETE /api/v1/media/:id`)
+- [x] Restore from trash (`POST /api/v1/media/:id/restore`)
+- [x] Filter by mime type and folder
+- [x] Filter by mime category (image, video, audio, document)
+- [x] Search functionality (filename, title, alt_text)
+- [x] Trash management (soft delete with deleted_at)
+- [x] Usage tracking (posts and terms)
+- [x] Force delete option
+- [x] Permanent delete for trashed items
+- [x] Include uploader, folder, and usage info
+- [x] Permission checking (`manage_media`)
+- [x] Activity logging
+
+### Pages API - Not Needed
+Pages are handled by the Posts API with `post_type=page`. No separate endpoint needed.
+- Use `GET /api/v1/posts?post_type=page` to list pages
+- Use `POST /api/v1/posts` with `"post_type": "page"` to create pages
+- All other Posts API operations work for pages
+
+### Menus API - Completed
+- [x] List menus (`GET /api/v1/menus`)
+- [x] Get single menu (`GET /api/v1/menus/:id`)
+- [x] Create menu (`POST /api/v1/menus`)
+- [x] Update menu (`PUT /api/v1/menus/:id`)
+- [x] Partial update menu (`PATCH /api/v1/menus/:id`)
+- [x] Delete menu (`DELETE /api/v1/menus/:id`)
+- [x] Hierarchical menu item structure
+- [x] Create menu item (`POST /api/v1/menus/:id/items`)
+- [x] Get menu item (`GET /api/v1/menus/:id/items/:itemId`)
+- [x] Update menu item (`PATCH /api/v1/menus/:id/items/:itemId`)
+- [x] Delete menu item (`DELETE /api/v1/menus/:id/items/:itemId`)
+- [x] Reorder menu items (`PUT /api/v1/menus/:id/items`)
+- [x] Menu item types (post, post_type, taxonomy, term, custom)
+- [x] Menu item meta fields
+- [x] Parent-child relationships for nested menus
+- [x] Protection for items with children
+- [x] Permission checking (`manage_menus`)
+- [x] Activity logging
+
+## 🚧 Phase 5: User Management API (NEXT)
 
 ### Phase 5: User Management API
 - [ ] List users

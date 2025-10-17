@@ -5,34 +5,32 @@ All notable changes to Next CMS will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.3.1] - 2025-10-17
-
-### Added
-- **Taxonomies API** - Complete CRUD operations for taxonomy management
-  - List taxonomies with term counts
-  - Get single taxonomy with associated post types
-  - Create, update (PUT/PATCH), and delete taxonomies
-  - Protection for default taxonomies (category, tag)
-  - Permission checking and activity logging
-- **Terms API** - Complete CRUD operations for taxonomy terms
-  - List terms with filtering by taxonomy, parent, and search
-  - Get single term with relationships (parent, children, image, meta, posts)
-  - Create terms with meta fields and hierarchical support
-  - Update terms (PUT/PATCH) with slug uniqueness validation
-  - Delete terms with children protection
-  - Automatic slug generation from name
-  - Meta fields support via `site_X_term_meta` table
+## [2.3.2] - 2025-10-17
 
 ### Changed
-- **Authentication Middleware** - Enhanced permission handling
-  - Added `permissions` object to `AuthenticatedRequest` user interface
-  - Permissions now loaded from user's role during authentication
-  - Both JWT and API key authentication include permissions
+- **Test Suite Organization** - Reorganized API test scripts
+  - Moved all test scripts to `tests/api/` directory
+  - Created `load-env.ps1` helper to automatically load credentials from `.env` file
+  - Tests now support loading from `.env` for local development
+  - Environment variables take precedence over `.env` file
+  - Updated all test scripts to use centralized environment loading
+
+### Added
+- **Test Infrastructure**
+  - `run-all-tests.ps1` - Master test runner for all API test suites
+  - `load-env.ps1` - Environment variable loader with `.env` file support
+  - Comprehensive `README.md` in `tests/api/` with setup instructions
+  - Support for both local `.env` configuration and CI/CD environment variables
 
 ### Documentation
-- Complete API documentation for Taxonomies (`/api/v1/taxonomies/README.md`)
-- Complete API documentation for Terms (`/api/v1/terms/README.md`)
-- PowerShell test suite with 20 comprehensive tests
+- Complete test suite documentation in `tests/api/README.md`
+- Setup instructions with multiple configuration options
+- Troubleshooting guide for common test issues
+- CI/CD integration examples
+
+## [2.3.1] - 2025-10-17
+
+See [changelog/v2.3.1.md](changelog/v2.3.1.md) for details.
 
 ## [2.3.0] - 2025-10-17
 
