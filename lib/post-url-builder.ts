@@ -1,14 +1,15 @@
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
 
 // Helper function to build hierarchical slug path
-async function buildHierarchicalSlugPath(postId: number): Promise<string> {
+async function buildHierarchicalSlugPath(postId: number, siteId: number = 1): Promise<string> {
   const slugs: string[] = [];
   let currentId: number | null = postId;
+  const postsTable = getSiteTable(siteId, 'posts');
 
   while (currentId) {
     const [rows] = await db.query<RowDataPacket[]>(
-      'SELECT slug, parent_id FROM posts WHERE id = ?',
+      `SELECT slug, parent_id FROM ${postsTable} WHERE id = ?`,
       [currentId]
     );
 
@@ -25,16 +26,17 @@ async function buildHierarchicalSlugPath(postId: number): Promise<string> {
 /**
  * Build the correct URL for a post based on its post type's URL structure
  * @param post - Post object with url_structure, hierarchical, published_at, slug, post_type_slug
+ * @param siteId - Site ID for multi-site support
  * @returns The properly formatted URL
  */
-export async function buildPostUrl(post: any): Promise<string> {
+export async function buildPostUrl(post: any, siteId: number = 1): Promise<string> {
   const urlStructure = post.url_structure || 'default';
   const isHierarchical = post.hierarchical === 1 || post.hierarchical === true;
   
   // For hierarchical post types, build the full slug path
   let slug = post.slug;
   if (isHierarchical) {
-    slug = await buildHierarchicalSlugPath(post.id);
+    slug = await buildHierarchicalSlugPath(post.id, siteId);
     // Hierarchical posts always use just the slug path
     return `/${slug}`;
   }
@@ -73,13 +75,14 @@ export async function buildPostUrl(post: any): Promise<string> {
 /**
  * Build URLs for an array of posts
  * @param posts - Array of post objects
+ * @param siteId - Site ID for multi-site support
  * @returns Array of posts with 'url' property added
  */
-export async function buildPostUrls(posts: any[]): Promise<any[]> {
+export async function buildPostUrls(posts: any[], siteId: number = 1): Promise<any[]> {
   return await Promise.all(
     posts.map(async (post: any) => ({
       ...post,
-      url: await buildPostUrl(post),
+      url: await buildPostUrl(post, siteId),
     }))
   );
 }

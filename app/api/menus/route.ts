@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
@@ -13,12 +13,15 @@ export async function GET() {
     }
 
     const permissions = (session.user as any).permissions || {};
+    const siteId = (session.user as any).currentSiteId || 1;
+    const menusTable = getSiteTable(siteId, 'menus');
+    
     if (!permissions.manage_menus) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const [rows] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM menus ORDER BY name ASC'
+      `SELECT * FROM ${menusTable} ORDER BY name ASC`
     );
 
     return NextResponse.json({ menus: rows });
@@ -36,6 +39,10 @@ export async function POST(request: NextRequest) {
     }
 
     const permissions = (session.user as any).permissions || {};
+    const userId = (session.user as any).id;
+    const siteId = (session.user as any).currentSiteId || 1;
+    const menusTable = getSiteTable(siteId, 'menus');
+    
     if (!permissions.manage_menus) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
@@ -48,17 +55,16 @@ export async function POST(request: NextRequest) {
     }
 
     const [result] = await db.query<ResultSetHeader>(
-      'INSERT INTO menus (name, location, description) VALUES (?, ?, ?)',
+      `INSERT INTO ${menusTable} (name, location, description) VALUES (?, ?, ?)`,
       [name, location, description || '']
     );
 
     const [newMenu] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM menus WHERE id = ?',
+      `SELECT * FROM ${menusTable} WHERE id = ?`,
       [result.insertId]
     );
 
     // Log activity
-    const userId = (session.user as any).id;
     await logActivity({
       userId,
       action: 'menu_created' as any,
@@ -68,6 +74,7 @@ export async function POST(request: NextRequest) {
       details: `Created menu: ${name} (${location})`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
+      siteId,
     });
 
     return NextResponse.json({ menu: newMenu[0] });

@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect } from 'react';
+
 interface ActivityLogDetailsModalProps {
   readonly isOpen: boolean;
   readonly log: any;
@@ -11,6 +13,20 @@ export default function ActivityLogDetailsModal({
   log,
   onClose,
 }: ActivityLogDetailsModalProps) {
+  // Handle ESC key to close modal
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('keydown', handleEscape);
+      return () => document.removeEventListener('keydown', handleEscape);
+    }
+  }, [isOpen, onClose]);
+
   if (!isOpen || !log) return null;
 
   // Parse JSON strings if needed

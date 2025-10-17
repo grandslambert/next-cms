@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 
 export async function GET(request: NextRequest) {
@@ -12,6 +12,10 @@ export async function GET(request: NextRequest) {
     }
 
     const permissions = (session.user as any).permissions || {};
+    const siteId = (session.user as any).currentSiteId || 1;
+    const mediaFoldersTable = getSiteTable(siteId, 'media_folders');
+    const mediaTable = getSiteTable(siteId, 'media');
+    
     if (!permissions.manage_media) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
@@ -23,9 +27,9 @@ export async function GET(request: NextRequest) {
       SELECT mf.*, 
              COUNT(DISTINCT m.id) as file_count,
              COUNT(DISTINCT sub.id) as subfolder_count
-      FROM media_folders mf
-      LEFT JOIN media m ON m.folder_id = mf.id AND m.deleted_at IS NULL
-      LEFT JOIN media_folders sub ON sub.parent_id = mf.id
+      FROM ${mediaFoldersTable} mf
+      LEFT JOIN ${mediaTable} m ON m.folder_id = mf.id AND m.deleted_at IS NULL
+      LEFT JOIN ${mediaFoldersTable} sub ON sub.parent_id = mf.id
     `;
     const params: any[] = [];
 
@@ -57,6 +61,9 @@ export async function POST(request: NextRequest) {
     }
 
     const permissions = (session.user as any).permissions || {};
+    const siteId = (session.user as any).currentSiteId || 1;
+    const mediaFoldersTable = getSiteTable(siteId, 'media_folders');
+    
     if (!permissions.manage_media) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
@@ -69,12 +76,12 @@ export async function POST(request: NextRequest) {
     }
 
     const [result] = await db.execute<ResultSetHeader>(
-      'INSERT INTO media_folders (name, parent_id) VALUES (?, ?)',
+      `INSERT INTO ${mediaFoldersTable} (name, parent_id) VALUES (?, ?)`,
       [name.trim(), parent_id || null]
     );
 
     const [newFolder] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM media_folders WHERE id = ?',
+      `SELECT * FROM ${mediaFoldersTable} WHERE id = ?`,
       [result.insertId]
     );
 

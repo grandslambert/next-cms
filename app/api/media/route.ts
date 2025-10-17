@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 import sharp from 'sharp';
@@ -9,10 +9,11 @@ import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 // Get image sizes from settings
-async function getImageSizes() {
+async function getImageSizes(siteId: number = 1) {
   try {
+    const settingsTable = getSiteTable(siteId, 'settings');
     const [rows] = await db.query<RowDataPacket[]>(
-      "SELECT setting_value FROM settings WHERE setting_key = 'image_sizes'"
+      `SELECT setting_value FROM ${settingsTable} WHERE setting_key = 'image_sizes'`
     );
     
     if (rows.length > 0 && rows[0].setting_value) {
@@ -34,16 +35,20 @@ async function getImageSizes() {
 
 export async function GET(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    const siteId = (session?.user as any)?.currentSiteId || 1;
+    const mediaTable = getSiteTable(siteId, 'media');
+    
     const searchParams = request.nextUrl.searchParams;
-    const limit = parseInt(searchParams.get('limit') || '20');
-    const offset = parseInt(searchParams.get('offset') || '0');
+    const limit = Number.parseInt(searchParams.get('limit') || '20');
+    const offset = Number.parseInt(searchParams.get('offset') || '0');
     const folderId = searchParams.get('folder_id');
     const showTrash = searchParams.get('trash') === 'true';
 
     let query = `SELECT m.*, CONCAT(u.first_name, ' ', u.last_name) as uploaded_by_name 
-                 FROM media m 
+                 FROM ${mediaTable} m 
                  LEFT JOIN users u ON m.uploaded_by = u.id`;
-    let countQuery = 'SELECT COUNT(*) as total FROM media';
+    let countQuery = `SELECT COUNT(*) as total FROM ${mediaTable}`;
     const params: any[] = [];
     const countParams: any[] = [];
     const conditions: string[] = [];
@@ -109,6 +114,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const userId = (session.user as any).id;
+    const siteId = (session.user as any).currentSiteId || 1;
+    const mediaTable = getSiteTable(siteId, 'media');
+
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const title = formData.get('title') as string || '';
@@ -122,13 +131,13 @@ export async function POST(request: NextRequest) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // Create date-based folder structure (YYYY/MM)
+    // Create site-based and date-based folder structure (site_X/YYYY/MM)
     const now = new Date();
     const year = now.getFullYear().toString();
     const month = (now.getMonth() + 1).toString().padStart(2, '0');
-    const folderPath = `${year}/${month}`; // Always use forward slashes for URLs
+    const folderPath = `site_${siteId}/${year}/${month}`; // Always use forward slashes for URLs
     
-    const uploadDir = path.join(process.cwd(), 'public', 'uploads', year, month);
+    const uploadDir = path.join(process.cwd(), 'public', 'uploads', `site_${siteId}`, year, month);
     await mkdir(uploadDir, { recursive: true });
 
     // Generate clean filename
@@ -138,7 +147,6 @@ export async function POST(request: NextRequest) {
     const baseFilename = `${nameWithoutExt}-${timestamp}`;
     
     const sizes: any = {};
-    const userId = (session.user as any).id;
 
     // Check if it's an image
     if (file.type.startsWith('image/')) {
@@ -146,7 +154,7 @@ export async function POST(request: NextRequest) {
       const metadata = await image.metadata();
 
       // Get image sizes from settings
-      const IMAGE_SIZES = await getImageSizes();
+      const IMAGE_SIZES = await getImageSizes(siteId);
 
       // Generate different sizes
       for (const [sizeName, dimensions] of Object.entries(IMAGE_SIZES)) {
@@ -194,13 +202,13 @@ export async function POST(request: NextRequest) {
       const filename = `${baseFilename}${ext}`;
 
       const [result] = await db.query<ResultSetHeader>(
-        `INSERT INTO media (filename, original_name, title, alt_text, mime_type, size, url, sizes, folder_id, uploaded_by)
+        `INSERT INTO ${mediaTable} (filename, original_name, title, alt_text, mime_type, size, url, sizes, folder_id, uploaded_by)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [filename, file.name, title, altText, file.type, file.size, url, JSON.stringify(sizes), folderId ? parseInt(folderId) : null, userId]
+        [filename, file.name, title, altText, file.type, file.size, url, JSON.stringify(sizes), folderId ? Number.parseInt(folderId) : null, userId]
       );
 
       const [newMedia] = await db.query<RowDataPacket[]>(
-        'SELECT * FROM media WHERE id = ?',
+        `SELECT * FROM ${mediaTable} WHERE id = ?`,
         [result.insertId]
       );
 
@@ -214,6 +222,7 @@ export async function POST(request: NextRequest) {
         details: `Uploaded image: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`,
         ipAddress: getClientIp(request),
         userAgent: getUserAgent(request),
+        siteId,
       });
 
       return NextResponse.json({ media: newMedia[0] }, { status: 201 });
@@ -226,13 +235,13 @@ export async function POST(request: NextRequest) {
       const url = `/uploads/${folderPath}/${filename}`;
 
       const [result] = await db.query<ResultSetHeader>(
-        `INSERT INTO media (filename, original_name, title, alt_text, mime_type, size, url, folder_id, uploaded_by)
+        `INSERT INTO ${mediaTable} (filename, original_name, title, alt_text, mime_type, size, url, folder_id, uploaded_by)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [filename, file.name, title, altText, file.type, file.size, url, folderId ? parseInt(folderId) : null, userId]
+        [filename, file.name, title, altText, file.type, file.size, url, folderId ? Number.parseInt(folderId) : null, userId]
       );
 
       const [newMedia] = await db.query<RowDataPacket[]>(
-        'SELECT * FROM media WHERE id = ?',
+        `SELECT * FROM ${mediaTable} WHERE id = ?`,
         [result.insertId]
       );
 
@@ -246,6 +255,7 @@ export async function POST(request: NextRequest) {
         details: `Uploaded file: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`,
         ipAddress: getClientIp(request),
         userAgent: getUserAgent(request),
+        siteId,
       });
 
       return NextResponse.json({ media: newMedia[0] }, { status: 201 });

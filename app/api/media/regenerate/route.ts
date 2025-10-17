@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { writeFile, mkdir, unlink, rename } from 'fs/promises';
 import path from 'path';
 import sharp from 'sharp';
@@ -50,10 +50,11 @@ async function cleanupOldFiles(uploadDir: string): Promise<void> {
 }
 
 // Get image sizes from settings
-async function getImageSizes() {
+async function getImageSizes(siteId: number = 1) {
   try {
+    const settingsTable = getSiteTable(siteId, 'settings');
     const [rows] = await db.query<RowDataPacket[]>(
-      "SELECT setting_value FROM settings WHERE setting_key = 'image_sizes'"
+      `SELECT setting_value FROM ${settingsTable} WHERE setting_key = 'image_sizes'`
     );
     
     if (rows.length > 0 && rows[0].setting_value) {
@@ -76,15 +77,22 @@ async function getImageSizes() {
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user || (session.user as any).role !== 'admin') {
+    const isSuperAdmin = (session?.user as any)?.isSuperAdmin || false;
+    const userRole = (session.user as any).role;
+    
+    if (!session?.user || (!isSuperAdmin && userRole !== 'admin')) {
       return NextResponse.json({ error: 'Unauthorized - Admin only' }, { status: 401 });
     }
 
     const body = await request.json();
     const { mediaId } = body; // If null, regenerate all images
 
+    // Get site ID for multi-site support
+    const siteId = (session.user as any).currentSiteId || 1;
+    const mediaTable = getSiteTable(siteId, 'media');
+
     // Get media items to process
-    let query = 'SELECT * FROM media WHERE mime_type LIKE ?';
+    let query = `SELECT * FROM ${mediaTable} WHERE mime_type LIKE ?`;
     let params: any[] = ['image/%'];
     
     if (mediaId) {
@@ -98,7 +106,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No images found' }, { status: 404 });
     }
 
-    const IMAGE_SIZES = await getImageSizes();
+    const IMAGE_SIZES = await getImageSizes(siteId);
     const results = {
       success: 0,
       failed: 0,
@@ -243,7 +251,7 @@ export async function POST(request: NextRequest) {
 
         // Update database with new sizes and URL
         await db.query<ResultSetHeader>(
-          'UPDATE media SET url = ?, filename = ?, sizes = ? WHERE id = ?',
+          `UPDATE ${mediaTable} SET url = ?, filename = ?, sizes = ? WHERE id = ?`,
           [sizes.full.url, `${newBaseFilename}${ext}`, JSON.stringify(sizes), media.id]
         );
 
@@ -254,6 +262,7 @@ export async function POST(request: NextRequest) {
           action: 'media_updated',
           entityType: 'media',
           entityId: media.id,
+          siteId,
           entityName: media.original_name,
           details: 'Regenerated image sizes',
           ipAddress: getClientIp(request),

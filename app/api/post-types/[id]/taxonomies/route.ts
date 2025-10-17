@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 
 // Get taxonomies for a specific post type
@@ -10,10 +10,15 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    const session = await getServerSession(authOptions);
+    const siteId = (session?.user as any)?.currentSiteId || 1;
+    const taxonomiesTable = getSiteTable(siteId, 'taxonomies');
+    const postTypeTaxonomiesTable = getSiteTable(siteId, 'post_type_taxonomies');
+    
     const [rows] = await db.query<RowDataPacket[]>(
       `SELECT t.*
-       FROM taxonomies t
-       INNER JOIN post_type_taxonomies ptt ON ptt.taxonomy_id = t.id
+       FROM ${taxonomiesTable} t
+       INNER JOIN ${postTypeTaxonomiesTable} ptt ON ptt.taxonomy_id = t.id
        WHERE ptt.post_type_id = ?
        ORDER BY t.label ASC`,
       [params.id]
@@ -33,16 +38,22 @@ export async function PUT(
 ) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user || (session.user as any).role !== 'admin') {
+    const isSuperAdmin = (session?.user as any)?.isSuperAdmin || false;
+    const userRole = (session.user as any).role;
+    
+    if (!session?.user || (!isSuperAdmin && userRole !== 'admin')) {
       return NextResponse.json({ error: 'Unauthorized - Admin only' }, { status: 401 });
     }
+
+    const siteId = (session.user as any).currentSiteId || 1;
+    const postTypeTaxonomiesTable = getSiteTable(siteId, 'post_type_taxonomies');
 
     const body = await request.json();
     const { taxonomy_ids } = body;
 
     // Remove existing relationships
     await db.query<ResultSetHeader>(
-      'DELETE FROM post_type_taxonomies WHERE post_type_id = ?',
+      `DELETE FROM ${postTypeTaxonomiesTable} WHERE post_type_id = ?`,
       [params.id]
     );
 
@@ -50,7 +61,7 @@ export async function PUT(
     if (taxonomy_ids && taxonomy_ids.length > 0) {
       const values = taxonomy_ids.map((taxonomyId: number) => [params.id, taxonomyId]);
       await db.query<ResultSetHeader>(
-        'INSERT INTO post_type_taxonomies (post_type_id, taxonomy_id) VALUES ?',
+        `INSERT INTO ${postTypeTaxonomiesTable} (post_type_id, taxonomy_id) VALUES ?`,
         [values]
       );
     }

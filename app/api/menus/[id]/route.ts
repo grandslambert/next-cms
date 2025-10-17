@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
@@ -16,12 +16,15 @@ export async function GET(
     }
 
     const permissions = (session.user as any).permissions || {};
+    const siteId = (session.user as any).currentSiteId || 1;
+    const menusTable = getSiteTable(siteId, 'menus');
+    
     if (!permissions.manage_menus) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const [rows] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM menus WHERE id = ?',
+      `SELECT * FROM ${menusTable} WHERE id = ?`,
       [params.id]
     );
 
@@ -47,6 +50,10 @@ export async function PUT(
     }
 
     const permissions = (session.user as any).permissions || {};
+    const userId = (session.user as any).id;
+    const siteId = (session.user as any).currentSiteId || 1;
+    const menusTable = getSiteTable(siteId, 'menus');
+    
     if (!permissions.manage_menus) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
@@ -60,7 +67,7 @@ export async function PUT(
 
     // Get current menu BEFORE updating
     const [beforeUpdate] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM menus WHERE id = ?',
+      `SELECT * FROM ${menusTable} WHERE id = ?`,
       [params.id]
     );
 
@@ -71,17 +78,16 @@ export async function PUT(
     const currentMenu = beforeUpdate[0];
 
     await db.query<ResultSetHeader>(
-      'UPDATE menus SET name = ?, location = ?, description = ? WHERE id = ?',
+      `UPDATE ${menusTable} SET name = ?, location = ?, description = ? WHERE id = ?`,
       [name, location, description || '', params.id]
     );
 
     const [updated] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM menus WHERE id = ?',
+      `SELECT * FROM ${menusTable} WHERE id = ?`,
       [params.id]
     );
 
     // Log activity
-    const userId = (session.user as any).id;
     await logActivity({
       userId,
       action: 'menu_updated' as any,
@@ -101,6 +107,7 @@ export async function PUT(
         location: updated[0].location,
         description: updated[0].description,
       },
+      siteId,
     });
 
     return NextResponse.json({ menu: updated[0] });
@@ -124,13 +131,17 @@ export async function DELETE(
     }
 
     const permissions = (session.user as any).permissions || {};
+    const userId = (session.user as any).id;
+    const siteId = (session.user as any).currentSiteId || 1;
+    const menusTable = getSiteTable(siteId, 'menus');
+    
     if (!permissions.manage_menus) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     // Get menu details for logging
     const [menuRows] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM menus WHERE id = ?',
+      `SELECT * FROM ${menusTable} WHERE id = ?`,
       [params.id]
     );
 
@@ -141,7 +152,6 @@ export async function DELETE(
     const menu = menuRows[0];
 
     // Log activity before deleting
-    const userId = (session.user as any).id;
     await logActivity({
       userId,
       action: 'menu_deleted' as any,
@@ -151,10 +161,11 @@ export async function DELETE(
       details: `Deleted menu: ${menu.name} (${menu.location})`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
+      siteId,
     });
 
     // Delete menu (CASCADE will delete menu items)
-    await db.query<ResultSetHeader>('DELETE FROM menus WHERE id = ?', [params.id]);
+    await db.query<ResultSetHeader>(`DELETE FROM ${menusTable} WHERE id = ?`, [params.id]);
 
     return NextResponse.json({ success: true });
   } catch (error) {

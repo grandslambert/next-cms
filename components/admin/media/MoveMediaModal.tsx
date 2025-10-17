@@ -1,3 +1,5 @@
+import { useEffect } from 'react';
+
 interface MoveMediaModalProps {
   isOpen: boolean;
   media: any;
@@ -13,6 +15,20 @@ export default function MoveMediaModal({
   onClose,
   onMove,
 }: MoveMediaModalProps) {
+  // Handle ESC key to close modal
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('keydown', handleEscape);
+      return () => document.removeEventListener('keydown', handleEscape);
+    }
+  }, [isOpen, onClose]);
+
   if (!isOpen || !media) return null;
 
   return (
@@ -35,7 +51,7 @@ export default function MoveMediaModal({
               onClick={() => onMove(folder.id)}
               className="w-full text-left px-4 py-2 border border-gray-300 rounded-lg hover:bg-blue-50 transition-colors"
             >
-              📁 {folder.name}
+              📁 {folder.display_name || folder.name}
             </button>
           ))}
         </div>

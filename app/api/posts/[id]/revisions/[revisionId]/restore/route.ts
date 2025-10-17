@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 
 export async function POST(
@@ -15,11 +15,19 @@ export async function POST(
     }
 
     const userId = (session.user as any).id;
+    const isSuperAdmin = (session.user as any)?.isSuperAdmin || false;
     const permissions = (session.user as any).permissions || {};
+    
+    // Get site ID for multi-site support
+    const siteId = (session.user as any).currentSiteId || 1;
+    const postsTable = getSiteTable(siteId, 'posts');
+    const postRevisionsTable = getSiteTable(siteId, 'post_revisions');
+    const postMetaTable = getSiteTable(siteId, 'post_meta');
+    const settingsTable = getSiteTable(siteId, 'settings');
 
     // Check if post exists
     const [existingPost] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM posts WHERE id = ?',
+      `SELECT * FROM ${postsTable} WHERE id = ?`,
       [params.id]
     );
 
@@ -28,8 +36,8 @@ export async function POST(
     }
 
     const post = existingPost[0];
-    const isOwner = post.author_id === parseInt(userId);
-    const canManageOthers = permissions.manage_others_posts === true;
+    const isOwner = post.author_id === Number.parseInt(userId);
+    const canManageOthers = isSuperAdmin || permissions.manage_others_posts === true;
 
     // Check if user can edit this post
     if (!isOwner && !canManageOthers) {
@@ -38,7 +46,7 @@ export async function POST(
 
     // Get the revision
     const [revisionResult] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM post_revisions WHERE id = ? AND post_id = ?',
+      `SELECT * FROM ${postRevisionsTable} WHERE id = ? AND post_id = ?`,
       [params.revisionId, params.id]
     );
 
@@ -50,7 +58,7 @@ export async function POST(
 
     // Save current state as a revision before restoring
     const [settingsResult] = await db.query<RowDataPacket[]>(
-      'SELECT setting_value FROM settings WHERE setting_key = ?',
+      `SELECT setting_value FROM ${settingsTable} WHERE setting_key = ?`,
       ['max_revisions']
     );
     const maxRevisions = settingsResult.length > 0 ? parseInt(settingsResult[0].setting_value) : 10;
@@ -58,7 +66,7 @@ export async function POST(
     if (maxRevisions > 0) {
       // Get current custom fields for the revision
       const [currentMeta] = await db.query<RowDataPacket[]>(
-        'SELECT meta_key, meta_value FROM post_meta WHERE post_id = ?',
+        `SELECT meta_key, meta_value FROM ${postMetaTable} WHERE post_id = ?`,
         [params.id]
       );
       
@@ -68,14 +76,14 @@ export async function POST(
       });
 
       await db.query<ResultSetHeader>(
-        'INSERT INTO post_revisions (post_id, title, content, excerpt, custom_fields, author_id) VALUES (?, ?, ?, ?, ?, ?)',
+        `INSERT INTO ${postRevisionsTable} (post_id, title, content, excerpt, custom_fields, author_id) VALUES (?, ?, ?, ?, ?, ?)`,
         [params.id, post.title, post.content, post.excerpt, JSON.stringify(customFieldsObj), userId]
       );
     }
 
     // Restore the revision
     await db.query<ResultSetHeader>(
-      'UPDATE posts SET title = ?, content = ?, excerpt = ? WHERE id = ?',
+      `UPDATE ${postsTable} SET title = ?, content = ?, excerpt = ? WHERE id = ?`,
       [revision.title, revision.content, revision.excerpt, params.id]
     );
 
@@ -83,7 +91,7 @@ export async function POST(
     if (revision.custom_fields) {
       // Delete existing custom fields
       await db.query<ResultSetHeader>(
-        'DELETE FROM post_meta WHERE post_id = ?',
+        `DELETE FROM ${postMetaTable} WHERE post_id = ?`,
         [params.id]
       );
 
@@ -95,7 +103,7 @@ export async function POST(
       if (customFields && Object.keys(customFields).length > 0) {
         const values = Object.entries(customFields).map(([key, value]) => [params.id, key, value]);
         await db.query<ResultSetHeader>(
-          'INSERT INTO post_meta (post_id, meta_key, meta_value) VALUES ?',
+          `INSERT INTO ${postMetaTable} (post_id, meta_key, meta_value) VALUES ?`,
           [values]
         );
       }
@@ -103,7 +111,7 @@ export async function POST(
 
     // Get updated post
     const [updatedPost] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM posts WHERE id = ?',
+      `SELECT * FROM ${postsTable} WHERE id = ?`,
       [params.id]
     );
 

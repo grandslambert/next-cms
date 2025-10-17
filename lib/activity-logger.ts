@@ -1,4 +1,4 @@
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { ResultSetHeader } from 'mysql2';
 
 export type ActivityAction = 
@@ -23,10 +23,12 @@ export type ActivityAction =
   | 'folder_created' | 'folder_updated' | 'folder_deleted'
   // Menu actions
   | 'menu_created' | 'menu_updated' | 'menu_deleted'
-  | 'menu_item_created' | 'menu_item_updated' | 'menu_item_deleted';
+  | 'menu_item_created' | 'menu_item_updated' | 'menu_item_deleted'
+  // Import/Export actions
+  | 'data_exported' | 'data_imported';
 
 export type EntityType = 
-  | 'auth' | 'post' | 'media' | 'user' | 'role' | 'post_type' | 'taxonomy' | 'term' | 'settings' | 'folder' | 'menu' | 'menu_item';
+  | 'auth' | 'post' | 'media' | 'user' | 'role' | 'post_type' | 'taxonomy' | 'term' | 'settings' | 'folder' | 'menu' | 'menu_item' | 'data';
 
 interface LogActivityParams {
   userId: number;
@@ -39,6 +41,7 @@ interface LogActivityParams {
   changesAfter?: Record<string, any> | null;
   ipAddress?: string | null;
   userAgent?: string | null;
+  siteId?: number | null; // Site context for multi-site support (null for global activities)
 }
 
 export async function logActivity({
@@ -52,6 +55,7 @@ export async function logActivity({
   changesAfter = null,
   ipAddress = null,
   userAgent = null,
+  siteId = null, // Site context (null for global/system-wide activities)
 }: LogActivityParams): Promise<void> {
   try {
     // Convert details to JSON string if it's an object
@@ -63,10 +67,11 @@ export async function logActivity({
     const changesBeforeStr = changesBefore ? JSON.stringify(changesBefore) : null;
     const changesAfterStr = changesAfter ? JSON.stringify(changesAfter) : null;
 
+    // Use global activity_log table with site_id column
     await db.execute<ResultSetHeader>(
-      `INSERT INTO activity_log (user_id, action, entity_type, entity_id, entity_name, details, changes_before, changes_after, ip_address, user_agent)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [userId, action, entityType, entityId, entityName, detailsStr, changesBeforeStr, changesAfterStr, ipAddress, userAgent]
+      `INSERT INTO activity_log (user_id, action, entity_type, entity_id, entity_name, details, changes_before, changes_after, ip_address, user_agent, site_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [userId, action, entityType, entityId, entityName, detailsStr, changesBeforeStr, changesAfterStr, ipAddress, userAgent, siteId]
     );
   } catch (error) {
     // Log error but don't throw - we don't want logging failures to break the app

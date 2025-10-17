@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,9 +11,11 @@ export async function GET(request: NextRequest) {
     }
 
     const permissions = (session.user as any).permissions || {};
+    const isSuperAdmin = (session.user as any)?.isSuperAdmin || false;
+    const siteId = (session.user as any).currentSiteId || 1;
     
     // Only admins can view activity logs (or users with manage_users permission)
-    if (!permissions.manage_users) {
+    if (!isSuperAdmin && !permissions.manage_users) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -25,9 +27,29 @@ export async function GET(request: NextRequest) {
     const action = searchParams.get('action');
     const entityType = searchParams.get('entity_type');
     const search = searchParams.get('search');
+    const filterSiteId = searchParams.get('site_id'); // For super admin site filtering
 
     let whereConditions = [];
     let params: any[] = [];
+
+    // Filter by site
+    if (!isSuperAdmin) {
+      // Non-super admins: only see their current site (not global activities)
+      whereConditions.push('al.site_id = ?');
+      params.push(siteId);
+    } else if (filterSiteId) {
+      // Super admins: filter by specific site if selected
+      if (filterSiteId === 'all') {
+        // Show all activities
+      } else if (filterSiteId === 'global') {
+        // Show only global activities
+        whereConditions.push('al.site_id IS NULL');
+      } else {
+        // Show specific site activities
+        whereConditions.push('al.site_id = ?');
+        params.push(Number.parseInt(filterSiteId));
+      }
+    }
 
     if (userId) {
       whereConditions.push('al.user_id = ?');
@@ -53,22 +75,24 @@ export async function GET(request: NextRequest) {
       ? 'WHERE ' + whereConditions.join(' AND ')
       : '';
 
-    // Get total count
+    // Get total count (activity_log is a global table)
     const [countResult] = await db.query<any[]>(
       `SELECT COUNT(*) as total FROM activity_log al ${whereClause}`,
       params
     );
     const total = countResult[0].total;
 
-    // Get logs with user info
+    // Get logs with user info and site name
     const [logs] = await db.query<any[]>(
       `SELECT 
         al.*,
         u.username,
         u.first_name,
-        u.last_name
+        u.last_name,
+        s.display_name as site_name
        FROM activity_log al
        LEFT JOIN users u ON al.user_id = u.id
+       LEFT JOIN sites s ON al.site_id = s.id
        ${whereClause}
        ORDER BY al.created_at DESC
        LIMIT ? OFFSET ?`,

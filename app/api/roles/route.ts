@@ -12,14 +12,38 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const [roles] = await db.query<RowDataPacket[]>(
-      'SELECT id, name, display_name, description, permissions, is_system, created_at, updated_at FROM roles ORDER BY id ASC'
-    );
+    const isSuperAdmin = (session.user as any)?.isSuperAdmin || false;
+    const currentSiteId = (session.user as any)?.currentSiteId || 1;
+    
+    let query = `SELECT r.id, r.name, r.display_name, r.description, 
+                 COALESCE(sro.permissions, r.permissions) as permissions,
+                 r.is_system, r.site_id, 
+                 s.display_name as site_name,
+                 IF(sro.id IS NOT NULL, 1, 0) as has_override,
+                 r.created_at, r.updated_at 
+                 FROM roles r
+                 LEFT JOIN sites s ON r.site_id = s.id
+                 LEFT JOIN site_role_overrides sro ON r.id = sro.role_id AND sro.site_id = ?`;
+    let params: any[] = [isSuperAdmin ? 0 : currentSiteId]; // Super admins: don't load overrides
+    
+    if (!isSuperAdmin) {
+      // Site admins see: system roles (with overrides if they exist) + their site's custom roles
+      query += ' WHERE r.site_id IS NULL OR r.site_id = ?';
+      params.push(currentSiteId);
+    } else {
+      // Super admins see all roles without overrides
+      query += ' WHERE 1=1'; // Dummy condition since we're already excluding overrides with site_id = 0
+    }
+    
+    query += ' ORDER BY r.site_id IS NULL DESC, r.id ASC'; // System roles first, then site-specific
+
+    const [roles] = await db.query<RowDataPacket[]>(query, params);
 
     // Parse JSON permissions
     const rolesWithParsedPermissions = roles.map(role => ({
       ...role,
-      permissions: typeof role.permissions === 'string' ? JSON.parse(role.permissions) : role.permissions
+      permissions: typeof role.permissions === 'string' ? JSON.parse(role.permissions) : role.permissions,
+      has_override: !!role.has_override
     }));
 
     return NextResponse.json({ roles: rolesWithParsedPermissions });
@@ -43,9 +67,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
+    const isSuperAdmin = (session.user as any)?.isSuperAdmin || false;
+    const currentSiteId = (session.user as any)?.currentSiteId || 1;
+    
+    // Site admins can only create roles for their site
+    // Super admins can create global roles (site_id = NULL)
+    const site_id = isSuperAdmin ? null : currentSiteId;
+
     const [result] = await db.query<ResultSetHeader>(
-      'INSERT INTO roles (name, display_name, description, permissions, is_system) VALUES (?, ?, ?, ?, false)',
-      [name, display_name, description || null, JSON.stringify(permissions)]
+      'INSERT INTO roles (name, display_name, description, permissions, is_system, site_id) VALUES (?, ?, ?, ?, false, ?)',
+      [name, display_name, description || null, JSON.stringify(permissions), site_id]
     );
 
     // Log activity
@@ -56,9 +87,10 @@ export async function POST(request: NextRequest) {
       entityType: 'role',
       entityId: result.insertId,
       entityName: display_name,
-      details: `Created role: ${display_name} (${name})`,
+      details: `Created ${site_id ? 'site-specific' : 'global'} role: ${display_name} (${name})`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
+      siteId: site_id,
     });
 
     return NextResponse.json({ 
@@ -67,7 +99,8 @@ export async function POST(request: NextRequest) {
       display_name,
       description,
       permissions,
-      is_system: false
+      is_system: false,
+      site_id
     }, { status: 201 });
   } catch (error) {
     console.error('Error creating role:', error);

@@ -1,574 +1,303 @@
 # Next CMS
 
-A complete Content Management System built with Next.js 14, Tailwind CSS, and MySQL - similar to WordPress.
+> Version 2.2.0
 
-## Current Version: 1.18.1
+A powerful, modern content management system built with Next.js 14, TypeScript, Tailwind CSS, and MySQL with multi-site support.
 
-See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
+## 🚀 Features
 
-## Features
+### Multi-Site Management
+- **Multiple sites** from a single installation
+- **Site isolation** - completely separate content, media, and settings per site
+- **User assignment** - assign users to specific sites with different roles
+- **Efficient architecture** - shared global tables, isolated site tables
 
-- 📝 **Unified Content System** 
-  - Custom post types (posts, pages, portfolios, products, events, etc.)
-  - Hierarchical support for parent/child relationships
-  - Configurable features per post type (title, content, excerpt, featured image, taxonomies)
-  - Built-in post types: Posts (blog) and Pages (static content)
-  - Trash system with restore and permanent delete capabilities
-  - Bulk actions for managing multiple posts at once
-  - Smart status filtering with real-time post counts
-  - Post revisions with configurable history limit and one-click restore
-  - Custom fields (post meta) for unlimited key-value data
-  - Scheduled publishing with cron job integration
-  - **Autosave with visual diff** - Automatic draft saving every 3 seconds with side-by-side comparison modal
-  - **SEO metadata editor** - Per-post SEO title, description, and keywords with character count guidance
-- 🏷️ **Flexible Taxonomy System** 
-  - Create custom taxonomies (categories, tags, etc.) for any post type with hierarchical support
-  - Public taxonomy archive pages showing all terms with post counts
-  - Individual term pages displaying tagged posts
-  - Hierarchical term display with visual nesting and breadcrumb navigation
-- 🧭 **Navigation Menu System**
-  - WordPress-style menu builder with drag-and-drop reordering
-  - Hierarchical menu structure (parent/child items with visual indentation)
-  - Menu locations: Built-in (header, footer, sidebar) + create custom locations
-  - Four item types: Post Type archives/individual posts, Taxonomy archives/individual terms, Custom links
-  - Advanced meta fields: Title Attribute (tooltip), CSS Classes, Link Relationship (XFN), Description
-  - Inline editing with batch save (menu + items + meta + deletions in one operation)
-  - Public template integration with automatic hierarchical URL building and dropdown submenus
-  - Post and term search with real-time filtering when adding menu items
-  - Custom label overrides and link target options (same/new window)
-- 🖼️ **Advanced Media Library** 
-  - WordPress-style automatic image resizing with multiple size variants
-  - Image metadata (title and alt text) for SEO and accessibility
-  - Folder organization with hierarchical structure
-  - Drag and drop to move files between folders
-  - Trash system with restore and permanent delete
-  - Bulk actions (move, trash, restore, delete)
-  - File count badges on folders
-  - Breadcrumb navigation for folder browsing
-  - Regenerate image sizes when settings change
-  - Date-based file storage (YYYY/MM on filesystem)
-  - Customizable image sizes with crop styles (cover, inside, contain, fill)
-  - Compact grid layout showing more items at once
-- ✏️ **Rich Text Editor** - Full-featured WYSIWYG editor (react-simple-wysiwyg)
-- 🔐 **Authentication** - Secure login system with NextAuth.js
-- 👥 **Advanced User Management** 
-  - Custom role creation with granular permissions
-  - Per-post-type permission control (manage, edit, delete)
-  - Content workflow with pending review status
-  - Author reassignment capability
-  - Role-based admin interface visibility
-  - **Activity log and audit trail** - Comprehensive tracking with before/after change comparison
-- 🔍 **Advanced Post List Features**
-  - Powerful search across title and content (debounced)
-  - Column filters for title, author, status, taxonomies, and date
-  - Customizable columns with user-specific preferences
-  - Featured image thumbnails in list view
-  - Items per page selector (10, 25, 50, 100)
-  - Smart pagination with page numbers and navigation
-- ⚙️ **Settings System** 
-  - Configurable site name, tagline, and description
-  - Media settings: Image sizes with custom crop styles
-  - Post revisions limit and session timeout
-  - Authentication: Hide default user, password requirements (length, complexity)
-- 🛠️ **Import/Export Tools**
-  - Comprehensive data backup and migration system
-  - Export all or selected data types to JSON files
-  - Import data from previous exports
-  - 7 data categories: Posts, Media, Taxonomies, Menus, Post Types, Settings, Users
-  - Duplicate prevention and detailed import summaries
-  - Security: User passwords never exported/imported
-- ❓ **Help Center** 
-  - Comprehensive in-app documentation covering all CMS features
-  - 9 detailed sections with interactive navigation
-  - Dashboard, Posts, Media, Taxonomies, Users, Appearance, Settings, Tools (Import/Export & Activity Log), Tips
-  - Direct links to admin pages from help documentation
-  - Modular component architecture for easy maintenance
-  - Tips and best practices for security, performance, and organization
-- 🎨 **Beautiful UI** - Modern, responsive interface with Tailwind CSS
-- ⚡ **Fast & SEO-Friendly** - Server-side rendering with Next.js 14
-- 🗄️ **MySQL Database** - Robust relational database for content storage
+### Content Management
+- **Custom post types** - create any content structure you need
+- **Rich text editor** - full-featured WYSIWYG editing
+- **Media management** - organized folders, image optimization, bulk operations
+- **Taxonomies** - categories and tags with hierarchical support
+- **Revisions** - track content changes over time
+- **Scheduled publishing** - set posts to publish automatically
 
-## Tech Stack
+### User Management
+- **Role-based access** - Super Admin, Admin, Editor, Author, Guest
+- **Granular permissions** - control exactly what users can do
+- **Site role overrides** - customize system roles per site independently
+- **Site-specific roles** - create custom roles for individual sites
+- **User switching** - test as other users for debugging
+- **Site-aware** - users see only their assigned sites
+- **Multi-site users** - assign users to multiple sites with different roles
 
-- **Frontend**: Next.js 14, React 18, Tailwind CSS
-- **Backend**: Next.js API Routes
-- **Database**: MySQL
-- **Authentication**: NextAuth.js
-- **Rich Text Editor**: React Quill
-- **State Management**: TanStack Query (React Query)
-- **Forms**: React Hook Form
-- **Notifications**: React Hot Toast
+### Navigation & Menus
+- **Visual menu builder** - drag-and-drop interface
+- **Multiple menu locations** - header, footer, sidebar
+- **Custom links** - add external URLs
+- **Nested menus** - unlimited depth
 
-## Prerequisites
+### Advanced Features
+- **Activity logging** - complete audit trail
+- **SEO metadata** - per-post SEO fields
+- **Featured images** - with multiple sizes
+- **Custom fields** - extend content with metadata
+- **Search & filtering** - find content quickly
+- **Responsive design** - works on all devices
 
-- Node.js 18+ 
-- MySQL 8+
-- npm or yarn
+## 📋 Prerequisites
 
-## Installation
+- **Node.js** 18+ and npm
+- **MySQL** 8.0+
+- **Git** (for cloning)
 
-1. **Clone the repository**
+## 🛠️ Quick Start
+
+### 1. Clone and Install
+
    ```bash
    git clone <repository-url>
    cd next-cms
-   ```
-
-2. **Install dependencies**
-   ```bash
    npm install
    ```
 
-3. **Set up the database**
-   
-   Create a MySQL database:
-   ```sql
-   CREATE DATABASE nextcms;
-   ```
+### 2. Configure Environment
 
-   Import the schema:
-   ```bash
-   mysql -u root -p nextcms < database/schema.sql
-   ```
+Create `.env.local`:
 
-4. **Configure environment variables**
-   
-   Copy the example environment file:
-   ```bash
-   cp .env.example .env
-   ```
+```env
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=your_db_user
+DB_PASSWORD=your_db_password
+DB_NAME=your_db_name
 
-   Update `.env` with your configuration:
-   ```env
-   # Database
-   DB_HOST=localhost
-   DB_USER=root
-   DB_PASSWORD=your_password
-   DB_NAME=nextcms
+NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_SECRET=generate-this-with-openssl-rand-base64-32
+```
 
-   # NextAuth
-   NEXTAUTH_URL=http://localhost:3000
-   NEXTAUTH_SECRET=your-secret-key-here
+### 3. Create Database
 
-   # Upload
-   UPLOAD_DIR=./public/uploads
+```sql
+CREATE DATABASE your_db_name CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
 
-   # Session timeout in seconds (default: 86400 = 24 hours)
-   SESSION_TIMEOUT=86400
-   ```
+### 4. Initialize Database
 
-5. **Run the development server**
+```bash
+mysql -u your_db_user -p your_db_name < database/schema.sql
+```
+
+### 5. Start Development
+
    ```bash
    npm run dev
    ```
 
-   Open [http://localhost:3000](http://localhost:3000) in your browser.
+Visit [http://localhost:3000/admin/login](http://localhost:3000/admin/login)
 
-## Default Credentials
+### 6. Default Login
 
-The database schema includes a default admin user:
+**Super Administrator:**
+- Username: `superadmin`
+- Password: `SuperAdmin123!`
 
-- **Email**: admin@example.com
-- **Password**: admin123
+**Site Administrator (Site 1):**
+- Username: `siteadmin`  
+- Password: `SiteAdmin123!`
 
-⚠️ **Important**: Change these credentials immediately after first login in production!
+**⚠️ Change these passwords immediately!**
 
-## Project Structure
+## 📚 Documentation
+
+### Essential Docs
+- **[Setup Guide](./SETUP.md)** - Installation and configuration
+- **[Changelog](./CHANGELOG.md)** - Version history and release notes
+
+### Complete Documentation
+
+All comprehensive guides are in the **[Documentation/](./Documentation/)** folder:
+
+**Architecture & Setup**
+- [Database Structure](./Documentation/DATABASE_STRUCTURE.md) - Complete schema reference
+- [Project Structure](./Documentation/PROJECT_STRUCTURE.md) - Codebase organization
+- [Multi-Site Architecture](./Documentation/MULTI_SITE.md) - Multi-site system guide
+
+**Content Management**
+- [Content Types Guide](./Documentation/CONTENT_TYPES_GUIDE.md) - Custom post types & taxonomies
+- [Media Guide](./Documentation/MEDIA_GUIDE.md) - Complete media management
+- [Scheduled Publishing](./Documentation/SCHEDULED_PUBLISHING.md) - Schedule posts
+
+**User & System Management**
+- [Super Admin Interface](./Documentation/SUPER_ADMIN_INTERFACE.md) - System administration
+- [Site User Management](./Documentation/SITE_USER_MANAGEMENT.md) - Multi-site users
+- [User Switching](./Documentation/USER_SWITCHING.md) - Testing as other users
+- [Session Management](./Documentation/SESSION_MANAGEMENT.md) - Session configuration
+
+**Reference**
+- [Features](./Documentation/FEATURES.md) - Complete feature list
+- [Settings](./Documentation/SETTINGS.md) - Settings system reference
+- [Versioning](./VERSIONING.md) - Version guidelines
+- [Troubleshooting](./Documentation/TROUBLESHOOTING.md) - Common issues
+
+## 🏗️ Architecture
+
+Next CMS uses a multi-site architecture where a single installation can manage multiple independent websites.
+
+### Database Architecture
+
+- **Global Tables**: Shared across all sites (users, roles, sites, activity_log)
+- **Site Tables**: Isolated per site with `site_{id}_` prefix (posts, media, menus, settings)
+
+👉 **[View Complete Database Structure](./DATABASE_STRUCTURE.md)**
+
+### User Hierarchy
+
+```
+Super Administrator (system-wide)
+├─ Manages all sites and system settings
+├─ Creates and assigns users to sites
+├─ Views activity across all sites
+└─ Access to Global Settings
+
+Site Administrator (per site)
+├─ Full access to assigned site(s)
+├─ Manages site content and users
+└─ Site-specific settings
+
+Editor (per site)
+├─ Creates and publishes content
+└─ Manages media library
+
+Author (per site)
+├─ Creates own content
+└─ Limited to own posts
+
+Guest (public)
+├─ Read-only access to public site
+├─ Cannot access admin area
+└─ No permissions
+```
+
+### Multi-Site Features
+
+- **Site Isolation**: Each site has completely separate content, media, and settings
+- **Shared Users**: Users can be assigned to multiple sites with different roles
+- **Centralized Management**: Super admins manage all sites from one interface
+- **Activity Logging**: Global audit trail with per-site filtering
+
+## 🎨 Technology Stack
+
+- **Framework**: Next.js 14 (App Router)
+- **Language**: TypeScript
+- **Styling**: Tailwind CSS
+- **Database**: MySQL 8.0+
+- **Authentication**: NextAuth.js
+- **ORM**: mysql2
+- **State Management**: TanStack Query
+- **Forms**: React Hook Form
+- **Editor**: TipTap
+- **Icons**: Emoji (lightweight!)
+
+## 📁 Project Structure
 
 ```
 next-cms/
-├── app/                       # Next.js app directory
-│   ├── (public)/             # Public-facing pages
-│   │   ├── page.tsx          # Homepage
-│   │   ├── blog/             # Blog listing and posts
-│   │   └── [...slug]/        # Dynamic hierarchical pages
-│   ├── admin/                # Admin dashboard
-│   │   ├── page.tsx          # Dashboard with content summary
-│   │   ├── content-types/    # Content types management
-│   │   │   ├── post-types/   # Post type definitions
-│   │   │   └── taxonomies/   # Taxonomy definitions
-│   │   ├── post-type/        # Dynamic post type content
-│   │   │   └── [slug]/       # Posts for each type (list, new, edit)
-│   │   ├── taxonomy/         # Dynamic taxonomy terms
-│   │   │   └── [slug]/       # Terms for each taxonomy
-│   │   ├── media/            # Media library
-│   │   ├── users/            # User management
-│   │   │   └── roles/        # Custom roles & permissions
-│   │   ├── settings/         # Site settings
-│   │   │   ├── page.tsx      # General settings
-│   │   │   └── media/        # Media settings
-│   │   └── login/            # Login page
-│   └── api/                  # API routes
-│       ├── auth/             # Authentication
-│       ├── posts/            # Posts CRUD
-│       │   ├── [id]/         # Single post operations
-│       │   │   ├── restore/          # Restore from trash
-│       │   │   ├── permanent-delete/ # Hard delete
-│       │   │   ├── revisions/        # Post revisions
-│       │   │   └── meta/             # Custom fields
-│       │   ├── trash/empty/  # Empty trash
-│       │   └── process-scheduled/ # Cron endpoint
-│       ├── post-types/       # Post types management
-│       ├── taxonomies/       # Taxonomies management
-│       ├── terms/            # Terms management
-│       ├── users/            # User management
-│       ├── roles/            # Roles & permissions
-│       ├── media/            # Media upload/management
-│       ├── settings/         # Settings management
-│       └── user/             # User metadata/preferences
-│           └── meta/         # User preferences (columns, items per page)
-├── components/               # React components
-│   ├── admin/               # Admin components
-│   │   ├── media/           # Media library components
-│   │   │   ├── MediaUploadProgress.tsx
-│   │   │   ├── MediaGrid.tsx
-│   │   │   ├── EditMediaModal.tsx
-│   │   │   ├── FolderModal.tsx
-│   │   │   ├── MoveMediaModal.tsx
-│   │   │   ├── BulkMoveModal.tsx
-│   │   │   ├── LoadingOverlay.tsx
-│   │   │   └── TrashView.tsx
-│   │   ├── post-editor/     # Post editor sub-components
-│   │   ├── PostTypeForm.tsx # Main post editor
-│   │   ├── MediaSelector.tsx # Featured image picker
-│   │   └── Sidebar.tsx      # Admin navigation
-│   └── public/              # Public components
-├── hooks/                   # Custom React hooks
-│   └── usePermission.ts    # Permission checking
-├── lib/                     # Utility functions
-│   ├── db.ts               # Database connection
-│   ├── auth.ts             # Authentication config
-│   └── utils.ts            # Helper functions
-├── database/                # Database schema
-│   └── schema.sql          # Complete database structure
-├── scripts/                # Utility scripts
-│   └── sync-session-timeout.js # Sync session timeout to .env
-└── public/                 # Static files
-    └── uploads/            # Uploaded media files
+├── app/
+│   ├── (public)/         # Public-facing site (pages, blog)
+│   ├── admin/            # Admin dashboard and tools
+│   └── api/              # REST API endpoints
+├── components/
+│   ├── admin/            # Admin UI components
+│   └── public/           # Public-facing components
+├── database/
+│   ├── schema.sql        # Main database schema
+│   └── site-tables-template.sql  # Template for new sites
+├── lib/                  # Utilities, helpers, and database
+├── hooks/                # Custom React hooks
+└── [documentation files]
 ```
 
-## Usage
+👉 **[View Complete Project Structure](./PROJECT_STRUCTURE.md)**
 
-### Admin Panel
+## 🚢 Deployment
 
-Access the admin panel at `/admin`:
-
-1. **Dashboard** - Overview of your content with post type and taxonomy counts
-2. **Post Types** - View and manage content for each post type (Posts, Pages, etc.)
-3. **Content Types** - Create and configure custom post types and taxonomies
-4. **Taxonomies** - Manage terms (categories, tags) for your content
-5. **Media** - Upload and manage media files
-6. **Users** - Manage users and custom roles with granular permissions
-7. **Settings** - Configure site name, tagline, media sizes, revisions limit, and session timeout
-
-### Creating Content
-
-1. Navigate to the desired post type (Posts, Pages, etc.)
-2. Click "New [Post Type]"
-3. Fill in the title and content using the rich text editor
-4. Add custom fields for additional metadata (key-value pairs)
-5. Select parent (for hierarchical content), taxonomies, and featured image
-6. Change author if you have `can_reassign` permission
-7. Set the status:
-   - **Draft** - Save without publishing
-   - **Pending** - Submit for review (if you can't publish)
-   - **Published** - Make content live (requires `can_publish` permission)
-   - **Scheduled** - Set a future publish date/time
-8. Click "Publish", "Update", "Schedule", or "Submit for Review" based on your permissions
-9. View revision history and restore previous versions if needed
-
-### Managing Content
-
-**Status Filtering:**
-- Use tabs to filter posts by status (All, Published, Draft, Pending, Trash)
-- Counts show number of posts in each status
-- Tabs with zero posts are automatically hidden
-
-**Bulk Actions:**
-1. Select multiple posts using checkboxes
-2. Choose an action from the dropdown:
-   - **Move to Trash** - Soft delete multiple posts
-   - **Restore** - Recover posts from trash
-   - **Delete Permanently** - Permanently remove posts from database
-3. Click "Apply" to execute the action
-
-**Trash System:**
-- Deleted posts move to trash (not permanently deleted)
-- View trashed items via the "Trash" status tab
-- Restore individual posts or empty entire trash
-- Permanent deletion only available from trash view
-
-**Search and Filtering:**
-- Use the search bar to find posts by title or content
-- Apply column filters for precise results
-- Combine multiple filters for advanced queries
-- Results update automatically as you type (debounced)
-
-**List Customization:**
-- Toggle column visibility (featured image, author, status, taxonomies, date)
-- Choose items per page (10, 25, 50, or 100)
-- Navigate with pagination controls
-- Settings saved per user and per post type
-
-**Revisions:**
-- View complete revision history for any post
-- See what changed, when, and by whom
-- Restore any previous version with one click
-- Automatic cleanup based on max revisions setting
-
-### Media Management
-
-**Organizing Media:**
-1. Go to the Media Library
-2. Create folders to organize files by clicking "New Folder"
-3. Navigate folders with breadcrumb navigation
-4. Upload files into the current folder
-
-**Working with Files:**
-1. Click "Upload Files" to add new media
-2. Drag and drop files onto folders to move them
-3. Use bulk actions to move or delete multiple files at once
-4. Edit title and alt text for SEO and accessibility
-5. Copy URLs for use in posts/pages
-6. Regenerate sizes if media settings change
-
-**Trash System:**
-1. Deleted files move to trash (not permanently deleted)
-2. Click "Trash" button to view deleted files
-3. Restore individual files or use bulk restore
-4. Permanently delete files when ready
-5. Empty entire trash with one click
-
-### Managing Roles and Permissions
-
-1. Navigate to **Users → Roles**
-2. View system roles (Admin, Editor, Author) or create custom roles
-3. Select a role to edit its permissions:
-   - **General Permissions**: Core capabilities like managing media, users, settings
-   - **Administration**: Manage post types, taxonomies, and roles
-   - **Post Type Permissions**: Per-post-type control for each custom type
-4. Clone existing roles to create variations
-5. Assign roles to users in the Users management page
-
-**Key Permissions:**
-- `manage_posts_[type]` - Create/edit own posts of a specific type
-- `manage_others_posts` - Edit/view others' posts
-- `view_others_posts` - See others' posts in lists
-- `can_publish` - Publish directly (vs. submit for review)
-- `can_delete` / `can_delete_others` - Delete own/others' posts
-- `can_reassign` - Change post authors
-- `manage_media` - Upload and manage media files
-- `manage_users` - Create and edit user accounts
-- `manage_roles` - Create and edit custom roles
-- `manage_post_types` - Create custom post types and taxonomies
-- `manage_taxonomies` - Manage taxonomy terms
-- `manage_settings` - Edit site settings
-
-## API Routes
-
-All API routes enforce role-based permissions. Unauthorized requests return 403 Forbidden.
-
-### Posts (All Content)
-- `GET /api/posts` - List posts (filtered by permissions)
-- `GET /api/posts/:id` - Get single post
-- `POST /api/posts` - Create post (requires `manage_posts_[type]`)
-- `PUT /api/posts/:id` - Update post (checks ownership and permissions)
-- `DELETE /api/posts/:id` - Move post to trash (soft delete)
-- `POST /api/posts/:id/restore` - Restore post from trash
-- `DELETE /api/posts/:id/permanent-delete` - Permanently delete post from database
-- `DELETE /api/posts/trash/empty` - Empty all items from trash
-- `GET /api/posts/:id/revisions` - Get post revision history
-- `POST /api/posts/:id/revisions/:revisionId/restore` - Restore a specific revision
-- `GET /api/posts/:id/meta` - Get post custom fields
-- `PUT /api/posts/:id/meta` - Update post custom fields
-- `GET /api/posts/process-scheduled` - Process scheduled posts (cron endpoint)
-
-### Post Types
-- `GET /api/post-types` - List all post types
-- `POST /api/post-types` - Create post type (requires `manage_post_types`)
-- `PUT /api/post-types/:id` - Update post type
-- `DELETE /api/post-types/:id` - Delete post type
-
-### Taxonomies
-- `GET /api/taxonomies` - List all taxonomies
-- `POST /api/taxonomies` - Create taxonomy (requires `manage_post_types`)
-- `PUT /api/taxonomies/:id` - Update taxonomy
-- `DELETE /api/taxonomies/:id` - Delete taxonomy
-
-### Terms
-- `GET /api/terms` - List terms (filtered by taxonomy)
-- `POST /api/terms` - Create term (requires `manage_taxonomies`)
-- `PUT /api/terms/:id` - Update term
-- `DELETE /api/terms/:id` - Delete term
-
-### Users
-- `GET /api/users` - List users (requires `manage_users`)
-- `POST /api/users` - Create user
-- `PUT /api/users/:id` - Update user
-- `DELETE /api/users/:id` - Delete user
-
-### Roles
-- `GET /api/roles` - List all roles
-- `GET /api/roles/:id` - Get single role (requires `manage_roles`)
-- `POST /api/roles` - Create role
-- `PUT /api/roles/:id` - Update role permissions
-- `DELETE /api/roles/:id` - Delete custom role
-
-### Media
-- `GET /api/media` - List all media (supports folder_id and trash filters)
-- `POST /api/media` - Upload file (supports folder_id)
-- `DELETE /api/media/:id` - Move file to trash (soft delete)
-- `PUT /api/media/:id/move` - Move file to folder
-- `POST /api/media/:id/restore` - Restore from trash
-- `DELETE /api/media/:id/permanent-delete` - Permanently delete file
-- `DELETE /api/media/trash/empty` - Empty entire trash
-
-### Media Folders
-- `GET /api/media/folders` - List folders (supports parent_id filter)
-- `POST /api/media/folders` - Create folder
-- `GET /api/media/folders/:id` - Get folder details
-- `PUT /api/media/folders/:id` - Update folder (rename/move)
-- `DELETE /api/media/folders/:id` - Delete folder
-
-### Media Bulk Actions
-- `POST /api/media/bulk` - Bulk operations (trash, restore, move)
-- `POST /api/media/bulk/permanent-delete` - Bulk permanent delete
-
-### Settings
-- `GET /api/settings` - Get site settings (requires `manage_settings`)
-- `PUT /api/settings` - Update settings
-
-### User Meta
-- `GET /api/user/meta` - Get user preference by key
-- `PUT /api/user/meta` - Update user preference (column visibility, items per page, etc.)
-
-## Database Schema
-
-The system uses the following main tables:
-
-- **users** - User accounts and authentication
-- **roles** - Custom roles with granular permissions
-- **posts** - All content (posts, pages, custom post types) with trash and scheduled status
-- **post_revisions** - Complete revision history for posts
-- **post_meta** - Custom fields (key-value pairs) for posts
-- **user_meta** - User preferences and settings
-- **post_types** - Custom post type definitions
-- **taxonomies** - Custom taxonomy definitions
-- **terms** - Taxonomy terms (categories, tags, etc.)
-- **post_terms** - Post-term relationships
-- **media** - Uploaded files with metadata, folder assignment, and soft delete (trash)
-- **media_folders** - Hierarchical folder structure for organizing media
-- **settings** - Site configuration (includes max_revisions and session_timeout)
-
-## Deployment
-
-### Database Setup
-
-Ensure your production MySQL database is set up and the schema is imported.
-
-### Environment Variables
-
-Set all required environment variables in your hosting platform.
-
-### Build
+### Build for Production
 
 ```bash
 npm run build
 npm start
 ```
 
-### Hosting Recommendations
+### Using PM2
 
-- **Vercel** - Recommended for Next.js apps
-- **Railway** - Easy database and app hosting
-- **DigitalOcean** - Full control with App Platform
-- **AWS** - Elastic Beanstalk or ECS
+```bash
+npm install -g pm2
+pm2 start npm --name "next-cms" -- start
+```
 
-## Documentation
+### Environment Variables
 
-Comprehensive guides for various features:
+Update for production:
+- `NEXTAUTH_URL` - Your domain
+- `NODE_ENV=production`
+- Strong `NEXTAUTH_SECRET`
+- Secure database credentials
 
-- [CHANGELOG.md](CHANGELOG.md) - Complete version history and release notes
-- [CUSTOM_POST_TYPES.md](CUSTOM_POST_TYPES.md) - Creating and managing custom post types
-- [SCHEDULED_PUBLISHING.md](SCHEDULED_PUBLISHING.md) - Setting up cron jobs for scheduled posts
-- [SESSION_MANAGEMENT.md](SESSION_MANAGEMENT.md) - Configuring session timeout and security
-- [MIGRATION_GUIDE.md](MIGRATION_GUIDE.md) - Migrating from v1.0.2 to v1.0.3 (Pages to Post Types)
-- [IMAGE_SYSTEM.md](IMAGE_SYSTEM.md) - WordPress-style image handling and sizing
-- [IMAGE_CROP_STYLES.md](IMAGE_CROP_STYLES.md) - Image crop and fit strategies
-- [IMAGE_REGENERATION.md](IMAGE_REGENERATION.md) - Regenerating image sizes
-- [MEDIA_METADATA.md](MEDIA_METADATA.md) - Managing titles and alt text
-- [MEDIA_SAFETY.md](MEDIA_SAFETY.md) - Safe media deletion with usage tracking
-- [SETTINGS.md](SETTINGS.md) - Configuring site and media settings
-- [VERSIONING.md](VERSIONING.md) - Semantic versioning guide
-- [TROUBLESHOOTING.md](TROUBLESHOOTING.md) - Common issues and solutions
+## 🔒 Security
 
-**Note:** The roles and permissions system is fully integrated. See the "Managing Roles and Permissions" section above for details on creating custom roles and configuring granular access control.
+- ✅ Password hashing with bcrypt
+- ✅ Role-based access control
+- ✅ SQL injection prevention
+- ✅ XSS protection
+- ✅ CSRF tokens (NextAuth)
+- ✅ Secure session management
+- ✅ Activity logging
+- ✅ Input validation
 
-## Security Considerations
+## 🤝 Contributing
 
-1. Change default admin credentials
-2. Use strong `NEXTAUTH_SECRET`
-3. Enable HTTPS in production
-4. Set up proper database backups
-5. Implement rate limiting for API routes
-6. Sanitize user input
-7. Keep dependencies updated
+Contributions are welcome! Please:
 
-## Future Enhancements
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
 
-Completed features (see CHANGELOG for details):
-- [x] Revision history with restore capability
-- [x] Scheduled publishing with cron integration
-- [x] Bulk actions for posts (trash, restore, delete)
-- [x] Bulk actions for media (move, trash, restore, delete)
-- [x] Advanced search and filtering with column filters
-- [x] Custom fields (post meta) system
-- [x] Pagination for post lists
-- [x] Session timeout configuration
-- [x] Media library folders with drag and drop
-- [x] Media trash system with restore
-- [x] Autosave with visual diff modal
-- [x] SEO metadata editor per post/page
-- [x] Activity log and audit trail
-- [x] Export/import functionality (JSON, CSV)
+## 📝 License
 
-Planned features:
-- [ ] Comments system with moderation
-- [ ] Multi-language support (i18n)
-- [ ] AI-generated content suggestions
-- [ ] AI-generated alt text for images
-- [ ] Analytics dashboard (page views, popular content)
-- [ ] Email notifications (new comment, user registration, etc.)
-- [ ] Custom themes with theme editor
-- [ ] Plugin system for extensibility
-- [ ] Duplicate post/page functionality
-- [ ] Post templates for consistent formatting
-- [ ] Collaborative editing with real-time updates
-- [ ] Two-factor authentication (2FA)
-- [ ] OAuth providers (Google, GitHub, etc.)
-- [ ] API rate limiting
-- [ ] GraphQL API option
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Contributing
+## 🙏 Acknowledgments
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Built with love using:
+- Next.js by Vercel
+- TanStack Query
+- Tailwind CSS
+- TipTap Editor
+- And many other amazing open-source projects
 
-## License
+## 📧 Support
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+- Documentation: Check the docs folder
+- Issues: GitHub Issues
+- Discussions: GitHub Discussions
 
-## Support
+## 🗺️ Roadmap
 
-For issues, questions, or suggestions, please open an issue on GitHub.
+- [ ] [Content Preview & Views](./roadmap/content-preview-views.md) - Visual content previews for headless workflows
+- [ ] [Plugin architecture](./roadmap/plugin-architecture.md) - Extensible plugin system for adding functionality
+- [ ] [REST API for headless CMS](./roadmap/rest-api-headless.md) - Complete REST API for decoupled applications
+- [ ] [GraphQL API](./roadmap/graphql-api.md) - Flexible GraphQL API with subscriptions
+- [ ] [Advanced caching](./roadmap/advanced-caching.md) - Multi-layer caching for performance
+- [ ] [CDN integration](./roadmap/cdn-integration.md) - Global content delivery network support
+- [ ] [Multi-language support](./roadmap/multi-language-support.md) - Comprehensive i18n and localization
+- [ ] [Advanced SEO tools](./roadmap/advanced-seo-tools.md) - SEO analysis, schema markup, and optimization
+- [ ] [Analytics dashboard](./roadmap/analytics-dashboard.md) - Built-in traffic and content analytics
+- [ ] [Email templates](./roadmap/email-templates.md) - Email system with newsletter management
+- [ ] [Webhooks](./roadmap/webhooks.md) - Real-time event notifications for integrations
+- [ ] [Import/Export improvements](./roadmap/import-export-improvements.md) - Enhanced data migration and backup tools
+- [ ] [Backup & Restore](./roadmap/backup-restore.md) - Automated backups with cloud storage and point-in-time recovery
 
-## Version History
+---
 
-See [CHANGELOG.md](CHANGELOG.md) for complete version history.
-
-## Acknowledgments
-
-- Next.js team for the amazing framework
-- Tailwind CSS for the utility-first CSS framework
-- NextAuth.js for authentication
-- Sharp for image processing
-- React Simple WYSIWYG for the text editor
-
+**Made with ❤️ for the content management community**

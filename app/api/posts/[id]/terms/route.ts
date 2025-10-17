@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 
 // Get terms for a specific post
@@ -10,16 +10,24 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    const session = await getServerSession(authOptions);
+    const siteId = (session?.user as any)?.currentSiteId || 1;
+    
+    const termsTable = getSiteTable(siteId, 'terms');
+    const termRelationshipsTable = getSiteTable(siteId, 'term_relationships');
+    const taxonomiesTable = getSiteTable(siteId, 'taxonomies');
+    const mediaTable = getSiteTable(siteId, 'media');
+    
     const searchParams = request.nextUrl.searchParams;
     const taxonomyId = searchParams.get('taxonomy_id');
 
     let query = `
       SELECT t.*, tax.name as taxonomy_name, tax.hierarchical,
              m.url as image_url, m.sizes as image_sizes
-      FROM terms t
-      INNER JOIN term_relationships tr ON tr.term_id = t.id
-      INNER JOIN taxonomies tax ON t.taxonomy_id = tax.id
-      LEFT JOIN media m ON t.image_id = m.id
+      FROM ${termsTable} t
+      INNER JOIN ${termRelationshipsTable} tr ON tr.term_id = t.id
+      INNER JOIN ${taxonomiesTable} tax ON t.taxonomy_id = tax.id
+      LEFT JOIN ${mediaTable} m ON t.image_id = m.id
       WHERE tr.post_id = ?
     `;
     const queryParams: any[] = [params.id];
@@ -51,6 +59,10 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const siteId = (session.user as any).currentSiteId || 1;
+    const termsTable = getSiteTable(siteId, 'terms');
+    const termRelationshipsTable = getSiteTable(siteId, 'term_relationships');
+
     const body = await request.json();
     const { term_ids, taxonomy_id } = body;
 
@@ -60,9 +72,9 @@ export async function PUT(
 
     // Remove existing relationships for this taxonomy
     await db.query<ResultSetHeader>(
-      `DELETE FROM term_relationships 
+      `DELETE FROM ${termRelationshipsTable} 
        WHERE post_id = ? 
-       AND term_id IN (SELECT id FROM terms WHERE taxonomy_id = ?)`,
+       AND term_id IN (SELECT id FROM ${termsTable} WHERE taxonomy_id = ?)`,
       [params.id, taxonomy_id]
     );
 
@@ -70,14 +82,14 @@ export async function PUT(
     if (term_ids && term_ids.length > 0) {
       const values = term_ids.map((termId: number) => [params.id, termId]);
       await db.query<ResultSetHeader>(
-        'INSERT INTO term_relationships (post_id, term_id) VALUES ?',
+        `INSERT INTO ${termRelationshipsTable} (post_id, term_id) VALUES ?`,
         [values]
       );
 
       // Update term counts
       await db.query<ResultSetHeader>(
-        `UPDATE terms 
-         SET count = (SELECT COUNT(*) FROM term_relationships WHERE term_id = terms.id)
+        `UPDATE ${termsTable} 
+         SET count = (SELECT COUNT(*) FROM ${termRelationshipsTable} WHERE term_id = ${termsTable}.id)
          WHERE taxonomy_id = ?`,
         [taxonomy_id]
       );

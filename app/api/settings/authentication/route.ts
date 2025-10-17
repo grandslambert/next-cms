@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
@@ -10,19 +10,6 @@ export async function GET() {
     // Note: This endpoint is public (no auth check) because it's used on the login page
     // Only safe settings (hide_default_user, password requirements) are exposed
     
-    // Fetch authentication settings
-    const [settings] = await db.query<RowDataPacket[]>(
-      `SELECT setting_key, setting_value FROM settings 
-       WHERE setting_key IN (
-         'auth_hide_default_user',
-         'password_min_length',
-         'password_require_uppercase',
-         'password_require_lowercase',
-         'password_require_numbers',
-         'password_require_special'
-       )`
-    );
-
     const authSettings = {
       hide_default_user: false,
       password_min_length: 8,
@@ -32,12 +19,34 @@ export async function GET() {
       password_require_special: false,
     };
 
-    settings.forEach((setting: any) => {
+    // Fetch global settings (hide_default_user is system-wide)
+    const [globalSettings] = await db.query<RowDataPacket[]>(
+      `SELECT setting_key, setting_value FROM global_settings 
+       WHERE setting_key = 'auth_hide_default_user'`
+    );
+
+    globalSettings.forEach((setting: any) => {
+      if (setting.setting_key === 'auth_hide_default_user') {
+        authSettings.hide_default_user = setting.setting_value === 'true' || setting.setting_value === '1';
+      }
+    });
+
+    // Fetch site-specific settings (password requirements from site 1 for login page)
+    const settingsTable = getSiteTable(1, 'settings');
+    const [siteSettings] = await db.query<RowDataPacket[]>(
+      `SELECT setting_key, setting_value FROM ${settingsTable} 
+       WHERE setting_key IN (
+         'password_min_length',
+         'password_require_uppercase',
+         'password_require_lowercase',
+         'password_require_numbers',
+         'password_require_special'
+       )`
+    );
+
+    siteSettings.forEach((setting: any) => {
       const value = setting.setting_value;
       switch (setting.setting_key) {
-        case 'auth_hide_default_user':
-          authSettings.hide_default_user = value === 'true' || value === '1';
-          break;
         case 'password_min_length':
           authSettings.password_min_length = parseInt(value) || 8;
           break;
@@ -73,8 +82,9 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const isSuperAdmin = (session.user as any)?.isSuperAdmin || false;
     const userPermissions = (session.user as any).permissions || {};
-    if (!userPermissions.manage_settings) {
+    if (!isSuperAdmin && !userPermissions.manage_settings) {
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
     }
 
@@ -88,9 +98,12 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    // Save each setting
-    const settingsToSave = [
-      { key: 'auth_hide_default_user', value: body.hide_default_user ? '1' : '0' },
+    const userId = (session.user as any).id;
+    const siteId = (session.user as any).currentSiteId || 1;
+
+    // Save site-specific password settings
+    const settingsTable = getSiteTable(siteId, 'settings');
+    const passwordSettings = [
       { key: 'password_min_length', value: body.password_min_length.toString() },
       { key: 'password_require_uppercase', value: body.password_require_uppercase ? '1' : '0' },
       { key: 'password_require_lowercase', value: body.password_require_lowercase ? '1' : '0' },
@@ -98,23 +111,25 @@ export async function PUT(request: NextRequest) {
       { key: 'password_require_special', value: body.password_require_special ? '1' : '0' },
     ];
 
-    for (const setting of settingsToSave) {
+    for (const setting of passwordSettings) {
       await db.query(
-        'INSERT INTO settings (setting_key, setting_value, setting_type) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)',
-        [setting.key, setting.value, 'string']
+        `INSERT INTO ${settingsTable} (setting_key, setting_value, setting_type) 
+         VALUES (?, ?, 'string') 
+         ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)`,
+        [setting.key, setting.value]
       );
     }
 
     // Log activity
-    const userId = (session.user as any).id;
     await logActivity({
       userId,
       action: 'settings_updated',
       entityType: 'settings',
       entityName: 'Authentication Settings',
-      details: 'Updated authentication and password requirements',
+      details: 'Updated password requirements',
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
+      siteId,
     });
 
     return NextResponse.json({ success: true });

@@ -34,5 +34,19 @@ const db = {
   }
 };
 
+// Multi-site helper functions
+export function getSitePrefix(siteId: number): string {
+  return `site_${siteId}_`;
+}
+
+export function getSiteTable(siteId: number, tableName: string): string {
+  return `${getSitePrefix(siteId)}${tableName}`;
+}
+
+// Get table name with backticks for safe SQL (prevents SQL injection in table names)
+export function getSiteTableSafe(siteId: number, tableName: string): string {
+  return `\`${getSitePrefix(siteId)}${tableName}\``;
+}
+
 export default db;
 

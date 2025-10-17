@@ -7,7 +7,7 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
+  const [emailOrUsername, setEmailOrUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [hideDefaultUser, setHideDefaultUser] = useState(false);
@@ -30,13 +30,13 @@ export default function LoginPage() {
 
     try {
       const result = await signIn('credentials', {
-        email,
+        email: emailOrUsername,
         password,
         redirect: false,
       });
 
       if (result?.error) {
-        toast.error('Invalid email or password');
+        toast.error('Invalid username/email or password');
         setLoading(false);
       } else {
         toast.success('Login successful');
@@ -59,15 +59,16 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-              Email
+            <label htmlFor="emailOrUsername" className="block text-sm font-medium text-gray-700">
+              Email or Username
             </label>
             <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              id="emailOrUsername"
+              type="text"
+              value={emailOrUsername}
+              onChange={(e) => setEmailOrUsername(e.target.value)}
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+              placeholder="superadmin@example.com or superadmin"
               required
             />
           </div>
@@ -96,9 +97,21 @@ export default function LoginPage() {
         </form>
 
         {!hideDefaultUser && (
-          <div className="mt-6 text-center text-sm text-gray-600">
-            <p>Default credentials:</p>
-            <p className="font-mono mt-1">admin@example.com / admin123</p>
+          <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-sm font-semibold text-gray-700 mb-2">Default Accounts:</p>
+            <div className="space-y-2 text-sm">
+              <div className="font-mono text-gray-900">
+                <p className="font-semibold text-blue-700">Super Admin:</p>
+                <p>superadmin (or superadmin@example.com)</p>
+                <p className="text-gray-600">Password: SuperAdmin123!</p>
+              </div>
+              <div className="font-mono text-gray-900">
+                <p className="font-semibold text-green-700">Site Admin:</p>
+                <p>siteadmin (or admin@site1.com)</p>
+                <p className="text-gray-600">Password: SiteAdmin123!</p>
+              </div>
+            </div>
+            <p className="text-xs text-gray-500 mt-3">⚠️ Change these passwords after first login</p>
           </div>
         )}
       </div>

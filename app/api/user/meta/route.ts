@@ -12,11 +12,12 @@ export async function GET(request: NextRequest) {
     }
 
     const userId = (session.user as any).id;
+    const siteId = (session.user as any).currentSiteId || 1;
     const searchParams = request.nextUrl.searchParams;
     const metaKey = searchParams.get('key');
 
-    let query = 'SELECT * FROM user_meta WHERE user_id = ?';
-    const params: any[] = [userId];
+    let query = 'SELECT * FROM user_meta WHERE user_id = ? AND site_id = ?';
+    const params: any[] = [userId, siteId];
 
     if (metaKey) {
       query += ' AND meta_key = ?';
@@ -45,6 +46,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const userId = (session.user as any).id;
+    const siteId = (session.user as any).currentSiteId || 1;
     const body = await request.json();
     const { meta_key, meta_value } = body;
 
@@ -52,23 +54,23 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'meta_key is required' }, { status: 400 });
     }
 
-    // Check if meta already exists
+    // Check if meta already exists for this user AND site
     const [existing] = await db.query<RowDataPacket[]>(
-      'SELECT id FROM user_meta WHERE user_id = ? AND meta_key = ?',
-      [userId, meta_key]
+      'SELECT id FROM user_meta WHERE user_id = ? AND site_id = ? AND meta_key = ?',
+      [userId, siteId, meta_key]
     );
 
     if (existing.length > 0) {
       // Update existing
       await db.query<ResultSetHeader>(
-        'UPDATE user_meta SET meta_value = ? WHERE user_id = ? AND meta_key = ?',
-        [meta_value, userId, meta_key]
+        'UPDATE user_meta SET meta_value = ? WHERE user_id = ? AND site_id = ? AND meta_key = ?',
+        [meta_value, userId, siteId, meta_key]
       );
     } else {
       // Insert new
       await db.query<ResultSetHeader>(
-        'INSERT INTO user_meta (user_id, meta_key, meta_value) VALUES (?, ?, ?)',
-        [userId, meta_key, meta_value]
+        'INSERT INTO user_meta (user_id, site_id, meta_key, meta_value) VALUES (?, ?, ?, ?)',
+        [userId, siteId, meta_key, meta_value]
       );
     }
 

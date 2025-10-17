@@ -1,3 +1,5 @@
+import { useEffect } from 'react';
+
 interface AutosaveDiffModalProps {
   readonly isOpen: boolean;
   readonly currentContent: {
@@ -8,6 +10,9 @@ interface AutosaveDiffModalProps {
     parent_id: number | null;
     menu_order: number;
     author_id: number;
+    featured_image_id: number | null;
+    featured_image_url: string;
+    selected_terms: {[taxonomyId: number]: number[]};
     seo_title: string;
     seo_description: string;
     seo_keywords: string;
@@ -20,6 +25,9 @@ interface AutosaveDiffModalProps {
     parent_id?: number | null;
     menu_order?: number;
     author_id?: number;
+    featured_image_id?: number | null;
+    featured_image_url?: string;
+    selected_terms?: {[taxonomyId: number]: number[]};
     seo_title?: string;
     seo_description?: string;
     seo_keywords?: string;
@@ -27,6 +35,7 @@ interface AutosaveDiffModalProps {
   };
   readonly allPosts?: Array<{id: number, title: string}>;
   readonly users?: Array<{id: number, name: string}>;
+  readonly allTerms?: Array<{taxonomyId: number, taxonomy: any, terms: any[]}>;
   readonly onUseCurrent: () => void;
   readonly onUseAutosave: () => void;
 }
@@ -37,9 +46,24 @@ export default function AutosaveDiffModal({
   autosaveContent,
   allPosts = [],
   users = [],
+  allTerms = [],
   onUseCurrent,
   onUseAutosave,
 }: AutosaveDiffModalProps) {
+  // Handle ESC key to close modal (defaults to keeping current)
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onUseCurrent();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('keydown', handleEscape);
+      return () => document.removeEventListener('keydown', handleEscape);
+    }
+  }, [isOpen, onUseCurrent]);
+
   if (!isOpen) return null;
 
   const savedDate = new Date(autosaveContent.saved_at);
@@ -55,6 +79,14 @@ export default function AutosaveDiffModal({
   const authorChanged = currentContent.author_id !== (autosaveContent.author_id ?? currentContent.author_id);
   const pageAttributesChanged = parentChanged || menuOrderChanged || authorChanged;
 
+  // Compare featured image
+  const featuredImageChanged = currentContent.featured_image_id !== (autosaveContent.featured_image_id ?? currentContent.featured_image_id);
+
+  // Compare taxonomies
+  const currentTermsStr = JSON.stringify(currentContent.selected_terms || {});
+  const autosaveTermsStr = JSON.stringify(autosaveContent.selected_terms || currentContent.selected_terms || {});
+  const taxonomiesChanged = currentTermsStr !== autosaveTermsStr;
+
   // Compare SEO fields
   const seoTitleChanged = currentContent.seo_title !== (autosaveContent.seo_title ?? currentContent.seo_title);
   const seoDescriptionChanged = currentContent.seo_description !== (autosaveContent.seo_description ?? currentContent.seo_description);
@@ -67,6 +99,8 @@ export default function AutosaveDiffModal({
     currentContent.excerpt !== autosaveContent.excerpt ||
     customFieldsChanged ||
     pageAttributesChanged ||
+    featuredImageChanged ||
+    taxonomiesChanged ||
     seoMetadataChanged;
 
   // Helper functions to get names
@@ -79,6 +113,26 @@ export default function AutosaveDiffModal({
   const getAuthorName = (authorId: number) => {
     const author = users.find(u => u.id === authorId);
     return author?.name || `ID: ${authorId}`;
+  };
+
+  const getTermNames = (selectedTerms: {[taxonomyId: number]: number[]}) => {
+    const result: { [taxonomyName: string]: string[] } = {};
+    
+    Object.entries(selectedTerms).forEach(([taxId, termIds]) => {
+      const taxonomyId = parseInt(taxId);
+      const taxonomyData = allTerms.find(t => t.taxonomyId === taxonomyId);
+      if (taxonomyData) {
+        const termNames = termIds.map(termId => {
+          const term = taxonomyData.terms.find((t: any) => t.id === termId);
+          return term?.name || `ID: ${termId}`;
+        });
+        if (termNames.length > 0) {
+          result[taxonomyData.taxonomy.label] = termNames;
+        }
+      }
+    });
+    
+    return result;
   };
 
   // HTML-aware diff that preserves formatting and adds highlighting
@@ -386,6 +440,104 @@ export default function AutosaveDiffModal({
                               </div>
                             )}
                           </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Featured Image Diff */}
+                {featuredImageChanged && (
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-3">Featured Image</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <div className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                          <span className="px-2 py-1 bg-gray-100 rounded text-xs">Current</span>
+                        </div>
+                        <div className="p-4 bg-gray-50 border border-gray-300 rounded-lg min-h-[100px]">
+                          {currentContent.featured_image_url ? (
+                            <img src={currentContent.featured_image_url} alt="Current featured" className="max-w-full h-auto rounded" />
+                          ) : (
+                            <span className="text-gray-400 italic text-sm">No featured image</span>
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                          <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs">Autosaved</span>
+                        </div>
+                        <div className="p-4 bg-green-50 border border-green-300 rounded-lg min-h-[100px]">
+                          {(autosaveContent.featured_image_url ?? currentContent.featured_image_url) ? (
+                            <img src={autosaveContent.featured_image_url ?? currentContent.featured_image_url} alt="Autosaved featured" className="max-w-full h-auto rounded" />
+                          ) : (
+                            <span className="text-gray-400 italic text-sm">No featured image</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Taxonomies Diff */}
+                {taxonomiesChanged && (
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-3">Taxonomies (Categories & Tags)</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <div className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                          <span className="px-2 py-1 bg-gray-100 rounded text-xs">Current</span>
+                        </div>
+                        <div className="p-4 bg-gray-50 border border-gray-300 rounded-lg min-h-[80px]">
+                          {(() => {
+                            const terms = getTermNames(currentContent.selected_terms);
+                            return Object.keys(terms).length === 0 ? (
+                              <span className="text-gray-400 italic text-sm">No terms selected</span>
+                            ) : (
+                              <div className="space-y-3">
+                                {Object.entries(terms).map(([taxonomyName, termNames]) => (
+                                  <div key={taxonomyName}>
+                                    <div className="font-medium text-gray-700 text-sm mb-1">{taxonomyName}:</div>
+                                    <div className="flex flex-wrap gap-1">
+                                      {termNames.map((termName, idx) => (
+                                        <span key={idx} className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">
+                                          {termName}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                          <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs">Autosaved</span>
+                        </div>
+                        <div className="p-4 bg-green-50 border border-green-300 rounded-lg min-h-[80px]">
+                          {(() => {
+                            const terms = getTermNames(autosaveContent.selected_terms || currentContent.selected_terms);
+                            return Object.keys(terms).length === 0 ? (
+                              <span className="text-gray-400 italic text-sm">No terms selected</span>
+                            ) : (
+                              <div className="space-y-3">
+                                {Object.entries(terms).map(([taxonomyName, termNames]) => (
+                                  <div key={taxonomyName}>
+                                    <div className="font-medium text-gray-700 text-sm mb-1">{taxonomyName}:</div>
+                                    <div className="flex flex-wrap gap-1">
+                                      {termNames.map((termName, idx) => (
+                                        <span key={idx} className="px-2 py-1 bg-green-200 text-green-800 text-xs rounded">
+                                          {termName}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })()}
                         </div>
                       </div>
                     </div>

@@ -37,7 +37,7 @@ export default function PageAttributesBox({
     <div className="bg-white rounded-lg shadow p-6">
       <h3 className="font-semibold text-gray-900 mb-4">Page Attributes</h3>
       
-      {canReassign && isEdit && (
+      {canReassign && (
         <div className="mb-4">
           <label htmlFor="post-author" className="block text-sm font-medium text-gray-700 mb-2">
             Author

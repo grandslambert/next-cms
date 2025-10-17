@@ -1,14 +1,15 @@
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
 
 // Helper function to build hierarchical slug path
-async function buildHierarchicalSlugPath(postId: number): Promise<string> {
+async function buildHierarchicalSlugPath(postId: number, siteId: number = 1): Promise<string> {
   const slugs: string[] = [];
   let currentId: number | null = postId;
+  const postsTable = getSiteTable(siteId, 'posts');
 
   while (currentId) {
     const [rows] = await db.query<RowDataPacket[]>(
-      'SELECT slug, parent_id FROM posts WHERE id = ?',
+      `SELECT slug, parent_id FROM ${postsTable} WHERE id = ?`,
       [currentId]
     );
 
@@ -34,11 +35,20 @@ export interface MenuItem {
   description?: string;
 }
 
-export async function getMenuByLocation(location: string): Promise<MenuItem[]> {
+export async function getMenuByLocation(location: string, siteId: number = 1): Promise<MenuItem[]> {
   try {
+    // Get site-prefixed table names
+    const menusTable = getSiteTable(siteId, 'menus');
+    const menuItemsTable = getSiteTable(siteId, 'menu_items');
+    const menuItemMetaTable = getSiteTable(siteId, 'menu_item_meta');
+    const postTypesTable = getSiteTable(siteId, 'post_types');
+    const taxonomiesTable = getSiteTable(siteId, 'taxonomies');
+    const postsTable = getSiteTable(siteId, 'posts');
+    const termsTable = getSiteTable(siteId, 'terms');
+    
     // Get the menu for this location
     const [menuRows] = await db.query<RowDataPacket[]>(
-      'SELECT id, name FROM menus WHERE location = ?',
+      `SELECT id, name FROM ${menusTable} WHERE location = ?`,
       [location]
     );
 
@@ -67,13 +77,13 @@ export async function getMenuByLocation(location: string): Promise<MenuItem[]> {
               t.name as term_name,
               t.slug as term_slug,
               tax2.name as term_taxonomy_slug
-       FROM menu_items mi
-       LEFT JOIN post_types pt ON mi.type = 'post_type' AND mi.object_id = pt.id
-       LEFT JOIN taxonomies tax ON mi.type = 'taxonomy' AND mi.object_id = tax.id
-       LEFT JOIN posts p ON mi.type = 'post' AND mi.object_id = p.id
-       LEFT JOIN post_types pt2 ON p.post_type = pt2.name
-       LEFT JOIN terms t ON mi.type = 'term' AND mi.object_id = t.id
-       LEFT JOIN taxonomies tax2 ON mi.type = 'term' AND t.taxonomy_id = tax2.id
+       FROM ${menuItemsTable} mi
+       LEFT JOIN ${postTypesTable} pt ON mi.type = 'post_type' AND mi.object_id = pt.id
+       LEFT JOIN ${taxonomiesTable} tax ON mi.type = 'taxonomy' AND mi.object_id = tax.id
+       LEFT JOIN ${postsTable} p ON mi.type = 'post' AND mi.object_id = p.id
+       LEFT JOIN ${postTypesTable} pt2 ON p.post_type = pt2.name
+       LEFT JOIN ${termsTable} t ON mi.type = 'term' AND mi.object_id = t.id
+       LEFT JOIN ${taxonomiesTable} tax2 ON mi.type = 'term' AND t.taxonomy_id = tax2.id
        WHERE mi.menu_id = ? 
        ORDER BY mi.menu_order ASC, mi.id ASC`,
       [(menu as any).id]
@@ -83,7 +93,7 @@ export async function getMenuByLocation(location: string): Promise<MenuItem[]> {
     if (itemRows.length > 0) {
       const [metaRows] = await db.query<RowDataPacket[]>(
         `SELECT menu_item_id, meta_key, meta_value 
-         FROM menu_item_meta 
+         FROM ${menuItemMetaTable} 
          WHERE menu_item_id IN (?)`,
         [itemRows.map((r: any) => r.id)]
       );
@@ -114,7 +124,7 @@ export async function getMenuByLocation(location: string): Promise<MenuItem[]> {
           
           if (isHierarchical) {
             // For hierarchical post types, always build the full path
-            const slugPath = await buildHierarchicalSlugPath(itemAny.post_id);
+            const slugPath = await buildHierarchicalSlugPath(itemAny.post_id, siteId);
             itemAny.url = `/${slugPath}`;
             console.log(`Built hierarchical URL for post ${itemAny.post_id}: /${slugPath}`);
           } else {

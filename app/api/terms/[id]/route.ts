@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { slugify } from '@/lib/utils';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
@@ -11,12 +11,18 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    const session = await getServerSession(authOptions);
+    const siteId = (session?.user as any)?.currentSiteId || 1;
+    const termsTable = getSiteTable(siteId, 'terms');
+    const taxonomiesTable = getSiteTable(siteId, 'taxonomies');
+    const mediaTable = getSiteTable(siteId, 'media');
+    
     const [rows] = await db.query<RowDataPacket[]>(
       `SELECT t.*, tax.name as taxonomy_name, tax.hierarchical,
               m.url as image_url, m.sizes as image_sizes
-       FROM terms t
-       INNER JOIN taxonomies tax ON t.taxonomy_id = tax.id
-       LEFT JOIN media m ON t.image_id = m.id
+       FROM ${termsTable} t
+       INNER JOIN ${taxonomiesTable} tax ON t.taxonomy_id = tax.id
+       LEFT JOIN ${mediaTable} m ON t.image_id = m.id
        WHERE t.id = ?`,
       [params.id]
     );
@@ -42,6 +48,12 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const userId = (session.user as any).id;
+    const siteId = (session.user as any).currentSiteId || 1;
+    const termsTable = getSiteTable(siteId, 'terms');
+    const taxonomiesTable = getSiteTable(siteId, 'taxonomies');
+    const mediaTable = getSiteTable(siteId, 'media');
+
     const body = await request.json();
     const { name, description, image_id, parent_id } = body;
 
@@ -54,8 +66,8 @@ export async function PUT(
     // Get current term BEFORE updating (for activity log)
     const [beforeUpdate] = await db.query<RowDataPacket[]>(
       `SELECT t.*, tax.name as taxonomy_name
-       FROM terms t
-       INNER JOIN taxonomies tax ON t.taxonomy_id = tax.id
+       FROM ${termsTable} t
+       INNER JOIN ${taxonomiesTable} tax ON t.taxonomy_id = tax.id
        WHERE t.id = ?`,
       [params.id]
     );
@@ -68,7 +80,7 @@ export async function PUT(
 
     // Check if new slug already exists for this taxonomy (excluding current term)
     const [existing] = await db.query<RowDataPacket[]>(
-      'SELECT id FROM terms WHERE taxonomy_id = ? AND slug = ? AND id != ?',
+      `SELECT id FROM ${termsTable} WHERE taxonomy_id = ? AND slug = ? AND id != ?`,
       [currentTerm.taxonomy_id, slug, params.id]
     );
 
@@ -79,7 +91,7 @@ export async function PUT(
     }
 
     await db.query<ResultSetHeader>(
-      `UPDATE terms 
+      `UPDATE ${termsTable} 
        SET name = ?, slug = ?, description = ?, image_id = ?, parent_id = ?
        WHERE id = ?`,
       [name, slug, description || '', image_id || null, parent_id || null, params.id]
@@ -88,9 +100,9 @@ export async function PUT(
     const [updated] = await db.query<RowDataPacket[]>(
       `SELECT t.*, tax.name as taxonomy_name, tax.hierarchical,
               m.url as image_url, m.sizes as image_sizes
-       FROM terms t
-       INNER JOIN taxonomies tax ON t.taxonomy_id = tax.id
-       LEFT JOIN media m ON t.image_id = m.id
+       FROM ${termsTable} t
+       INNER JOIN ${taxonomiesTable} tax ON t.taxonomy_id = tax.id
+       LEFT JOIN ${mediaTable} m ON t.image_id = m.id
        WHERE t.id = ?`,
       [params.id]
     );
@@ -113,7 +125,6 @@ export async function PUT(
     };
 
     // Log activity
-    const userId = (session.user as any).id;
     await logActivity({
       userId,
       action: 'term_updated',
@@ -125,6 +136,7 @@ export async function PUT(
       userAgent: getUserAgent(request),
       changesBefore,
       changesAfter,
+      siteId,
     });
 
     return NextResponse.json({ term: updated[0] });
@@ -144,11 +156,16 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const userId = (session.user as any).id;
+    const siteId = (session.user as any).currentSiteId || 1;
+    const termsTable = getSiteTable(siteId, 'terms');
+    const taxonomiesTable = getSiteTable(siteId, 'taxonomies');
+
     // Get term details for logging
     const [termRows] = await db.query<RowDataPacket[]>(
       `SELECT t.name, tax.name as taxonomy_name
-       FROM terms t
-       INNER JOIN taxonomies tax ON t.taxonomy_id = tax.id
+       FROM ${termsTable} t
+       INNER JOIN ${taxonomiesTable} tax ON t.taxonomy_id = tax.id
        WHERE t.id = ?`,
       [params.id]
     );
@@ -161,7 +178,7 @@ export async function DELETE(
 
     // Check if term has children
     const [children] = await db.query<RowDataPacket[]>(
-      'SELECT COUNT(*) as count FROM terms WHERE parent_id = ?',
+      `SELECT COUNT(*) as count FROM ${termsTable} WHERE parent_id = ?`,
       [params.id]
     );
 
@@ -172,7 +189,6 @@ export async function DELETE(
     }
 
     // Log activity before deleting
-    const userId = (session.user as any).id;
     await logActivity({
       userId,
       action: 'term_deleted',
@@ -182,9 +198,10 @@ export async function DELETE(
       details: `Deleted term: ${term.name} from ${term.taxonomy_name}`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
+      siteId,
     });
 
-    await db.query<ResultSetHeader>('DELETE FROM terms WHERE id = ?', [params.id]);
+    await db.query<ResultSetHeader>(`DELETE FROM ${termsTable} WHERE id = ?`, [params.id]);
 
     return NextResponse.json({ success: true });
   } catch (error) {

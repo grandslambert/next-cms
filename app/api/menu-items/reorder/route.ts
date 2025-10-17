@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { ResultSetHeader } from 'mysql2';
 
 export async function PUT(request: NextRequest) {
@@ -16,6 +16,9 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    const siteId = (session.user as any).currentSiteId || 1;
+    const menuItemsTable = getSiteTable(siteId, 'menu_items');
+
     const body = await request.json();
     const { items } = body; // Array of { id, parent_id, menu_order }
 
@@ -26,7 +29,7 @@ export async function PUT(request: NextRequest) {
     // Update each item's order, parent, and editable fields
     for (const item of items) {
       await db.query<ResultSetHeader>(
-        'UPDATE menu_items SET parent_id = ?, menu_order = ?, custom_label = ?, custom_url = ?, target = ? WHERE id = ?',
+        `UPDATE ${menuItemsTable} SET parent_id = ?, menu_order = ?, custom_label = ?, custom_url = ?, target = ? WHERE id = ?`,
         [
           item.parent_id || null, 
           item.menu_order,

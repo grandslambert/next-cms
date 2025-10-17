@@ -14,10 +14,11 @@ interface PostType {
   description: string;
   icon: string;
   supports: {
-    title?: boolean;
-    content?: boolean;
-    excerpt?: boolean;
-    featured_image?: boolean;
+    title?: boolean | null;
+    content?: boolean | null;
+    excerpt?: boolean | null;
+    featured_image?: boolean | null;
+    custom_fields?: boolean | null;
   };
   menu_position: number;
 }
@@ -42,6 +43,7 @@ export default function PostTypesSettings() {
       content: true,
       excerpt: true,
       featured_image: true,
+      custom_fields: false,
     },
   });
   const [selectedTaxonomies, setSelectedTaxonomies] = useState<number[]>([]);
@@ -140,6 +142,7 @@ export default function PostTypesSettings() {
         content: true,
         excerpt: true,
         featured_image: true,
+        custom_fields: false,
       },
     });
     setSelectedTaxonomies([]);
@@ -177,7 +180,13 @@ export default function PostTypesSettings() {
       menu_position: postType.menu_position || 5,
       show_in_dashboard: postType.show_in_dashboard !== false,
       hierarchical: postType.hierarchical || false,
-      supports: postType.supports || {},
+      supports: {
+        title: postType.supports?.title ?? true,
+        content: postType.supports?.content ?? true,
+        excerpt: postType.supports?.excerpt ?? false,
+        featured_image: postType.supports?.featured_image ?? false,
+        custom_fields: postType.supports?.custom_fields ?? false,
+      },
     });
     setIsCreating(false);
     // Taxonomies will be loaded by the query
@@ -366,7 +375,7 @@ export default function PostTypesSettings() {
                   onChange={(e) => setFormData({ ...formData, slug: e.target.value.toLowerCase().replace(/[^\w-]/g, '-').replace(/-+/g, '-') })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono disabled:bg-gray-100"
                   placeholder="portfolio (leave empty for root)"
-                  disabled={editingPostType && isBuiltIn(editingPostType.name)}
+                  disabled={!!(editingPostType && isBuiltIn(editingPostType.name))}
                 />
                 <p className="mt-1 text-xs text-gray-500">
                   URL prefix for this post type. Example: "portfolio" → <code>/portfolio/item-slug</code>. Leave empty for root level like pages.
@@ -509,7 +518,7 @@ export default function PostTypesSettings() {
                   Supports
                 </p>
                 <div className="space-y-2">
-                  {['title', 'content', 'excerpt', 'featured_image'].map((feature) => (
+                  {['title', 'content', 'excerpt', 'featured_image', 'custom_fields'].map((feature) => (
                     <label key={feature} className="flex items-center">
                       <input
                         type="checkbox"
@@ -524,7 +533,7 @@ export default function PostTypesSettings() {
                         className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                       />
                       <span className="ml-2 text-sm text-gray-700 capitalize">
-                        {feature.replace('_', ' ')}
+                        {feature.replace(/_/g, ' ')}
                       </span>
                     </label>
                   ))}

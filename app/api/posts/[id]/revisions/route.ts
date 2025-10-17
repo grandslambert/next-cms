@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
 
 export async function GET(
@@ -16,10 +16,16 @@ export async function GET(
 
     const userId = (session.user as any).id;
     const permissions = (session.user as any).permissions || {};
+    const isSuperAdmin = (session.user as any)?.isSuperAdmin || false;
+    const siteId = (session.user as any).currentSiteId || 1;
+    
+    // Get site-prefixed table names
+    const postsTable = getSiteTable(siteId, 'posts');
+    const postRevisionsTable = getSiteTable(siteId, 'post_revisions');
 
     // Check if post exists and user has permission to view it
     const [existingPost] = await db.query<RowDataPacket[]>(
-      'SELECT author_id, post_type FROM posts WHERE id = ?',
+      `SELECT author_id, post_type FROM ${postsTable} WHERE id = ?`,
       [params.id]
     );
 
@@ -28,8 +34,8 @@ export async function GET(
     }
 
     const post = existingPost[0];
-    const isOwner = post.author_id === parseInt(userId);
-    const canManageOthers = permissions.manage_others_posts === true;
+    const isOwner = post.author_id === Number.parseInt(userId);
+    const canManageOthers = isSuperAdmin || permissions.manage_others_posts === true;
 
     // Check if user can view this post's revisions
     if (!isOwner && !canManageOthers) {
@@ -39,7 +45,7 @@ export async function GET(
     // Fetch revisions
     const [revisions] = await db.query<RowDataPacket[]>(
       `SELECT r.*, CONCAT(u.first_name, ' ', u.last_name) as author_name
-       FROM post_revisions r
+       FROM ${postRevisionsTable} r
        LEFT JOIN users u ON r.author_id = u.id
        WHERE r.post_id = ?
        ORDER BY r.created_at DESC`,

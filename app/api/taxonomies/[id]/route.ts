@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
@@ -10,8 +10,12 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    const session = await getServerSession(authOptions);
+    const siteId = (session?.user as any)?.currentSiteId || 1;
+    const taxonomiesTable = getSiteTable(siteId, 'taxonomies');
+    
     const [rows] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM taxonomies WHERE id = ?',
+      `SELECT * FROM ${taxonomiesTable} WHERE id = ?`,
       [params.id]
     );
 
@@ -36,12 +40,16 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized - Admin only' }, { status: 401 });
     }
 
+    const userId = (session.user as any).id;
+    const siteId = (session.user as any).currentSiteId || 1;
+    const taxonomiesTable = getSiteTable(siteId, 'taxonomies');
+
     const body = await request.json();
     const { label, singular_label, description, hierarchical, show_in_menu, show_in_dashboard, menu_position } = body;
 
     // Get current taxonomy BEFORE updating (for activity log)
     const [beforeUpdate] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM taxonomies WHERE id = ?',
+      `SELECT * FROM ${taxonomiesTable} WHERE id = ?`,
       [params.id]
     );
 
@@ -52,7 +60,7 @@ export async function PUT(
     const currentTaxonomy = beforeUpdate[0];
 
     await db.query<ResultSetHeader>(
-      `UPDATE taxonomies 
+      `UPDATE ${taxonomiesTable} 
        SET label = ?, singular_label = ?, description = ?, hierarchical = ?, show_in_menu = ?, show_in_dashboard = ?, menu_position = ?
        WHERE id = ?`,
       [
@@ -68,7 +76,7 @@ export async function PUT(
     );
 
     const [updated] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM taxonomies WHERE id = ?',
+      `SELECT * FROM ${taxonomiesTable} WHERE id = ?`,
       [params.id]
     );
 
@@ -94,7 +102,6 @@ export async function PUT(
     };
 
     // Log activity
-    const userId = (session.user as any).id;
     await logActivity({
       userId,
       action: 'taxonomy_updated',
@@ -106,6 +113,7 @@ export async function PUT(
       userAgent: getUserAgent(request),
       changesBefore,
       changesAfter,
+      siteId,
     });
 
     return NextResponse.json({ taxonomy: updated[0] });
@@ -125,9 +133,14 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized - Admin only' }, { status: 401 });
     }
 
+    const userId = (session.user as any).id;
+    const siteId = (session.user as any).currentSiteId || 1;
+    const taxonomiesTable = getSiteTable(siteId, 'taxonomies');
+    const termsTable = getSiteTable(siteId, 'terms');
+
     // Check if it's a built-in taxonomy
     const [taxonomy] = await db.query<RowDataPacket[]>(
-      'SELECT name FROM taxonomies WHERE id = ?',
+      `SELECT name FROM ${taxonomiesTable} WHERE id = ?`,
       [params.id]
     );
 
@@ -143,7 +156,7 @@ export async function DELETE(
 
     // Check if any terms use this taxonomy
     const [termCount] = await db.query<RowDataPacket[]>(
-      'SELECT COUNT(*) as count FROM terms WHERE taxonomy_id = ?',
+      `SELECT COUNT(*) as count FROM ${termsTable} WHERE taxonomy_id = ?`,
       [params.id]
     );
 
@@ -154,7 +167,6 @@ export async function DELETE(
     }
 
     // Log activity before deleting
-    const userId = (session.user as any).id;
     await logActivity({
       userId,
       action: 'taxonomy_deleted',
@@ -164,9 +176,10 @@ export async function DELETE(
       details: `Deleted taxonomy: ${taxonomy[0].name}`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
+      siteId,
     });
 
-    await db.query<ResultSetHeader>('DELETE FROM taxonomies WHERE id = ?', [params.id]);
+    await db.query<ResultSetHeader>(`DELETE FROM ${taxonomiesTable} WHERE id = ?`, [params.id]);
 
     return NextResponse.json({ success: true });
   } catch (error) {

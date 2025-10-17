@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
@@ -12,10 +12,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const isSuperAdmin = (session.user as any)?.isSuperAdmin || false;
     const permissions = (session.user as any).permissions || {};
-    if (!permissions.manage_menus) {
+    if (!isSuperAdmin && !permissions.manage_menus) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
+
+    const siteId = (session.user as any).currentSiteId || 1;
+    const menuItemsTable = getSiteTable(siteId, 'menu_items');
+    const menuItemMetaTable = getSiteTable(siteId, 'menu_item_meta');
+    const postTypesTable = getSiteTable(siteId, 'post_types');
+    const taxonomiesTable = getSiteTable(siteId, 'taxonomies');
+    const postsTable = getSiteTable(siteId, 'posts');
+    const termsTable = getSiteTable(siteId, 'terms');
 
     const searchParams = request.nextUrl.searchParams;
     const menuId = searchParams.get('menu_id');
@@ -31,12 +40,12 @@ export async function GET(request: NextRequest) {
               p.title as post_title,
               terms.name as term_name,
               tax_for_term.label as term_taxonomy_label
-       FROM menu_items mi
-       LEFT JOIN post_types pt ON mi.type = 'post_type' AND mi.object_id = pt.id
-       LEFT JOIN taxonomies tax ON mi.type = 'taxonomy' AND mi.object_id = tax.id
-       LEFT JOIN posts p ON mi.type = 'post' AND mi.object_id = p.id
-       LEFT JOIN terms ON mi.type = 'term' AND mi.object_id = terms.id
-       LEFT JOIN taxonomies tax_for_term ON terms.taxonomy_id = tax_for_term.id
+       FROM ${menuItemsTable} mi
+       LEFT JOIN ${postTypesTable} pt ON mi.type = 'post_type' AND mi.object_id = pt.id
+       LEFT JOIN ${taxonomiesTable} tax ON mi.type = 'taxonomy' AND mi.object_id = tax.id
+       LEFT JOIN ${postsTable} p ON mi.type = 'post' AND mi.object_id = p.id
+       LEFT JOIN ${termsTable} terms ON mi.type = 'term' AND mi.object_id = terms.id
+       LEFT JOIN ${taxonomiesTable} tax_for_term ON terms.taxonomy_id = tax_for_term.id
        WHERE mi.menu_id = ? 
        ORDER BY mi.menu_order ASC, mi.id ASC`,
       [menuId]
@@ -46,7 +55,7 @@ export async function GET(request: NextRequest) {
     if (rows.length > 0) {
       const [metaRows] = await db.query<RowDataPacket[]>(
         `SELECT menu_item_id, meta_key, meta_value 
-         FROM menu_item_meta 
+         FROM ${menuItemMetaTable} 
          WHERE menu_item_id IN (?)`,
         [rows.map((r: any) => r.id)]
       );
@@ -74,10 +83,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const isSuperAdmin = (session.user as any)?.isSuperAdmin || false;
     const permissions = (session.user as any).permissions || {};
-    if (!permissions.manage_menus) {
+    if (!isSuperAdmin && !permissions.manage_menus) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
+
+    const siteId = (session.user as any).currentSiteId || 1;
+    const menuItemsTable = getSiteTable(siteId, 'menu_items');
 
     const body = await request.json();
     const { menu_id, parent_id, type, object_id, post_type, custom_url, custom_label, menu_order, target } = body;
@@ -95,13 +108,13 @@ export async function POST(request: NextRequest) {
     }
 
     const [result] = await db.query<ResultSetHeader>(
-      `INSERT INTO menu_items (menu_id, parent_id, type, object_id, post_type, custom_url, custom_label, menu_order, target) 
+      `INSERT INTO ${menuItemsTable} (menu_id, parent_id, type, object_id, post_type, custom_url, custom_label, menu_order, target) 
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [menu_id, parent_id || null, type, object_id || null, post_type || null, custom_url || null, custom_label || null, menu_order || 0, target || '_self']
     );
 
     const [newItem] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM menu_items WHERE id = ?',
+      `SELECT * FROM ${menuItemsTable} WHERE id = ?`,
       [result.insertId]
     );
 
@@ -116,6 +129,7 @@ export async function POST(request: NextRequest) {
       details: `Added menu item to menu ID ${menu_id}`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
+      siteId,
     });
 
     return NextResponse.json({ item: newItem[0] });

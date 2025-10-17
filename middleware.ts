@@ -13,6 +13,10 @@ export default withAuth({
       
       // All other /admin/* routes require authentication
       if (path.startsWith('/admin')) {
+        // Block guests from accessing admin (they have no dashboard access)
+        if (token && (token as any).role === 'guest') {
+          return false;
+        }
         return !!token;
       }
       

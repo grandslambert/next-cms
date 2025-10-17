@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
@@ -15,17 +15,21 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const isSuperAdmin = (session.user as any)?.isSuperAdmin || false;
     const permissions = (session.user as any).permissions || {};
-    if (!permissions.manage_menus) {
+    if (!isSuperAdmin && !permissions.manage_menus) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
+
+    const siteId = (session.user as any).currentSiteId || 1;
+    const menuItemsTable = getSiteTable(siteId, 'menu_items');
 
     const body = await request.json();
     const { parent_id, post_type, custom_url, custom_label, menu_order, target } = body;
 
     // Get current item BEFORE updating
     const [beforeUpdate] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM menu_items WHERE id = ?',
+      `SELECT * FROM ${menuItemsTable} WHERE id = ?`,
       [params.id]
     );
 
@@ -36,14 +40,14 @@ export async function PUT(
     const currentItem = beforeUpdate[0];
 
     await db.query<ResultSetHeader>(
-      `UPDATE menu_items 
+      `UPDATE ${menuItemsTable} 
        SET parent_id = ?, post_type = ?, custom_url = ?, custom_label = ?, menu_order = ?, target = ?
        WHERE id = ?`,
       [parent_id || null, post_type || null, custom_url || null, custom_label || null, menu_order || 0, target || '_self', params.id]
     );
 
     const [updated] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM menu_items WHERE id = ?',
+      `SELECT * FROM ${menuItemsTable} WHERE id = ?`,
       [params.id]
     );
 
@@ -58,6 +62,7 @@ export async function PUT(
       details: `Updated menu item`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
+      siteId,
       changesBefore: {
         parent_id: currentItem.parent_id,
         post_type: currentItem.post_type,
@@ -93,14 +98,18 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const isSuperAdmin = (session.user as any)?.isSuperAdmin || false;
     const permissions = (session.user as any).permissions || {};
-    if (!permissions.manage_menus) {
+    if (!isSuperAdmin && !permissions.manage_menus) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    const siteId = (session.user as any).currentSiteId || 1;
+    const menuItemsTable = getSiteTable(siteId, 'menu_items');
+
     // Get item details for logging
     const [itemRows] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM menu_items WHERE id = ?',
+      `SELECT * FROM ${menuItemsTable} WHERE id = ?`,
       [params.id]
     );
 
@@ -121,9 +130,10 @@ export async function DELETE(
       details: `Deleted menu item from menu ID ${item.menu_id}`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
+      siteId,
     });
 
-    await db.query<ResultSetHeader>('DELETE FROM menu_items WHERE id = ?', [params.id]);
+    await db.query<ResultSetHeader>(`DELETE FROM ${menuItemsTable} WHERE id = ?`, [params.id]);
 
     return NextResponse.json({ success: true });
   } catch (error) {

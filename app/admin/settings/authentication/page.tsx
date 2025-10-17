@@ -7,7 +7,6 @@ import { toast } from 'react-hot-toast';
 import { usePermission } from '@/hooks/usePermission';
 
 interface AuthSettings {
-  hide_default_user: boolean;
   password_min_length: number;
   password_require_uppercase: boolean;
   password_require_lowercase: boolean;
@@ -21,7 +20,6 @@ export default function AuthenticationSettingsPage() {
   const queryClient = useQueryClient();
   const [isSaving, setIsSaving] = useState(false);
   const [settings, setSettings] = useState<AuthSettings>({
-    hide_default_user: false,
     password_min_length: 8,
     password_require_uppercase: true,
     password_require_lowercase: true,
@@ -114,32 +112,6 @@ export default function AuthenticationSettingsPage() {
       <div className="overflow-y-auto h-[calc(100vh-8rem)]">
         <div className="max-w-3xl px-8 py-6">
           <div className="space-y-8">
-        {/* Login Page Settings */}
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-xl font-semibold mb-4 flex items-center">
-            <span className="text-2xl mr-2">🔑</span>
-            Login Page
-          </h2>
-
-          <div className="space-y-4">
-            <label className="flex items-start space-x-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={settings.hide_default_user}
-                onChange={(e) => setSettings({ ...settings, hide_default_user: e.target.checked })}
-                className="mt-1 w-5 h-5 text-primary-600 focus:ring-primary-500 rounded"
-              />
-              <div className="flex-1">
-                <div className="font-medium">Hide Default User Hint</div>
-                <div className="text-sm text-gray-600">
-                  Don't display the default admin email (admin@example.com) on the login page. 
-                  Recommended for production sites to enhance security.
-                </div>
-              </div>
-            </label>
-          </div>
-        </div>
-
         {/* Password Requirements */}
         <div className="bg-white rounded-lg shadow-md p-6">
           <h2 className="text-xl font-semibold mb-4 flex items-center">
@@ -148,7 +120,7 @@ export default function AuthenticationSettingsPage() {
           </h2>
 
           <p className="text-sm text-gray-600 mb-6">
-            Set minimum password requirements for user accounts. These apply when creating users or resetting passwords.
+            Set minimum password requirements for user accounts on this site. These apply when creating users or resetting passwords.
           </p>
 
           <div className="space-y-6">

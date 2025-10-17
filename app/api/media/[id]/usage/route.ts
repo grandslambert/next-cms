@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
 
 export async function GET(
@@ -14,6 +14,11 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const siteId = (session.user as any).currentSiteId || 1;
+    const postsTable = getSiteTable(siteId, 'posts');
+    const termsTable = getSiteTable(siteId, 'terms');
+    const taxonomiesTable = getSiteTable(siteId, 'taxonomies');
+
     const usage: any = {
       posts: [],
       terms: [],
@@ -22,14 +27,17 @@ export async function GET(
 
     // Check posts (includes all post types: posts, pages, custom types)
     const [posts] = await db.query<RowDataPacket[]>(
-      'SELECT id, title, post_type FROM posts WHERE featured_image_id = ?',
+      `SELECT id, title, post_type FROM ${postsTable} WHERE featured_image_id = ?`,
       [params.id]
     );
     usage.posts = posts;
 
     // Check taxonomy terms
     const [terms] = await db.query<RowDataPacket[]>(
-      'SELECT t.id, t.name, tax.label as taxonomy_label FROM terms t LEFT JOIN taxonomies tax ON t.taxonomy_id = tax.id WHERE t.image_id = ?',
+      `SELECT t.id, t.name, tax.label as taxonomy_label 
+       FROM ${termsTable} t 
+       LEFT JOIN ${taxonomiesTable} tax ON t.taxonomy_id = tax.id 
+       WHERE t.image_id = ?`,
       [params.id]
     );
     usage.terms = terms;

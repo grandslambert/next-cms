@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
@@ -12,8 +12,10 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const siteId = (session.user as any).currentSiteId || 1;
+
     const [rows] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM menu_locations ORDER BY name ASC'
+      `SELECT * FROM ${getSiteTable(siteId, 'menu_locations')} ORDER BY name ASC`
     );
 
     return NextResponse.json({ locations: rows });
@@ -35,6 +37,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    const siteId = (session.user as any).currentSiteId || 1;
     const body = await request.json();
     const { name, description } = body;
 
@@ -43,12 +46,12 @@ export async function POST(request: NextRequest) {
     }
 
     const [result] = await db.query<ResultSetHeader>(
-      'INSERT INTO menu_locations (name, description) VALUES (?, ?)',
+      `INSERT INTO ${getSiteTable(siteId, 'menu_locations')} (name, description) VALUES (?, ?)`,
       [name.toLowerCase().replaceAll(/[^a-z0-9_]/g, '_'), description || null]
     );
 
     const [newLocation] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM menu_locations WHERE id = ?',
+      `SELECT * FROM ${getSiteTable(siteId, 'menu_locations')} WHERE id = ?`,
       [result.insertId]
     );
 
@@ -63,6 +66,7 @@ export async function POST(request: NextRequest) {
       details: `Created menu location: ${name}`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
+      siteId: siteId,
     });
 
     return NextResponse.json({ location: newLocation[0] });

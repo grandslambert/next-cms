@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
@@ -15,16 +15,21 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const isSuperAdmin = (session.user as any)?.isSuperAdmin || false;
     const permissions = (session.user as any).permissions || {};
-    if (!permissions.manage_settings) {
+    if (!isSuperAdmin && !permissions.manage_settings) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
+
+    const siteId = (session.user as any).currentSiteId || 1;
+    const menuLocationsTable = getSiteTable(siteId, 'menu_locations');
+    const menusTable = getSiteTable(siteId, 'menus');
 
     const locationId = params.id;
 
     // Get location info
     const [location] = await db.query<RowDataPacket[]>(
-      'SELECT name, is_builtin FROM menu_locations WHERE id = ?',
+      `SELECT name, is_builtin FROM ${menuLocationsTable} WHERE id = ?`,
       [locationId]
     );
 
@@ -42,7 +47,7 @@ export async function DELETE(
 
     // Check if any menus are using this location
     const [menus] = await db.query<RowDataPacket[]>(
-      'SELECT COUNT(*) as count FROM menus WHERE location = ?',
+      `SELECT COUNT(*) as count FROM ${menusTable} WHERE location = ?`,
       [location[0].name]
     );
 
@@ -54,7 +59,7 @@ export async function DELETE(
     }
 
     await db.query<ResultSetHeader>(
-      'DELETE FROM menu_locations WHERE id = ?',
+      `DELETE FROM ${menuLocationsTable} WHERE id = ?`,
       [locationId]
     );
 
@@ -69,6 +74,7 @@ export async function DELETE(
       details: `Deleted menu location: ${location[0]?.name}`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
+      siteId,
     });
 
     return NextResponse.json({ success: true });

@@ -7,10 +7,12 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import { formatDate } from '@/lib/utils';
 import { usePermission } from '@/hooks/usePermission';
+import { useRouter } from 'next/navigation';
 
 export default function UsersPage() {
   const { isLoading: permissionLoading } = usePermission('manage_users');
-  const { data: session } = useSession();
+  const { data: session, update } = useSession();
+  const router = useRouter();
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [username, setUsername] = useState('');
@@ -21,6 +23,14 @@ export default function UsersPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [roleId, setRoleId] = useState(3); // Default to Author role
   const queryClient = useQueryClient();
+
+  // Get user switching data
+  const isSuperAdmin = (session?.user as any)?.isSuperAdmin || false;
+  const currentUserRole = (session?.user as any)?.role;
+  const isSwitched = (session?.user as any)?.isSwitched || false;
+  const originalUserId = (session?.user as any)?.originalUserId;
+  const currentUserId = (session?.user as any)?.id;
+  const canSwitchUsers = isSuperAdmin || currentUserRole === 'admin';
 
   const { data, isLoading } = useQuery({
     queryKey: ['users'],
@@ -90,6 +100,23 @@ export default function UsersPage() {
     },
   });
 
+  const switchUserMutation = useMutation({
+    mutationFn: async (targetUserId: number) => {
+      const res = await axios.post('/api/auth/switch-user', { targetUserId });
+      return res.data.switchData;
+    },
+    onSuccess: async (switchData) => {
+      await update({ switchData });
+      toast.success(`Switched to ${switchData.name}`);
+      queryClient.invalidateQueries();
+      router.refresh();
+      router.push('/admin/sites'); // Redirect to sites after switching
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || 'Failed to switch user');
+    },
+  });
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const formData = { username, first_name: firstName, last_name: lastName, email, password, role_id: roleId };
@@ -108,13 +135,19 @@ export default function UsersPage() {
     setLastName(user.last_name || '');
     setEmail(user.email);
     setPassword(''); // Don't pre-fill password for security
-    setRoleId(user.role_id || 3);
+    setRoleId(user.role_id !== null && user.role_id !== undefined ? user.role_id : 3);
     setShowForm(true);
   };
 
   const handleDelete = (id: number, username: string) => {
     if (confirm(`Are you sure you want to delete user "${username}"?`)) {
       deleteMutation.mutate(id);
+    }
+  };
+
+  const handleSwitchUser = (userId: number, username: string) => {
+    if (confirm(`Switch to user "${username}"? You can switch back from the sidebar.`)) {
+      switchUserMutation.mutate(userId);
     }
   };
 
@@ -408,10 +441,12 @@ export default function UsersPage() {
                 <select
                   id="role"
                   value={roleId}
-                  onChange={(e) => setRoleId(parseInt(e.target.value))}
+                  onChange={(e) => setRoleId(Number.parseInt(e.target.value))}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
-                  {rolesData?.roles?.map((role: any) => (
+                  {rolesData?.roles
+                    ?.filter((role: any) => isSuperAdmin || role.id !== 0) // Hide super admin role from non-super admins
+                    .map((role: any) => (
                     <option key={role.id} value={role.id}>
                       {role.display_name}
                     </option>
@@ -448,6 +483,11 @@ export default function UsersPage() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Role
                 </th>
+                {isSuperAdmin && (
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Site Assignments
+                  </th>
+                )}
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Created
                 </th>
@@ -457,20 +497,46 @@ export default function UsersPage() {
               {data.users.map((user: any) => (
                 <tr key={user.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <button
-                      onClick={() => handleEdit(user)}
-                      className="text-primary-600 hover:text-primary-900 mr-4"
-                    >
-                      Edit
-                    </button>
-                    {user.id !== (session?.user as any)?.id && (
+                    <div className="flex items-center space-x-3">
                       <button
-                        onClick={() => handleDelete(user.id, user.username)}
-                        className="text-red-600 hover:text-red-900"
+                        onClick={() => handleEdit(user)}
+                        className="text-primary-600 hover:text-primary-900"
                       >
-                        Delete
+                        Edit
                       </button>
-                    )}
+                      {canSwitchUsers && 
+                       user.id.toString() !== currentUserId && 
+                       (!isSwitched || user.id.toString() !== originalUserId) &&
+                       !(currentUserRole === 'admin' && user.role_name === 'super_admin') && (
+                        (() => {
+                          // Check if user can be switched to
+                          // Super admins can always be switched to (they manage all sites)
+                          // For other users, check if they have active site assignments
+                          const isSuperAdminUser = user.role_name === 'super_admin';
+                          const hasActiveSites = isSuperAdminUser || 
+                                                 (isSuperAdmin ? (user.sites && user.sites.length > 0) : true);
+                          
+                          return (
+                            <button
+                              onClick={() => handleSwitchUser(user.id, user.username)}
+                              disabled={switchUserMutation.isPending || !hasActiveSites}
+                              className={`${hasActiveSites ? 'text-blue-600 hover:text-blue-900' : 'text-gray-400 cursor-not-allowed'} disabled:opacity-50`}
+                              title={hasActiveSites ? 'Switch to this user for testing' : 'User has no active site assignments'}
+                            >
+                              🔄 Switch
+                            </button>
+                          );
+                        })()
+                      )}
+                      {user.id !== (session?.user as any)?.id && (
+                        <button
+                          onClick={() => handleDelete(user.id, user.username)}
+                          className="text-red-600 hover:text-red-900"
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900">{user.username}</div>
@@ -485,7 +551,9 @@ export default function UsersPage() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`px-2 py-1 text-xs rounded ${
-                      user.role_name === 'admin' 
+                      user.role_name === 'super_admin'
+                        ? 'bg-red-100 text-red-800'
+                        : user.role_name === 'admin' 
                         ? 'bg-purple-100 text-purple-800' 
                         : user.role_name === 'editor'
                         ? 'bg-blue-100 text-blue-800'
@@ -494,6 +562,25 @@ export default function UsersPage() {
                       {user.role_display_name || user.role_name || 'Unknown'}
                     </span>
                   </td>
+                  {isSuperAdmin && (
+                    <td className="px-6 py-4 text-sm text-gray-900">
+                      {user.sites && user.sites.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {user.sites.map((site: any) => (
+                            <span
+                              key={site.id}
+                              className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200"
+                              title={`${site.display_name} (${site.role_display_name})`}
+                            >
+                              {site.display_name}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 italic text-xs">Not assigned</span>
+                      )}
+                    </td>
+                  )}
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {formatDate(user.created_at)}
                   </td>
