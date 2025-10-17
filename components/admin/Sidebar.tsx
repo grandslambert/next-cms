@@ -411,7 +411,7 @@ export default function Sidebar() {
           <span>Logout</span>
         </button>
         <div className="text-center text-xs text-gray-500 mt-2">
-          Next CMS v2.3.0
+          Next CMS v2.3.1
         </div>
       </div>
     </aside>

@@ -14,6 +14,7 @@ export interface AuthenticatedRequest {
     email: string;
     role: string;
     siteId: number;
+    permissions: Record<string, boolean>;
   };
   token: string;
 }
@@ -46,15 +47,28 @@ export async function authenticateJWT(
     return null;
   }
 
-  // Verify user still exists
+  // Verify user still exists and get role permissions
   const [userRows] = await db.query(
-    'SELECT id, username, email FROM users WHERE id = ?',
+    `SELECT u.id, u.username, u.email, u.role_id, r.permissions 
+     FROM users u
+     JOIN roles r ON u.role_id = r.id
+     WHERE u.id = ?`,
     [payload.userId]
   );
 
   const user = (userRows as any[])[0];
   if (!user) {
     return null;
+  }
+
+  // Parse permissions from JSON
+  let permissions: Record<string, boolean> = {};
+  try {
+    permissions = typeof user.permissions === 'string' 
+      ? JSON.parse(user.permissions) 
+      : user.permissions || {};
+  } catch {
+    permissions = {};
   }
 
   return {
@@ -64,6 +78,7 @@ export async function authenticateJWT(
       email: payload.email,
       role: payload.role,
       siteId: payload.siteId,
+      permissions,
     },
     token,
   };
@@ -81,11 +96,12 @@ export async function authenticateApiKey(
     return null;
   }
 
-  // Look up API key in database
+  // Look up API key in database with role permissions
   const [keyRows] = await db.query(
-    `SELECT ak.*, u.username, u.email 
+    `SELECT ak.*, u.username, u.email, u.role_id, r.name as role_name, r.permissions
      FROM api_keys ak
      JOIN users u ON ak.user_id = u.id
+     JOIN roles r ON u.role_id = r.id
      WHERE ak.key_value = ? 
      AND ak.is_active = true 
      AND (ak.expires_at IS NULL OR ak.expires_at > NOW())`,
@@ -103,13 +119,24 @@ export async function authenticateApiKey(
     [keyRecord.id]
   );
 
+  // Parse permissions from JSON
+  let permissions: Record<string, boolean> = {};
+  try {
+    permissions = typeof keyRecord.permissions === 'string' 
+      ? JSON.parse(keyRecord.permissions) 
+      : keyRecord.permissions || {};
+  } catch {
+    permissions = {};
+  }
+
   return {
     user: {
       id: keyRecord.user_id,
       username: keyRecord.username,
       email: keyRecord.email,
-      role: keyRecord.role || 'user',
+      role: keyRecord.role_name || 'user',
       siteId: keyRecord.site_id || 1,
+      permissions,
     },
     token: apiKey,
   };
