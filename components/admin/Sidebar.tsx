@@ -75,7 +75,7 @@ const hasPermission = (permissions: any, requiredPermission: string | undefined,
 };
 
 const getStaticMenuItemsWithTaxonomies = (taxonomiesData: any, permissions: any, isSuperAdmin: boolean) => {
-  // Super admin only sees Sites and Users
+  // Super admin only sees Sites, Users, Activity Log, and Settings
   if (isSuperAdmin) {
     return [
       { name: 'Sites', href: '/admin/sites', icon: '🌐', position: 0 },
@@ -88,6 +88,18 @@ const getStaticMenuItemsWithTaxonomies = (taxonomiesData: any, permissions: any,
           { name: 'All Users', href: '/admin/users', icon: '👤', permission: 'manage_users' },
           { name: 'Roles', href: '/admin/users/roles', icon: '🎭', permission: 'manage_roles' },
         ]
+      },
+      { 
+        name: 'Activity Log', 
+        href: '/admin/activity-log',
+        icon: '📋', 
+        position: 2,
+      },
+      { 
+        name: 'Settings', 
+        href: '/admin/settings/global',
+        icon: '⚙️', 
+        position: 3,
       },
     ];
   }
@@ -399,7 +411,7 @@ export default function Sidebar() {
           <span>Logout</span>
         </button>
         <div className="text-center text-xs text-gray-500 mt-2">
-          Next CMS v1.18.0
+          Next CMS v2.1.0
         </div>
       </div>
     </aside>

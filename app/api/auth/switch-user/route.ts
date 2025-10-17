@@ -47,6 +47,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Cannot switch to super admin' }, { status: 403 });
     }
 
+    // Check if target is super admin
+    const targetIsSuperAdmin = targetUser.role_name === 'super_admin';
+
+    // Check if non-super-admin user has any active site assignments
+    if (!targetIsSuperAdmin) {
+      const [siteCheck] = await db.query<RowDataPacket[]>(
+        `SELECT COUNT(*) as count 
+         FROM site_users su 
+         INNER JOIN sites s ON su.site_id = s.id 
+         WHERE su.user_id = ? AND s.is_active = 1`,
+        [targetUser.id]
+      );
+
+      if (siteCheck[0].count === 0) {
+        return NextResponse.json({ 
+          error: 'Cannot switch to user with no active site assignments' 
+        }, { status: 400 });
+      }
+    }
+
     // Parse permissions
     let permissions = {};
     if (targetUser.permissions) {
@@ -60,8 +80,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Check if target is super admin
-    const targetIsSuperAdmin = targetUser.role_name === 'super_admin';
     if (targetIsSuperAdmin) {
       permissions = new Proxy({ is_super_admin: true }, {
         get: () => true

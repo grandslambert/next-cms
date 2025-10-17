@@ -6,17 +6,37 @@
 -- GLOBAL TABLES (shared across all sites)
 -- =====================================================================
 
--- Roles table (shared across all sites)
+-- Sites table (for multi-site support) - must be created first for foreign keys
+CREATE TABLE IF NOT EXISTS sites (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  display_name VARCHAR(255) NOT NULL,
+  domain VARCHAR(255) UNIQUE,
+  description TEXT,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_name (name),
+  INDEX idx_domain (domain),
+  INDEX idx_active (is_active)
+);
+
+-- Roles table (can be global or site-specific)
+-- NULL site_id = global/system role, otherwise scoped to specific site
 CREATE TABLE IF NOT EXISTS roles (
   id INT AUTO_INCREMENT PRIMARY KEY,
-  name VARCHAR(100) UNIQUE NOT NULL,
+  name VARCHAR(100) NOT NULL,
   display_name VARCHAR(255) NOT NULL,
   description TEXT,
   permissions JSON,
   is_system BOOLEAN DEFAULT FALSE,
+  site_id INT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  INDEX idx_name (name)
+  FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
+  INDEX idx_name (name),
+  INDEX idx_site (site_id),
+  UNIQUE KEY unique_role_name_site (name, site_id)
 );
 
 -- Users table (global - users can be assigned to multiple sites)
@@ -49,21 +69,6 @@ CREATE TABLE IF NOT EXISTS user_meta (
   UNIQUE KEY unique_user_meta (user_id, meta_key)
 );
 
--- Sites table (for multi-site support)
-CREATE TABLE IF NOT EXISTS sites (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  name VARCHAR(255) NOT NULL,
-  display_name VARCHAR(255) NOT NULL,
-  domain VARCHAR(255) UNIQUE,
-  description TEXT,
-  is_active BOOLEAN DEFAULT TRUE,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  INDEX idx_name (name),
-  INDEX idx_domain (domain),
-  INDEX idx_active (is_active)
-);
-
 -- Site Users table (maps users to sites with roles)
 CREATE TABLE IF NOT EXISTS site_users (
   id INT AUTO_INCREMENT PRIMARY KEY,
@@ -77,6 +82,22 @@ CREATE TABLE IF NOT EXISTS site_users (
   UNIQUE KEY unique_site_user (site_id, user_id),
   INDEX idx_site (site_id),
   INDEX idx_user (user_id),
+  INDEX idx_role (role_id)
+);
+
+-- Site Role Overrides table (stores site-specific permission customizations)
+-- Allows each site to customize global/system roles without affecting other sites
+CREATE TABLE IF NOT EXISTS site_role_overrides (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  site_id INT NOT NULL,
+  role_id INT NOT NULL,
+  permissions JSON NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
+  FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
+  UNIQUE KEY unique_site_role (site_id, role_id),
+  INDEX idx_site (site_id),
   INDEX idx_role (role_id)
 );
 
@@ -104,6 +125,23 @@ CREATE TABLE IF NOT EXISTS activity_log (
   INDEX idx_site_id (site_id),
   INDEX idx_created_at (created_at)
 );
+
+-- Global Settings table (system-wide settings)
+CREATE TABLE IF NOT EXISTS global_settings (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  setting_key VARCHAR(255) UNIQUE NOT NULL,
+  setting_value TEXT,
+  setting_type VARCHAR(50) DEFAULT 'string',
+  description TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_setting_key (setting_key)
+);
+
+-- Insert default global settings
+INSERT INTO global_settings (setting_key, setting_value, setting_type, description) VALUES
+('auth_hide_default_user', '0', 'boolean', 'Hide default user credentials on login page')
+ON DUPLICATE KEY UPDATE setting_key = setting_key;
 
 -- =====================================================================
 -- SITE 1 TABLES (default site)
@@ -364,25 +402,28 @@ CREATE TABLE IF NOT EXISTS site_1_settings (
 -- DEFAULT DATA
 -- =====================================================================
 
--- Insert default roles
-INSERT INTO roles (id, name, display_name, description, permissions, is_system) VALUES
-(0, 'super_admin', 'Super Administrator', 'Full unrestricted access to all features - bypasses all permission checks', 
- '{"is_super_admin": true}', 
- true),
-(1, 'admin', 'Administrator', 'Full access to site features', 
- '{"view_dashboard": true, "view_others_posts": true, "manage_posts_post": true, "manage_posts_page": true, "manage_others_posts": true, "can_publish": true, "can_delete": true, "can_delete_others": true, "manage_media": true, "manage_taxonomies": true, "manage_users": true, "manage_roles": true, "manage_post_types": true, "manage_settings": true, "manage_menus": true}', 
- true),
-(2, 'editor', 'Editor', 'Can manage and publish all content', 
- '{"view_dashboard": true, "view_others_posts": false, "manage_posts_post": true, "manage_posts_page": true, "manage_others_posts": true, "can_publish": true, "can_delete": true, "can_delete_others": true, "manage_media": true, "manage_taxonomies": true, "manage_users": false, "manage_roles": false, "manage_post_types": false, "manage_settings": false, "manage_menus": false}', 
- true),
-(3, 'author', 'Author', 'Can create and edit own posts', 
- '{"view_dashboard": true, "view_others_posts": false, "manage_posts_post": true, "manage_posts_page": true, "manage_others_posts": false, "can_publish": true, "can_delete": true, "can_delete_others": false, "manage_media": true, "manage_taxonomies": false, "manage_users": false, "manage_roles": false, "manage_post_types": false, "manage_settings": false, "manage_menus": false}', 
- true)
-ON DUPLICATE KEY UPDATE name = name;
-
 -- Insert default site
 INSERT INTO sites (id, name, display_name, description, is_active) VALUES
 (1, 'site_1', 'Site 1', 'Default site', TRUE)
+ON DUPLICATE KEY UPDATE name = name;
+
+-- Insert default roles (site_id = NULL means global/system roles)
+INSERT INTO roles (id, name, display_name, description, permissions, is_system, site_id) VALUES
+(0, 'super_admin', 'Super Administrator', 'Full unrestricted access to all features - bypasses all permission checks', 
+ '{"is_super_admin": true}', 
+ true, NULL),
+(1, 'admin', 'Administrator', 'Full access to site features', 
+ '{"view_dashboard": true, "view_others_posts": true, "manage_posts_post": true, "manage_posts_page": true, "manage_others_posts": true, "can_publish": true, "can_delete": true, "can_delete_others": true, "can_reassign": true, "manage_media": true, "manage_taxonomies": true, "manage_users": true, "manage_roles": true, "manage_post_types": true, "manage_settings": true, "manage_menus": true}', 
+ true, NULL),
+(2, 'editor', 'Editor', 'Can manage and publish all content', 
+ '{"view_dashboard": true, "view_others_posts": false, "manage_posts_post": true, "manage_posts_page": true, "manage_others_posts": true, "can_publish": true, "can_delete": true, "can_delete_others": true, "can_reassign": false, "manage_media": true, "manage_taxonomies": true, "manage_users": false, "manage_roles": false, "manage_post_types": false, "manage_settings": false, "manage_menus": false}', 
+ true, NULL),
+(3, 'author', 'Author', 'Can create and edit own posts', 
+ '{"view_dashboard": true, "view_others_posts": false, "manage_posts_post": true, "manage_posts_page": true, "manage_others_posts": false, "can_publish": true, "can_delete": true, "can_delete_others": false, "can_reassign": false, "manage_media": true, "manage_taxonomies": false, "manage_users": false, "manage_roles": false, "manage_post_types": false, "manage_settings": false, "manage_menus": false}', 
+ true, NULL),
+(4, 'guest', 'Guest', 'Read-only access - can view public content only', 
+ '{"view_dashboard": false, "view_others_posts": false, "manage_posts_post": false, "manage_posts_page": false, "manage_others_posts": false, "can_publish": false, "can_delete": false, "can_delete_others": false, "manage_media": false, "manage_taxonomies": false, "manage_users": false, "manage_roles": false, "manage_post_types": false, "manage_settings": false, "manage_menus": false}', 
+ true, NULL)
 ON DUPLICATE KEY UPDATE name = name;
 
 -- Insert Super Administrator (password: SuperAdmin123!)

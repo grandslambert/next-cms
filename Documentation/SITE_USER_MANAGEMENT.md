@@ -196,6 +196,7 @@ The `role_id` in `site_users` determines what a user can do on that specific sit
 - **Admin** (ID: 1) - Full site management
 - **Editor** (ID: 2) - Publish and manage all content
 - **Author** (ID: 3) - Create and publish own content
+- **Guest** (ID: 4) - Read-only access (no admin access)
 
 ### Permission Scope
 
@@ -203,6 +204,90 @@ Permissions are **site-scoped**:
 - Editor on Site 1 can publish posts on Site 1
 - Same user might be Author on Site 2 (can only manage own posts)
 - Each site has its own content, media, menus, etc.
+
+### Site Role Overrides
+
+**Site administrators can customize system roles** to match their specific needs:
+
+#### How It Works
+
+1. **Global Roles**: System roles (Admin, Editor, Author, Guest) are defined globally
+2. **Site Overrides**: Site admins can edit these roles - changes only affect their site
+3. **Independent Permissions**: Each site can have different permissions for the same role
+
+#### Examples
+
+**Site 1 (Blog)**:
+- Site admin customizes "Editor" role → Can publish posts, manage others' posts
+- Override stored in `site_role_overrides` table for Site 1
+
+**Site 2 (E-commerce)**:
+- Site admin customizes "Editor" role → Cannot publish (requires approval), can only manage own posts
+- Different override stored for Site 2
+
+**Site 3 (Corporate)**:
+- Has not customized "Editor" role → Uses global default permissions
+
+#### Super Admin vs Site Admin
+
+**Site Admins Editing System Roles**:
+- Changes create/update an override in `site_role_overrides`
+- Only affects their site
+- Displayed with "Customized" badge (yellow)
+- Can always revert to global defaults
+
+**Super Admins Editing System Roles**:
+- Changes update the global role definition
+- Affects all sites that haven't created overrides
+- Site-specific overrides remain untouched
+
+#### Database Structure
+
+```sql
+CREATE TABLE site_role_overrides (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  site_id INT NOT NULL,
+  role_id INT NOT NULL,  -- Which system role is being overridden
+  permissions JSON NOT NULL,  -- Site-specific permissions
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
+  FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
+  UNIQUE KEY unique_site_role (site_id, role_id)
+);
+```
+
+#### Managing Role Overrides
+
+**As Site Admin**:
+1. Navigate to **Users → Roles**
+2. Click "Edit" on any system role (Admin, Editor, Author, Guest)
+3. Modify permissions as needed
+4. Save - creates/updates override for your site only
+5. Role shows "Customized" badge
+
+**As Super Admin**:
+1. Navigate to **Users → Roles**
+2. See all roles across all sites
+3. Editing a system role updates global default
+4. Can view but not delete site-specific overrides
+
+#### Use Cases
+
+**Tighter Editorial Control**:
+- Site 1 disables "can_publish" for Editors
+- All posts require Admin approval before publishing
+- Other sites unaffected
+
+**Expanded Author Permissions**:
+- Site 2 enables "manage_taxonomies" for Authors
+- Authors can create categories/tags
+- Other sites keep default restricted permissions
+
+**Custom Workflow**:
+- Site 3 enables "can_reassign" for Editors
+- Editors can change post authors
+- Matches their editorial workflow
 
 ## API Implementation
 

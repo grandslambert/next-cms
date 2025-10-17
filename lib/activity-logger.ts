@@ -39,7 +39,7 @@ interface LogActivityParams {
   changesAfter?: Record<string, any> | null;
   ipAddress?: string | null;
   userAgent?: string | null;
-  siteId?: number; // Site context for multi-site support
+  siteId?: number | null; // Site context for multi-site support (null for global activities)
 }
 
 export async function logActivity({
@@ -53,7 +53,7 @@ export async function logActivity({
   changesAfter = null,
   ipAddress = null,
   userAgent = null,
-  siteId = 1, // Default to site 1 for backwards compatibility
+  siteId = null, // Site context (null for global/system-wide activities)
 }: LogActivityParams): Promise<void> {
   try {
     // Convert details to JSON string if it's an object
@@ -65,13 +65,11 @@ export async function logActivity({
     const changesBeforeStr = changesBefore ? JSON.stringify(changesBefore) : null;
     const changesAfterStr = changesAfter ? JSON.stringify(changesAfter) : null;
 
-    // Use site-specific activity log table
-    const activityLogTable = getSiteTable(siteId, 'activity_log');
-
+    // Use global activity_log table with site_id column
     await db.execute<ResultSetHeader>(
-      `INSERT INTO ${activityLogTable} (user_id, action, entity_type, entity_id, entity_name, details, changes_before, changes_after, ip_address, user_agent)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [userId, action, entityType, entityId, entityName, detailsStr, changesBeforeStr, changesAfterStr, ipAddress, userAgent]
+      `INSERT INTO activity_log (user_id, action, entity_type, entity_id, entity_name, details, changes_before, changes_after, ip_address, user_agent, site_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [userId, action, entityType, entityId, entityName, detailsStr, changesBeforeStr, changesAfterStr, ipAddress, userAgent, siteId]
     );
   } catch (error) {
     // Log error but don't throw - we don't want logging failures to break the app

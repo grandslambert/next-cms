@@ -7,8 +7,12 @@ This CMS supports managing multiple sites from a single installation. Each site 
 ### Global Resources (Shared Across All Sites)
 - **users** - User accounts
 - **roles** - User roles and permissions
+- **site_role_overrides** - Site-specific permission customizations for system roles
 - **sites** - Site definitions
 - **site_users** - Maps users to sites with specific roles
+- **user_meta** - User preferences and metadata
+- **activity_log** - Global audit trail
+- **global_settings** - System-wide settings
 
 ### Site-Specific Resources (Prefixed with `site_{id}_`)
 Each site has its own set of tables with the prefix `site_{id}_`:
@@ -89,11 +93,12 @@ The system will automatically create all necessary tables with the prefix `site_
 
 ### Site Context in Sessions
 
-**TODO**: Currently, the site context needs to be implemented. Here's the recommended approach:
+The CMS automatically manages site context in user sessions:
 
-1. Add site selection to user sessions
-2. Store current site ID in session
-3. Use site ID to determine table prefixes
+1. **Login**: User's first assigned site becomes `currentSiteId` in session
+2. **Site Switcher**: Users can switch between assigned sites
+3. **Table Resolution**: API routes use `currentSiteId` to determine table prefixes
+4. **Super Admins**: Have access to all sites, can switch freely
 
 ### Database Helper with Site Context
 
@@ -149,9 +154,17 @@ const [posts] = await db.query(`SELECT * FROM ${postsTable}`);
 
 ### Site Switcher Component
 
-**TODO**: Create a site switcher component in the admin header that allows users to switch between sites they have access to.
+The site switcher is located in the admin sidebar and allows users to switch between assigned sites:
 
-Example structure:
+**Location**: `components/admin/SiteSwitcher.tsx`
+
+**Features**:
+- Shows all sites user has access to
+- Updates session with new `currentSiteId`
+- Refreshes page to load new site's content
+- Hidden for super admins (they don't need it)
+
+**Implementation**:
 ```typescript
 // components/admin/SiteSwitcher.tsx
 'use client';
@@ -217,6 +230,34 @@ VALUES (3, 2, 1);
 - **Super Admins**: Have access to all sites and the Sites management page
 - **Other Users**: Only have access to sites they're assigned to via `site_users` table
 - Each user can have a different role per site
+
+### Role Customization
+
+Sites can customize system roles (Admin, Editor, Author, Guest) independently:
+
+- **Global Roles**: System roles are defined globally in the `roles` table
+- **Site Overrides**: Site admins can edit roles - changes stored in `site_role_overrides` table
+- **Independent Permissions**: Each site can have different permissions for the same role
+
+**Example**:
+```sql
+-- Site 1 customizes "Editor" role to disable publishing
+INSERT INTO site_role_overrides (site_id, role_id, permissions)
+VALUES (1, 2, '{"can_publish": false, "manage_posts": true, ...}');
+
+-- Site 2 uses global "Editor" role (default permissions)
+-- No override needed
+
+-- Site 3 customizes "Editor" to enable user management
+INSERT INTO site_role_overrides (site_id, role_id, permissions)
+VALUES (3, 2, '{"can_publish": true, "manage_users": true, ...}');
+```
+
+**Benefits**:
+- Each site can match its unique workflow
+- Global defaults remain unchanged
+- Easy to revert (delete override row)
+- Super admins control global defaults
 
 ## Database Maintenance
 

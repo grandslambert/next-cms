@@ -7,6 +7,103 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.0] - 2025-10-17
+
+### Added
+- **Guest Role** - New system role for read-only public access
+  - Added "Guest" role (ID: 4) with no permissions
+  - Guests cannot access admin area (no dashboard permission)
+  - Middleware blocks guests from all /admin routes
+  - Dashboard redirects guests to homepage
+  - Useful for public users who don't need admin access
+  - Protected system role (cannot be edited/deleted)
+- **Site-Specific Roles** - Administrators can now create custom roles scoped to their site
+  - New `site_id` column in roles table (NULL = global/system role)
+  - Site admins can create roles that only apply to their site
+  - Super admins can create global roles available across all sites
+  - Roles list shows badge with site name for site-specific roles (e.g., "Site 1")
+  - System roles show "System" badge, global custom roles show "Global" badge
+  - Site admins only see system roles + their site's custom roles
+  - Super admins see all roles across all sites
+  - Site-specific roles are automatically scoped when created by site admins
+  - Site-specific roles can only be deleted by site admins who created them
+  - Super Administrator role hidden from non-super admins for security
+  - Prevents role name conflicts between sites (unique constraint per site)
+- **Site Role Overrides** - Site admins can customize system roles without affecting other sites
+  - New `site_role_overrides` table stores site-specific permission modifications
+  - Site admins can edit system roles (Admin, Editor, Author, Guest) - changes only affect their site
+  - Super admins editing system roles updates the global default (affects sites without overrides)
+  - Customized roles show "Customized" badge (yellow) for site admins
+  - Overrides automatically loaded for site admins when viewing roles
+  - Each site can have different permissions for the same role
+  - Example: Site 1 "Editor" can publish, Site 2 "Editor" cannot - completely independent
+
+### Fixed
+- **Role Permissions** - Added missing `can_reassign` permission to default roles
+  - Administrator has `can_reassign: true` (can change post authors)
+  - Editor has `can_reassign: false` (cannot change post authors)
+  - Author has `can_reassign: false` (cannot change post authors)
+  - Only Administrators can reassign authors by default
+
+## [2.0.1] - 2025-10-17
+
+### Added
+- **Global Settings Page** - New dedicated page for system-wide settings (Super Admin only)
+  - New page at `/admin/settings/global` for managing global settings
+  - "Hide Default Credentials" setting moved to Global Settings
+  - Future-ready for additional system-wide configuration options
+  - Super admin sidebar now has "Settings" link directly to Global Settings page
+  - New API endpoint: `/api/settings/global` for managing global settings
+  - Includes informative help text about global vs site-specific settings
+
+### Added
+- **Super Admin Activity Log Access** - Super admins can now view and filter activity logs
+  - Added Activity Log to super admin sidebar menu
+  - Site filter dropdown allows filtering by specific site, all sites, or global activities only
+  - Super admins can monitor activities across all sites from one interface
+  - Non-super admins see only their current site's activities (no global activities)
+
+### Changed
+- **Authentication Settings Simplified** - Now only contains site-specific password requirements
+  - Removed "Hide Default Credentials" from Authentication settings (moved to Global Settings)
+  - Authentication settings page now focused solely on password requirements
+  - Password requirements remain site-specific (configurable per site)
+  - New `global_settings` database table for system-wide configuration
+  - Non-super admins can manage password requirements for their site
+  - Updated schema includes `global_settings` table with default values
+
+### Changed
+- **Super Admin Switch Back Behavior** - Switching back to super admin redirects to Sites list
+  - When switching back to a super admin account, always redirect to `/admin/sites`
+  - Ensures super admins land on their primary management page
+  - Site admins remain on current page when switching back
+
+### Fixed
+- **Activity Log Multi-Site Support** - Fixed activity log to work correctly with multi-site architecture
+  - Activity log is a global table (not site-specific) with `site_id` column for filtering
+  - Site admins now see only activities for their current site
+  - Super admins see all activities across all sites
+  - Added "Site" column in activity log for super admins
+  - Site name displayed for each activity (or "Global" for system-wide actions)
+  - Fixed incorrect table reference (was looking for non-existent `site_1_activity_log`)
+  - Removed activity_log from site-tables-template.sql (was incorrectly creating per-site tables)
+- **Activity Logger Fixed** - Activity logger now correctly uses global activity_log table
+  - Changed from site-specific tables (`site_X_activity_log`) to global `activity_log` table
+  - Now properly inserts `site_id` as a column value (can be null for global activities)
+  - Super admin activities are now correctly logged
+  - Site-specific activities are properly associated with their sites
+  - System-wide activities (like global settings changes) have `site_id = NULL`
+- **Sidebar Version Display** - Updated version number in sidebar to 2.0.0
+- **Super Admin Role Selection** - Fixed role dropdown when editing super admin users
+  - Super admin role (ID: 0) now correctly selected when editing own account
+  - Fixed JavaScript falsy value issue where `0 || 3` was defaulting to author role
+  - Proper null/undefined check ensures correct role selection for all users
+- **User Switching Validation** - Prevent switching to users without active site assignments
+  - Backend validates user has at least one active site before allowing switch
+  - Frontend disables switch button for users without active sites (super admin view)
+  - Clear error message: "Cannot switch to user with no active site assignments"
+  - Improves system security and prevents confusing error states
+
 ## [2.0.0] - 2025-10-17
 
 ### 🚨 BREAKING CHANGES

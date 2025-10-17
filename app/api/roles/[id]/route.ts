@@ -46,7 +46,7 @@ export async function PUT(
 
     // Check if role is a system role
     const [existingRoles] = await db.query<RowDataPacket[]>(
-      'SELECT name, display_name, description, permissions, is_system FROM roles WHERE id = ?',
+      'SELECT name, display_name, description, permissions, is_system, site_id FROM roles WHERE id = ?',
       [params.id]
     );
 
@@ -59,6 +59,9 @@ export async function PUT(
       return NextResponse.json({ error: 'Super Administrator role cannot be modified' }, { status: 403 });
     }
 
+    const isSuperAdmin = (session.user as any)?.isSuperAdmin || false;
+    const currentSiteId = (session.user as any)?.currentSiteId || 1;
+
     const body = await request.json();
     const { name, display_name, description, permissions } = body;
 
@@ -70,8 +73,8 @@ export async function PUT(
       permissions: existingRoles[0].permissions,
     };
 
-    // System roles can only have their permissions updated
-    if (existingRoles[0].is_system) {
+    // Super admins editing system roles or global roles: update global role (affects all sites without overrides)
+    if ((existingRoles[0].is_system || !existingRoles[0].site_id) && isSuperAdmin) {
       if (!permissions) {
         return NextResponse.json({ error: 'Missing permissions' }, { status: 400 });
       }
@@ -80,7 +83,23 @@ export async function PUT(
         'UPDATE roles SET permissions = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
         [JSON.stringify(permissions), params.id]
       );
-    } else {
+    } 
+    // Site admins editing system roles: create/update override (only affects their site)
+    else if (existingRoles[0].is_system && !isSuperAdmin) {
+      if (!permissions) {
+        return NextResponse.json({ error: 'Missing permissions' }, { status: 400 });
+      }
+
+      // Create or update override for this site
+      await db.query<ResultSetHeader>(
+        `INSERT INTO site_role_overrides (site_id, role_id, permissions)
+         VALUES (?, ?, ?)
+         ON DUPLICATE KEY UPDATE permissions = VALUES(permissions), updated_at = CURRENT_TIMESTAMP`,
+        [currentSiteId, params.id, JSON.stringify(permissions)]
+      );
+    } 
+    // Editing custom roles (site-specific or global custom)
+    else {
       if (!name || !display_name || !permissions) {
         return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
       }
@@ -134,9 +153,11 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const isSuperAdmin = (session.user as any)?.isSuperAdmin || false;
+
     // Check if role is a system role
     const [roles] = await db.query<RowDataPacket[]>(
-      'SELECT name, display_name, is_system FROM roles WHERE id = ?',
+      'SELECT name, display_name, is_system, site_id FROM roles WHERE id = ?',
       [params.id]
     );
 
@@ -146,6 +167,13 @@ export async function DELETE(
 
     if (roles[0].is_system) {
       return NextResponse.json({ error: 'Cannot delete system role' }, { status: 403 });
+    }
+
+    // Prevent super admins from deleting site-specific roles
+    if (isSuperAdmin && roles[0].site_id) {
+      return NextResponse.json({ 
+        error: 'Site-specific roles can only be deleted by site administrators' 
+      }, { status: 403 });
     }
 
     // Check if any users have this role

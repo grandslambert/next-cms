@@ -21,6 +21,11 @@ export default function SwitchBackButton() {
       toast.success(`Switched back to ${switchData.name}`);
       queryClient.invalidateQueries();
       router.refresh();
+      
+      // Redirect super admins to sites list
+      if (switchData.isSuperAdmin) {
+        router.push('/admin/sites');
+      }
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.error || 'Failed to switch back');

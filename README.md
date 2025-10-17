@@ -1,6 +1,8 @@
 # Next CMS
 
-A powerful, modern content management system built with Next.js 14, TypeScript, Tailwind CSS, and MySQL.
+> Version 2.1.0
+
+A powerful, modern content management system built with Next.js 14, TypeScript, Tailwind CSS, and MySQL with multi-site support.
 
 ## 🚀 Features
 
@@ -19,8 +21,10 @@ A powerful, modern content management system built with Next.js 14, TypeScript, 
 - **Scheduled publishing** - set posts to publish automatically
 
 ### User Management
-- **Role-based access** - Super Admin, Admin, Editor, Author
+- **Role-based access** - Super Admin, Admin, Editor, Author, Guest
 - **Granular permissions** - control exactly what users can do
+- **Site role overrides** - customize system roles per site independently
+- **Site-specific roles** - create custom roles for individual sites
 - **User switching** - test as other users for debugging
 - **Site-aware** - users see only their assigned sites
 - **Multi-site users** - assign users to multiple sites with different roles
@@ -104,54 +108,81 @@ Visit [http://localhost:3000/admin/login](http://localhost:3000/admin/login)
 
 ## 📚 Documentation
 
-- **[Setup Guide](./SETUP.md)** - Detailed installation instructions
-- **[Multi-Site Architecture](./MULTI_SITE.md)** - How multi-site works
-- **[Super Admin Interface](./SUPER_ADMIN_INTERFACE.md)** - System administration
-- **[Site User Management](./SITE_USER_MANAGEMENT.md)** - Managing users and sites
-- **[User Switching](./USER_SWITCHING.md)** - Testing as other users
-- **[Features](./FEATURES.md)** - Complete feature list
-- **[Changelog](./CHANGELOG.md)** - Version history
+### Essential Docs
+- **[Setup Guide](./SETUP.md)** - Installation and configuration
+- **[Changelog](./CHANGELOG.md)** - Version history and release notes
+
+### Complete Documentation
+
+All comprehensive guides are in the **[Documentation/](./Documentation/)** folder:
+
+**Architecture & Setup**
+- [Database Structure](./Documentation/DATABASE_STRUCTURE.md) - Complete schema reference
+- [Project Structure](./Documentation/PROJECT_STRUCTURE.md) - Codebase organization
+- [Multi-Site Architecture](./Documentation/MULTI_SITE.md) - Multi-site system guide
+
+**Content Management**
+- [Content Types Guide](./Documentation/CONTENT_TYPES_GUIDE.md) - Custom post types & taxonomies
+- [Media Guide](./Documentation/MEDIA_GUIDE.md) - Complete media management
+- [Scheduled Publishing](./Documentation/SCHEDULED_PUBLISHING.md) - Schedule posts
+
+**User & System Management**
+- [Super Admin Interface](./Documentation/SUPER_ADMIN_INTERFACE.md) - System administration
+- [Site User Management](./Documentation/SITE_USER_MANAGEMENT.md) - Multi-site users
+- [User Switching](./Documentation/USER_SWITCHING.md) - Testing as other users
+- [Session Management](./Documentation/SESSION_MANAGEMENT.md) - Session configuration
+
+**Reference**
+- [Features](./Documentation/FEATURES.md) - Complete feature list
+- [Settings](./Documentation/SETTINGS.md) - Settings system reference
+- [Versioning](./VERSIONING.md) - Version guidelines
+- [Troubleshooting](./Documentation/TROUBLESHOOTING.md) - Common issues
 
 ## 🏗️ Architecture
 
-### Database Structure
+Next CMS uses a multi-site architecture where a single installation can manage multiple independent websites.
 
-**Global Tables:**
-- `users` - All user accounts
-- `roles` - Permission definitions
-- `sites` - Site configurations
-- `site_users` - User-site assignments
-- `activity_log` - Audit trail
+### Database Architecture
 
-**Site-Specific Tables** (per site):
-- `site_1_posts` - Content
-- `site_1_media` - Uploaded files
-- `site_1_menus` - Navigation
-- `site_1_settings` - Configuration
-- `site_1_taxonomies` - Categories/tags
-- And more...
+- **Global Tables**: Shared across all sites (users, roles, sites, activity_log)
+- **Site Tables**: Isolated per site with `site_{id}_` prefix (posts, media, menus, settings)
+
+👉 **[View Complete Database Structure](./DATABASE_STRUCTURE.md)**
 
 ### User Hierarchy
 
 ```
-Super Administrator
-├─ Manages all sites
-├─ Creates/assigns users
-└─ System-level administration
+Super Administrator (system-wide)
+├─ Manages all sites and system settings
+├─ Creates and assigns users to sites
+├─ Views activity across all sites
+└─ Access to Global Settings
 
 Site Administrator (per site)
-├─ Full site access
-├─ Manages site content
-└─ Can create site users
+├─ Full access to assigned site(s)
+├─ Manages site content and users
+└─ Site-specific settings
 
 Editor (per site)
-├─ Publishes all content
-└─ Manages media
+├─ Creates and publishes content
+└─ Manages media library
 
 Author (per site)
 ├─ Creates own content
-└─ Limited permissions
+└─ Limited to own posts
+
+Guest (public)
+├─ Read-only access to public site
+├─ Cannot access admin area
+└─ No permissions
 ```
+
+### Multi-Site Features
+
+- **Site Isolation**: Each site has completely separate content, media, and settings
+- **Shared Users**: Users can be assigned to multiple sites with different roles
+- **Centralized Management**: Super admins manage all sites from one interface
+- **Activity Logging**: Global audit trail with per-site filtering
 
 ## 🎨 Technology Stack
 
@@ -170,23 +201,22 @@ Author (per site)
 
 ```
 next-cms/
-├── app/                   # Next.js app directory
-│   ├── (public)/         # Public-facing site
-│   ├── admin/            # Admin interface
-│   └── api/              # API endpoints
-├── components/           # React components
-│   ├── admin/           # Admin UI components
-│   └── public/          # Public components
-├── database/            # Database files
-│   ├── schema.sql       # Main schema (RUN THIS)
-│   └── site-tables-template.sql
-├── lib/                 # Utilities & helpers
-├── hooks/               # Custom React hooks
-├── types/               # TypeScript definitions
-├── scripts/             # Helper scripts
-└── public/             # Static assets
-    └── uploads/        # Uploaded media
+├── app/
+│   ├── (public)/         # Public-facing site (pages, blog)
+│   ├── admin/            # Admin dashboard and tools
+│   └── api/              # REST API endpoints
+├── components/
+│   ├── admin/            # Admin UI components
+│   └── public/           # Public-facing components
+├── database/
+│   ├── schema.sql        # Main database schema
+│   └── site-tables-template.sql  # Template for new sites
+├── lib/                  # Utilities, helpers, and database
+├── hooks/                # Custom React hooks
+└── [documentation files]
 ```
+
+👉 **[View Complete Project Structure](./PROJECT_STRUCTURE.md)**
 
 ## 🚢 Deployment
 

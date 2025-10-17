@@ -62,6 +62,14 @@ export default function AdminDashboard() {
     }
   }, [isSuperAdmin, router]);
 
+  // Redirect guests away from admin (no dashboard access)
+  const role = (session?.user as any)?.role;
+  useEffect(() => {
+    if (role === 'guest') {
+      router.push('/');
+    }
+  }, [role, router]);
+
   const { data: postsData, isLoading: postsLoading } = useQuery({
     queryKey: ['recent-posts-all-types'],
     queryFn: async () => {

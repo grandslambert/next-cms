@@ -44,16 +44,15 @@ export default function SettingsHelp() {
             <span className="opacity-0 group-hover:opacity-100 transition-opacity">→</span>
           </h3>
         </Link>
-        <p className="text-gray-700 mb-2">Control login behavior and password security:</p>
+        <p className="text-gray-700 mb-2">Control password security for this site:</p>
         <ul className="list-disc list-inside space-y-1 text-gray-700">
-          <li><strong>Hide Default User:</strong> Hide default login credentials on the login page for improved security</li>
           <li><strong>Password Requirements:</strong> Set minimum password length and complexity rules</li>
           <li><strong>Minimum Length:</strong> Require passwords to be at least a certain number of characters (default: 8)</li>
           <li><strong>Character Requirements:</strong> Enforce uppercase letters, lowercase letters, numbers, and special characters</li>
         </ul>
         <div className="mt-3 p-3 bg-white rounded border border-green-300">
           <p className="text-sm text-gray-700">
-            <strong>Note:</strong> Password requirements apply to all new passwords and password changes, including user creation and password resets. The login page respects the "Hide Default User" setting when not logged in.
+            <strong>Note:</strong> Password requirements are site-specific and apply when creating users or resetting passwords. For global system-wide settings (like hiding default credentials on the login page), Super Administrators can use the Global Settings page.
           </p>
         </div>
       </div>

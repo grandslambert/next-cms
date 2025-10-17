@@ -23,7 +23,7 @@ const CORE_PERMISSIONS = [
 ];
 
 export default function RolesPage() {
-  const { isLoading: permissionLoading } = usePermission('manage_roles');
+  const { isLoading: permissionLoading, isSuperAdmin } = usePermission('manage_roles');
   const [editingRole, setEditingRole] = useState<any>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [formData, setFormData] = useState({
@@ -111,6 +111,7 @@ export default function RolesPage() {
       toast.error('Super Administrator role cannot be edited');
       return;
     }
+
     setEditingRole(role);
     setFormData({
       name: role.name,
@@ -150,6 +151,12 @@ export default function RolesPage() {
   const handleDelete = (role: any) => {
     if (role.is_system) {
       toast.error('Cannot delete system role');
+      return;
+    }
+
+    // Prevent super admins from deleting site-specific roles
+    if (isSuperAdmin && role.site_id) {
+      toast.error('Site-specific roles can only be deleted by site administrators');
       return;
     }
 
@@ -230,7 +237,9 @@ export default function RolesPage() {
 
           {data?.roles && data.roles.length > 0 ? (
             <div className="space-y-3">
-              {data.roles.map((role: any) => (
+              {data.roles
+                .filter((role: any) => isSuperAdmin || role.id !== 0) // Hide super admin role from non-super admins
+                .map((role: any) => (
                 <div
                   key={role.id}
                   className={`bg-white rounded-lg shadow p-4 border-2 ${
@@ -241,9 +250,25 @@ export default function RolesPage() {
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
                         <h4 className="font-semibold text-gray-900">{role.display_name}</h4>
-                        {role.is_system && (
+                        {!!role.is_system && (
                           <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded font-medium">
                             System
+                          </span>
+                        )}
+                        {role.site_id != null && role.site_id !== '' ? (
+                          <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded font-medium">
+                            {role.site_name || `Site ${role.site_id}`}
+                          </span>
+                        ) : (
+                          !role.is_system && (
+                            <span className="px-2 py-0.5 bg-gray-100 text-gray-700 text-xs rounded font-medium">
+                              Global
+                            </span>
+                          )
+                        )}
+                        {role.has_override && !isSuperAdmin && (
+                          <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 text-xs rounded font-medium">
+                            Customized
                           </span>
                         )}
                       </div>
@@ -311,7 +336,7 @@ export default function RolesPage() {
                               Clone
                             </button>
                           </div>
-                          {!role.is_system && (
+                          {!role.is_system && !(isSuperAdmin && role.site_id) && (
                             <button
                               onClick={() => handleDelete(role)}
                               className="px-3 py-1 text-sm border border-red-300 text-red-700 rounded hover:bg-red-50 w-full"

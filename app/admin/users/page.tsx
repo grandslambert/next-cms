@@ -135,7 +135,7 @@ export default function UsersPage() {
     setLastName(user.last_name || '');
     setEmail(user.email);
     setPassword(''); // Don't pre-fill password for security
-    setRoleId(user.role_id || 3);
+    setRoleId(user.role_id !== null && user.role_id !== undefined ? user.role_id : 3);
     setShowForm(true);
   };
 
@@ -444,7 +444,9 @@ export default function UsersPage() {
                   onChange={(e) => setRoleId(Number.parseInt(e.target.value))}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
-                  {rolesData?.roles?.map((role: any) => (
+                  {rolesData?.roles
+                    ?.filter((role: any) => isSuperAdmin || role.id !== 0) // Hide super admin role from non-super admins
+                    .map((role: any) => (
                     <option key={role.id} value={role.id}>
                       {role.display_name}
                     </option>
@@ -506,14 +508,25 @@ export default function UsersPage() {
                        user.id.toString() !== currentUserId && 
                        (!isSwitched || user.id.toString() !== originalUserId) &&
                        !(currentUserRole === 'admin' && user.role_name === 'super_admin') && (
-                        <button
-                          onClick={() => handleSwitchUser(user.id, user.username)}
-                          disabled={switchUserMutation.isPending}
-                          className="text-blue-600 hover:text-blue-900 disabled:opacity-50"
-                          title="Switch to this user for testing"
-                        >
-                          🔄 Switch
-                        </button>
+                        (() => {
+                          // Check if user can be switched to
+                          // Super admins can always be switched to (they manage all sites)
+                          // For other users, check if they have active site assignments
+                          const isSuperAdminUser = user.role_name === 'super_admin';
+                          const hasActiveSites = isSuperAdminUser || 
+                                                 (isSuperAdmin ? (user.sites && user.sites.length > 0) : true);
+                          
+                          return (
+                            <button
+                              onClick={() => handleSwitchUser(user.id, user.username)}
+                              disabled={switchUserMutation.isPending || !hasActiveSites}
+                              className={`${hasActiveSites ? 'text-blue-600 hover:text-blue-900' : 'text-gray-400 cursor-not-allowed'} disabled:opacity-50`}
+                              title={hasActiveSites ? 'Switch to this user for testing' : 'User has no active site assignments'}
+                            >
+                              🔄 Switch
+                            </button>
+                          );
+                        })()
                       )}
                       {user.id !== (session?.user as any)?.id && (
                         <button

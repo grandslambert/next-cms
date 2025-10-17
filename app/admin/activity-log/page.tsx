@@ -7,13 +7,14 @@ import { usePermission } from '@/hooks/usePermission';
 import ActivityLogDetailsModal from '@/components/admin/ActivityLogDetailsModal';
 
 export default function ActivityLogPage() {
-  const { isLoading: permissionLoading } = usePermission('manage_users');
+  const { isLoading: permissionLoading, isSuperAdmin } = usePermission('manage_users');
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 50;
   const [filterUserId, setFilterUserId] = useState('');
   const [filterAction, setFilterAction] = useState('');
   const [filterEntityType, setFilterEntityType] = useState('');
+  const [filterSiteId, setFilterSiteId] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedLog, setSelectedLog] = useState<any>(null);
@@ -30,7 +31,7 @@ export default function ActivityLogPage() {
 
   // Fetch activity logs
   const { data: logsData, isLoading } = useQuery({
-    queryKey: ['activity-log', currentPage, itemsPerPage, filterUserId, filterAction, filterEntityType, debouncedSearch],
+    queryKey: ['activity-log', currentPage, itemsPerPage, filterUserId, filterAction, filterEntityType, filterSiteId, debouncedSearch],
     queryFn: async () => {
       const params = new URLSearchParams({
         page: currentPage.toString(),
@@ -38,6 +39,7 @@ export default function ActivityLogPage() {
         ...(filterUserId && { user_id: filterUserId }),
         ...(filterAction && { action: filterAction }),
         ...(filterEntityType && { entity_type: filterEntityType }),
+        ...(isSuperAdmin && filterSiteId && { site_id: filterSiteId }),
         ...(debouncedSearch && { search: debouncedSearch }),
       });
       const res = await axios.get(`/api/activity-log?${params}`);
@@ -52,6 +54,16 @@ export default function ActivityLogPage() {
       const res = await axios.get('/api/users');
       return res.data;
     },
+  });
+
+  // Fetch sites for filter dropdown (super admin only)
+  const { data: sitesData } = useQuery({
+    queryKey: ['sites'],
+    queryFn: async () => {
+      const res = await axios.get('/api/sites');
+      return res.data;
+    },
+    enabled: isSuperAdmin,
   });
 
   const formatAction = (action: string) => {
@@ -80,7 +92,10 @@ export default function ActivityLogPage() {
       <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-8 py-4">
         <h1 className="text-2xl font-bold">Activity Log</h1>
         <p className="text-sm text-gray-600">
-          View all user activities and system events
+          {isSuperAdmin 
+            ? 'View all user activities and system events across all sites'
+            : 'View all user activities and system events for your site'
+          }
         </p>
       </div>
 
@@ -90,7 +105,33 @@ export default function ActivityLogPage() {
 
       {/* Filters */}
       <div className="bg-white rounded-lg shadow p-4 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className={`grid grid-cols-1 gap-4 ${isSuperAdmin ? 'md:grid-cols-5' : 'md:grid-cols-4'}`}>
+          {/* Site Filter (Super Admin Only) */}
+          {isSuperAdmin && (
+            <div>
+              <label htmlFor="filter-site" className="block text-sm font-medium text-gray-700 mb-1">
+                Site
+              </label>
+              <select
+                id="filter-site"
+                value={filterSiteId}
+                onChange={(e) => {
+                  setFilterSiteId(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="all">All Sites</option>
+                <option value="global">Global Only</option>
+                {sitesData?.sites?.map((site: any) => (
+                  <option key={site.id} value={site.id}>
+                    {site.display_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* User Filter */}
           <div>
             <label htmlFor="filter-user" className="block text-sm font-medium text-gray-700 mb-1">
@@ -210,6 +251,11 @@ export default function ActivityLogPage() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       User
                     </th>
+                    {isSuperAdmin && (
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Site
+                      </th>
+                    )}
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Action
                     </th>
@@ -241,6 +287,11 @@ export default function ActivityLogPage() {
                           {log.first_name} {log.last_name}
                         </div>
                       </td>
+                      {isSuperAdmin && (
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {log.site_name || <span className="text-gray-400 italic">Global</span>}
+                        </td>
+                      )}
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getActionBadgeColor(log.action)}`}>
                           {formatAction(log.action)}

@@ -90,6 +90,7 @@ export default function SitesPage() {
 
   const resetForm = () => {
     setIsCreating(false);
+    setEditingSite(null);
     setFormData({
       name: '',
       display_name: '',

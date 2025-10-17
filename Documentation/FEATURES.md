@@ -36,8 +36,45 @@
 - Bcrypt password hashing
 - Session-based authentication
 - Protected admin routes
-- Role-based access control (Admin, Editor, Author)
+- Role-based access control (Super Admin, Admin, Editor, Author, Guest)
+- Site role overrides (customize system roles per site)
 - Secure API endpoints
+
+### 🌐 Multi-Site Management
+
+#### Sites
+- Create and manage multiple independent sites
+- Each site has isolated content (posts, pages, media, menus)
+- Site-specific database tables (`site_{id}_posts`, etc.)
+- Active/inactive site status
+- Domain mapping support
+- Site descriptions and metadata
+
+#### User & Role Management
+- Global user accounts across all sites
+- Flexible site assignments (users can access multiple sites)
+- Site-specific roles (different roles on different sites)
+- **Site Role Overrides** - Customize system roles per site:
+  - Site admins can edit Admin, Editor, Author, Guest roles
+  - Changes only affect their specific site
+  - Other sites remain unaffected
+  - Revert to global defaults anytime
+  - Super admins control global defaults
+- Super Administrator role for system-wide management
+- Site-specific custom roles
+- Guest role for public/read-only access
+
+#### Site Switcher
+- Switch between assigned sites from sidebar
+- Maintains separate context per site
+- Seamless navigation between sites
+- Shows only sites user has access to
+
+#### User Switching
+- Admins can temporarily become another user for testing
+- Preserved original session for switching back
+- Visual indicators when in testing mode
+- Activity logging of switch actions
 
 ### 🎨 User Interface
 
@@ -120,9 +157,24 @@
 ### User Management
 ✅ User authentication
 ✅ Password hashing
-✅ User roles (Admin, Editor, Author)
+✅ User roles (Super Admin, Admin, Editor, Author, Guest)
+✅ Site-specific role assignments
+✅ Site role overrides (customize system roles per site)
+✅ Site-specific custom roles
 ✅ Session management
 ✅ Secure login/logout
+✅ User switching for testing
+✅ Multi-site user assignments
+
+### Multi-Site Management
+✅ Create multiple independent sites
+✅ Site-specific content isolation
+✅ Site-specific database tables
+✅ Site switcher for multi-site users
+✅ Super admin system-wide management
+✅ Site admin per-site management
+✅ Active/inactive site status
+✅ Activity logging across sites
 
 ### Database Schema
 ✅ Users table
