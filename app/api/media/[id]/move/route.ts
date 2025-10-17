@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 
 export async function PUT(
@@ -19,12 +19,16 @@ export async function PUT(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    const siteId = (session.user as any).currentSiteId || 1;
+    const mediaTable = getSiteTable(siteId, 'media');
+    const foldersTable = getSiteTable(siteId, 'media_folders');
+
     const body = await request.json();
     const { folder_id } = body;
 
     // Check if media item exists
     const [media] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM media WHERE id = ?',
+      `SELECT * FROM ${mediaTable} WHERE id = ?`,
       [params.id]
     );
 
@@ -35,7 +39,7 @@ export async function PUT(
     // If folder_id is provided, verify it exists
     if (folder_id) {
       const [folder] = await db.query<RowDataPacket[]>(
-        'SELECT * FROM media_folders WHERE id = ?',
+        `SELECT * FROM ${foldersTable} WHERE id = ?`,
         [folder_id]
       );
 
@@ -46,12 +50,12 @@ export async function PUT(
 
     // Move media to folder (or root if folder_id is null)
     await db.execute<ResultSetHeader>(
-      'UPDATE media SET folder_id = ? WHERE id = ?',
+      `UPDATE ${mediaTable} SET folder_id = ? WHERE id = ?`,
       [folder_id || null, params.id]
     );
 
     const [updated] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM media WHERE id = ?',
+      `SELECT * FROM ${mediaTable} WHERE id = ?`,
       [params.id]
     );
 

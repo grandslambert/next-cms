@@ -55,11 +55,7 @@ export default function BulkMoveModal({
               disabled={folder.id === currentFolderId}
               className="w-full text-left px-4 py-2 border border-gray-300 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              📁 {folder.name} {folder.id === currentFolderId && '(Current)'}
-              <span className="text-xs text-gray-500 ml-2">
-                {folder.file_count || 0} {folder.file_count === 1 ? 'file' : 'files'}
-                {folder.subfolder_count > 0 && `, ${folder.subfolder_count} ${folder.subfolder_count === 1 ? 'folder' : 'folders'}`}
-              </span>
+              📁 {folder.display_name || folder.name} {folder.id === currentFolderId && '(Current)'}
             </button>
           ))}
         </div>

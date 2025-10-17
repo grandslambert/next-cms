@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
@@ -18,6 +18,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    const siteId = (session.user as any).currentSiteId || 1;
+    const mediaTable = getSiteTable(siteId, 'media');
+
     const body = await request.json();
     const { media_ids } = body;
 
@@ -29,7 +32,7 @@ export async function POST(request: NextRequest) {
 
     // Get all media to delete files
     const [mediaItems] = await db.query<RowDataPacket[]>(
-      `SELECT * FROM media WHERE id IN (${placeholders}) AND deleted_at IS NOT NULL`,
+      `SELECT * FROM ${mediaTable} WHERE id IN (${placeholders}) AND deleted_at IS NOT NULL`,
       media_ids
     );
 
@@ -66,7 +69,7 @@ export async function POST(request: NextRequest) {
 
     // Permanently delete from database
     await db.execute<ResultSetHeader>(
-      `DELETE FROM media WHERE id IN (${placeholders})`,
+      `DELETE FROM ${mediaTable} WHERE id IN (${placeholders})`,
       media_ids
     );
 

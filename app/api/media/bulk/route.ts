@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { ResultSetHeader } from 'mysql2';
 
 export async function POST(request: NextRequest) {
@@ -16,6 +16,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    const siteId = (session.user as any).currentSiteId || 1;
+    const mediaTable = getSiteTable(siteId, 'media');
+
     const body = await request.json();
     const { action, media_ids, folder_id } = body;
 
@@ -29,7 +32,7 @@ export async function POST(request: NextRequest) {
       case 'trash':
         // Move to trash
         await db.execute<ResultSetHeader>(
-          `UPDATE media SET deleted_at = NOW() WHERE id IN (${placeholders})`,
+          `UPDATE ${mediaTable} SET deleted_at = NOW() WHERE id IN (${placeholders})`,
           media_ids
         );
         return NextResponse.json({ 
@@ -39,7 +42,7 @@ export async function POST(request: NextRequest) {
       case 'restore':
         // Restore from trash
         await db.execute<ResultSetHeader>(
-          `UPDATE media SET deleted_at = NULL WHERE id IN (${placeholders})`,
+          `UPDATE ${mediaTable} SET deleted_at = NULL WHERE id IN (${placeholders})`,
           media_ids
         );
         return NextResponse.json({ 
@@ -52,7 +55,7 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: 'Folder ID required for move action' }, { status: 400 });
         }
         await db.execute<ResultSetHeader>(
-          `UPDATE media SET folder_id = ? WHERE id IN (${placeholders})`,
+          `UPDATE ${mediaTable} SET folder_id = ? WHERE id IN (${placeholders})`,
           [folder_id, ...media_ids]
         );
         return NextResponse.json({ 
@@ -62,7 +65,7 @@ export async function POST(request: NextRequest) {
       case 'permanent-delete':
         // Permanently delete (only from trash)
         await db.execute<ResultSetHeader>(
-          `DELETE FROM media WHERE id IN (${placeholders}) AND deleted_at IS NOT NULL`,
+          `DELETE FROM ${mediaTable} WHERE id IN (${placeholders}) AND deleted_at IS NOT NULL`,
           media_ids
         );
         return NextResponse.json({ 

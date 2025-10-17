@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { unlink } from 'fs/promises';
 import path from 'path';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
@@ -18,9 +18,12 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    const siteId = (session.user as any).currentSiteId || 1;
+    const mediaTable = getSiteTable(siteId, 'media');
+
     // Get all trashed media
     const [trashedMedia] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM media WHERE deleted_at IS NOT NULL'
+      `SELECT * FROM ${mediaTable} WHERE deleted_at IS NOT NULL`
     );
 
     let deletedCount = 0;
@@ -58,7 +61,7 @@ export async function DELETE(request: NextRequest) {
 
     // Permanently delete all trashed media from database
     await db.execute<ResultSetHeader>(
-      'DELETE FROM media WHERE deleted_at IS NOT NULL'
+      `DELETE FROM ${mediaTable} WHERE deleted_at IS NOT NULL`
     );
 
     return NextResponse.json({ 

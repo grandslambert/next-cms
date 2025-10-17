@@ -233,10 +233,10 @@ export async function DELETE(
       }, { status: 400 });
     }
 
-    // Check if any posts use this post type
+    // Check if any posts use this post type (posts table uses 'post_type' VARCHAR, not 'post_type_id')
     const [postCount] = await db.query<RowDataPacket[]>(
-      `SELECT COUNT(*) as count FROM ${postsTable} WHERE post_type_id = ?`,
-      [params.id]
+      `SELECT COUNT(*) as count FROM ${postsTable} WHERE post_type = ?`,
+      [postType[0].name]
     );
 
     if (postCount[0].count > 0) {

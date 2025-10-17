@@ -63,6 +63,9 @@ export default function NavigationPage() {
       return;
     }
 
+    // Mark as loaded even if no menus exist
+    setMenuPreferenceLoaded(true);
+
     if (menusData?.menus && menusData.menus.length > 0) {
       let menuIdToSelect = null;
       
@@ -85,7 +88,6 @@ export default function NavigationPage() {
       
       console.log('Setting selected menu ID to:', menuIdToSelect);
       setSelectedMenuId(menuIdToSelect);
-      setMenuPreferenceLoaded(true);
     }
   }, [menuPreferenceLoaded, menusLoading, prefLoading, lastMenuData, menusData]);
 

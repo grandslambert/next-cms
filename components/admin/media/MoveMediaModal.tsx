@@ -51,7 +51,7 @@ export default function MoveMediaModal({
               onClick={() => onMove(folder.id)}
               className="w-full text-left px-4 py-2 border border-gray-300 rounded-lg hover:bg-blue-50 transition-colors"
             >
-              📁 {folder.name}
+              📁 {folder.display_name || folder.name}
             </button>
           ))}
         </div>

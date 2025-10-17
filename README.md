@@ -1,6 +1,6 @@
 # Next CMS
 
-> Version 2.1.1
+> Version 2.2.0
 
 A powerful, modern content management system built with Next.js 14, TypeScript, Tailwind CSS, and MySQL with multi-site support.
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import toast from 'react-hot-toast';
@@ -40,6 +40,12 @@ export default function MediaPage() {
   const [selectedMedia, setSelectedMedia] = useState<number[]>([]);
   const [bulkAction, setBulkAction] = useState<string>('');
   const [showBulkMoveModal, setShowBulkMoveModal] = useState(false);
+  const [showDeleteFolderModal, setShowDeleteFolderModal] = useState(false);
+  const [deletingFolder, setDeletingFolder] = useState<any>(null);
+  const [folderMediaCount, setFolderMediaCount] = useState(0);
+  const [folderSubfolderCount, setFolderSubfolderCount] = useState(0);
+  const [deleteAction, setDeleteAction] = useState<'move' | 'delete'>('move');
+  const [moveToFolderId, setMoveToFolderId] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
 
@@ -49,6 +55,15 @@ export default function MediaPage() {
     queryFn: async () => {
       const parentParam = currentFolderId === null ? 'null' : currentFolderId;
       const res = await axios.get(`/api/media/folders?parent_id=${parentParam}`);
+      return res.data;
+    },
+  });
+
+  // Fetch ALL folders for move/delete operations
+  const { data: allFoldersData } = useQuery({
+    queryKey: ['all-media-folders'],
+    queryFn: async () => {
+      const res = await axios.get('/api/media/folders/all');
       return res.data;
     },
   });
@@ -116,6 +131,7 @@ export default function MediaPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['media-folders'] });
+      queryClient.invalidateQueries({ queryKey: ['all-media-folders'] });
       toast.success('Folder created successfully');
       setShowNewFolderModal(false);
       setNewFolderName('');
@@ -132,6 +148,7 @@ export default function MediaPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['media-folders'] });
+      queryClient.invalidateQueries({ queryKey: ['all-media-folders'] });
       toast.success('Folder renamed successfully');
       setShowRenameFolderModal(false);
       setEditingFolder(null);
@@ -143,16 +160,51 @@ export default function MediaPage() {
   });
 
   const deleteFolderMutation = useMutation({
-    mutationFn: async (id: number) => {
-      const res = await axios.delete(`/api/media/folders/${id}`);
+    mutationFn: async ({ id, action, targetFolderId }: { id: number; action?: string; targetFolderId?: number | null }) => {
+      let url = `/api/media/folders/${id}`;
+      if (action) {
+        url += `?action=${action}`;
+        if (action === 'move') {
+          url += `&target_folder_id=${targetFolderId === null ? 'null' : targetFolderId}`;
+        }
+      }
+      const res = await axios.delete(url);
       return res.data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['media-folders'] });
-      toast.success('Folder deleted successfully');
+      queryClient.invalidateQueries({ queryKey: ['all-media-folders'] });
+      queryClient.invalidateQueries({ queryKey: ['media'] });
+      
+      const parts = [];
+      if (data.folders_deleted > 1) {
+        parts.push(`${data.folders_deleted} folders`);
+      } else {
+        parts.push('Folder');
+      }
+      
+      if (data.media_moved > 0) {
+        parts.push(`${data.media_moved} file(s) moved`);
+      } else if (data.media_deleted > 0) {
+        parts.push(`${data.media_deleted} file(s) deleted`);
+      }
+      
+      toast.success(parts.join(' - ') + ' deleted successfully');
+      setShowDeleteFolderModal(false);
+      setDeletingFolder(null);
     },
     onError: (error: any) => {
-      const errorMessage = error.response?.data?.error || 'Failed to delete folder';
+      const errorData = error.response?.data;
+      
+      // If the folder has media files and requires action, show the modal
+      if (errorData?.requires_action) {
+        setFolderMediaCount(errorData.media_count || 0);
+        setFolderSubfolderCount(errorData.subfolder_count || 0);
+        setShowDeleteFolderModal(true);
+        return;
+      }
+      
+      const errorMessage = errorData?.error || 'Failed to delete folder';
       toast.error(errorMessage);
     },
   });
@@ -165,6 +217,7 @@ export default function MediaPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['media'] });
       queryClient.invalidateQueries({ queryKey: ['media-folders'] });
+      queryClient.invalidateQueries({ queryKey: ['all-media-folders'] });
       toast.success('Media moved successfully');
       setShowMoveModal(false);
       setMovingMedia(null);
@@ -182,6 +235,7 @@ export default function MediaPage() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['media'] });
       queryClient.invalidateQueries({ queryKey: ['media-folders'] });
+      queryClient.invalidateQueries({ queryKey: ['all-media-folders'] });
       toast.success(data.message);
       setSelectedMedia([]);
       setBulkAction('');
@@ -364,10 +418,61 @@ export default function MediaPage() {
     renameFolderMutation.mutate({ id: editingFolder.id, name: newFolderName.trim() });
   };
 
-  const handleDeleteFolder = (folder: any) => {
-    if (confirm(`Are you sure you want to delete the folder "${folder.name}"? This will also delete any subfolders.`)) {
-      deleteFolderMutation.mutate(folder.id);
+  const handleDeleteFolder = async (folder: any) => {
+    setDeletingFolder(folder);
+    setDeleteAction('move');
+    setMoveToFolderId(null);
+    
+    // Try to delete - if it has contents, the API will return info for confirmation
+    deleteFolderMutation.mutate({ id: folder.id });
+  };
+
+  const handleConfirmDeleteFolder = () => {
+    if (!deletingFolder) return;
+    
+    deleteFolderMutation.mutate({
+      id: deletingFolder.id,
+      action: deleteAction,
+      targetFolderId: deleteAction === 'move' ? moveToFolderId : undefined
+    });
+  };
+
+  // Handle ESC key to close delete folder modal
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showDeleteFolderModal) {
+        setShowDeleteFolderModal(false);
+        setDeletingFolder(null);
+      }
+    };
+
+    if (showDeleteFolderModal) {
+      document.addEventListener('keydown', handleEscape);
+      return () => document.removeEventListener('keydown', handleEscape);
     }
+  }, [showDeleteFolderModal]);
+
+  // Get available folders (excluding the folder being deleted and its descendants)
+  const getAvailableFolders = () => {
+    if (!allFoldersData?.folders || !deletingFolder) return [];
+    
+    // Build a set of folder IDs to exclude (the deleting folder and all its descendants)
+    const excludeIds = new Set<number>([deletingFolder.id]);
+    
+    // Find all descendants by checking parent_id chain
+    const findDescendants = (parentId: number) => {
+      allFoldersData.folders.forEach((folder: any) => {
+        if (folder.parent_id === parentId && !excludeIds.has(folder.id)) {
+          excludeIds.add(folder.id);
+          findDescendants(folder.id);
+        }
+      });
+    };
+    
+    findDescendants(deletingFolder.id);
+    
+    // Return folders not in exclude list
+    return allFoldersData.folders.filter((f: any) => !excludeIds.has(f.id));
   };
 
   const handleMoveMedia = (targetFolderId: number | null) => {
@@ -666,7 +771,7 @@ export default function MediaPage() {
       <MoveMediaModal
         isOpen={showMoveModal}
         media={movingMedia}
-        folders={foldersData?.folders || []}
+        folders={allFoldersData?.folders || []}
         onClose={() => {
           setShowMoveModal(false);
           setMovingMedia(null);
@@ -677,15 +782,118 @@ export default function MediaPage() {
       <BulkMoveModal
         isOpen={showBulkMoveModal}
         selectedCount={selectedMedia.length}
-        folders={foldersData?.folders || []}
+        folders={allFoldersData?.folders || []}
         currentFolderId={currentFolderId}
         onClose={() => setShowBulkMoveModal(false)}
         onMove={handleBulkMove}
       />
 
+      {/* Delete Folder Confirmation Modal */}
+      {showDeleteFolderModal && deletingFolder && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">
+              Delete Folder with Contents
+            </h2>
+            <p className="text-gray-600 mb-4">
+              The folder <strong>&quot;{deletingFolder.name}&quot;</strong> contains:
+            </p>
+            <ul className="list-disc list-inside text-gray-600 mb-4 space-y-1">
+              {folderMediaCount > 0 && (
+                <li>{folderMediaCount} media file{folderMediaCount !== 1 ? 's' : ''}</li>
+              )}
+              {folderSubfolderCount > 0 && (
+                <li>{folderSubfolderCount} subfolder{folderSubfolderCount !== 1 ? 's' : ''} (will be deleted recursively)</li>
+              )}
+            </ul>
+            <p className="text-gray-600 mb-4">
+              What would you like to do with the media files?
+            </p>
+
+            <div className="space-y-3 mb-6">
+              <label className="flex items-start p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                <input
+                  type="radio"
+                  name="delete-action"
+                  value="move"
+                  checked={deleteAction === 'move'}
+                  onChange={(e) => setDeleteAction(e.target.value as 'move')}
+                  className="mt-1"
+                />
+                <div className="ml-3">
+                  <div className="font-medium text-gray-900">Move files to another folder</div>
+                  <div className="text-sm text-gray-600">Select a destination folder below</div>
+                  
+                  {deleteAction === 'move' && (
+                    <select
+                      value={moveToFolderId === null ? 'null' : moveToFolderId}
+                      onChange={(e) => setMoveToFolderId(e.target.value === 'null' ? null : Number.parseInt(e.target.value))}
+                      className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <option value="null">📁 Root / Media Library</option>
+                      {getAvailableFolders().map((folder: any) => (
+                        <option key={folder.id} value={folder.id}>
+                          📁 {folder.display_name || folder.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              </label>
+
+              <label className="flex items-start p-3 border border-red-200 rounded-lg cursor-pointer hover:bg-red-50">
+                <input
+                  type="radio"
+                  name="delete-action"
+                  value="delete"
+                  checked={deleteAction === 'delete'}
+                  onChange={(e) => setDeleteAction(e.target.value as 'delete')}
+                  className="mt-1"
+                  aria-label="Delete all files permanently"
+                />
+                <div className="ml-3">
+                  <div className="font-medium text-red-900">Delete all files permanently</div>
+                  <div className="text-sm text-red-600">⚠️ This will remove all {folderMediaCount} file{folderMediaCount !== 1 ? 's' : ''} from the server</div>
+                </div>
+              </label>
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowDeleteFolderModal(false);
+                  setDeletingFolder(null);
+                }}
+                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md"
+                disabled={deleteFolderMutation.isPending}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDeleteFolder}
+                disabled={deleteFolderMutation.isPending}
+                className={`px-4 py-2 rounded-md text-white ${
+                  deleteAction === 'delete'
+                    ? 'bg-red-600 hover:bg-red-700'
+                    : 'bg-primary-600 hover:bg-primary-700'
+                } disabled:opacity-50`}
+              >
+                {deleteFolderMutation.isPending ? 'Processing...' : deleteAction === 'delete' ? 'Delete All' : 'Move & Delete Folder'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <LoadingOverlay 
         isVisible={bulkActionMutation.isPending}
         message={`Processing ${selectedMedia.length} item${selectedMedia.length !== 1 ? 's' : ''}...`}
+      />
+
+      <LoadingOverlay 
+        isVisible={deleteFolderMutation.isPending}
+        message={deletingFolder ? `Deleting folder "${deletingFolder.name}"...` : 'Deleting folder...'}
       />
         </div>
       </div>

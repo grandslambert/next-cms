@@ -258,10 +258,10 @@ INSERT INTO {PREFIX}post_types (id, name, slug, label, singular_label, descripti
 VALUES 
   (1, 'post', 'blog', 'Posts', 'Post', 'Regular blog posts', '📝', 'default',
    '{"title": true, "content": true, "excerpt": true, "featured_image": true, "custom_fields": true}',
-   TRUE, FALSE, 5),
+   TRUE, FALSE, 1),
   (2, 'page', '', 'Pages', 'Page', 'Static pages', '📄', 'default',
    '{"title": true, "content": true, "featured_image": true, "custom_fields": true}',
-   TRUE, TRUE, 10)
+   TRUE, TRUE, 2)
 ON DUPLICATE KEY UPDATE 
   label = VALUES(label),
   hierarchical = VALUES(hierarchical),

@@ -23,10 +23,12 @@ export type ActivityAction =
   | 'folder_created' | 'folder_updated' | 'folder_deleted'
   // Menu actions
   | 'menu_created' | 'menu_updated' | 'menu_deleted'
-  | 'menu_item_created' | 'menu_item_updated' | 'menu_item_deleted';
+  | 'menu_item_created' | 'menu_item_updated' | 'menu_item_deleted'
+  // Import/Export actions
+  | 'data_exported' | 'data_imported';
 
 export type EntityType = 
-  | 'auth' | 'post' | 'media' | 'user' | 'role' | 'post_type' | 'taxonomy' | 'term' | 'settings' | 'folder' | 'menu' | 'menu_item';
+  | 'auth' | 'post' | 'media' | 'user' | 'role' | 'post_type' | 'taxonomy' | 'term' | 'settings' | 'folder' | 'menu' | 'menu_item' | 'data';
 
 interface LogActivityParams {
   userId: number;

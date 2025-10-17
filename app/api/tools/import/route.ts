@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import JSZip from 'jszip';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function POST(request: NextRequest) {
   try {
@@ -25,12 +27,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     }
 
-    const fileText = await file.text();
+    let fileText: string;
+    
+    // Handle ZIP files
+    if (file.name.toLowerCase().endsWith('.zip')) {
+      const arrayBuffer = await file.arrayBuffer();
+      const zip = await JSZip.loadAsync(arrayBuffer);
+      
+      // Look for export.json in the ZIP
+      const exportFile = zip.file('export.json');
+      if (!exportFile) {
+        return NextResponse.json({ error: 'ZIP file must contain export.json' }, { status: 400 });
+      }
+      
+      fileText = await exportFile.async('text');
+    } else {
+      // Handle JSON files directly
+      fileText = await file.text();
+    }
+
     const importData = JSON.parse(fileText);
 
     if (!importData.version || !importData.data) {
       return NextResponse.json({ error: 'Invalid import file format' }, { status: 400 });
     }
+
+    // Get current site ID from session
+    const currentSiteId = (session.user as any).currentSiteId || 1;
 
     const stats = {
       posts: 0,
@@ -51,13 +74,13 @@ export async function POST(request: NextRequest) {
       
       for (const postType of post_types || []) {
         const [existing] = await db.query<RowDataPacket[]>(
-          'SELECT id FROM post_types WHERE name = ?',
+          `SELECT id FROM ${getSiteTable(currentSiteId, 'post_types')} WHERE name = ?`,
           [postType.name]
         );
 
         if (existing.length === 0) {
           await db.query(
-            `INSERT INTO post_types 
+            `INSERT INTO ${getSiteTable(currentSiteId, 'post_types')} 
             (name, slug, label, singular_label, description, icon, url_structure, supports, 
              public, show_in_dashboard, hierarchical, menu_position, created_at, updated_at) 
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -90,13 +113,13 @@ export async function POST(request: NextRequest) {
       // Import taxonomy definitions
       for (const taxonomy of taxonomies || []) {
         const [existing] = await db.query<RowDataPacket[]>(
-          'SELECT id FROM taxonomies WHERE name = ?',
+          `SELECT id FROM ${getSiteTable(currentSiteId, 'taxonomies')} WHERE name = ?`,
           [taxonomy.name]
         );
 
         if (existing.length === 0) {
           await db.query(
-            `INSERT INTO taxonomies 
+            `INSERT INTO ${getSiteTable(currentSiteId, 'taxonomies')} 
             (name, label, singular_label, description, hierarchical, public, show_in_menu, show_in_dashboard, menu_position, created_at, updated_at) 
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
@@ -122,16 +145,16 @@ export async function POST(request: NextRequest) {
       
       for (const term of terms || []) {
         const [existing] = await db.query<RowDataPacket[]>(
-          'SELECT id FROM terms WHERE taxonomy_id = (SELECT id FROM taxonomies WHERE name = ?) AND slug = ?',
+          `SELECT id FROM ${getSiteTable(currentSiteId, 'terms')} WHERE taxonomy_id = (SELECT id FROM ${getSiteTable(currentSiteId, 'taxonomies')} WHERE name = ?) AND slug = ?`,
           [term.taxonomy_id, term.slug]
         );
 
         let termId: number;
         if (existing.length === 0) {
           const [result] = await db.query<ResultSetHeader>(
-            `INSERT INTO terms 
+            `INSERT INTO ${getSiteTable(currentSiteId, 'terms')} 
             (taxonomy_id, name, slug, description, parent_id, created_at, updated_at) 
-            VALUES ((SELECT id FROM taxonomies WHERE id = ?), ?, ?, ?, ?, ?, ?)`,
+            VALUES ((SELECT id FROM ${getSiteTable(currentSiteId, 'taxonomies')} WHERE id = ?), ?, ?, ?, ?, ?, ?)`,
             [term.taxonomy_id, term.name, term.slug, term.description, term.parent_id, term.created_at, term.updated_at]
           );
           termId = result.insertId;
@@ -148,17 +171,17 @@ export async function POST(request: NextRequest) {
         for (const rel of term_relationships) {
           // Only import if both post and term exist
           const [postExists] = await db.query<RowDataPacket[]>(
-            'SELECT id FROM posts WHERE id = ?',
+            `SELECT id FROM ${getSiteTable(currentSiteId, 'posts')} WHERE id = ?`,
             [rel.post_id]
           );
           const [termExists] = await db.query<RowDataPacket[]>(
-            'SELECT id FROM terms WHERE id = ?',
+            `SELECT id FROM ${getSiteTable(currentSiteId, 'terms')} WHERE id = ?`,
             [rel.term_id]
           );
           
           if (postExists.length > 0 && termExists.length > 0) {
             await db.query(
-              'INSERT IGNORE INTO term_relationships (post_id, term_id) VALUES (?, ?)',
+              `INSERT IGNORE INTO ${getSiteTable(currentSiteId, 'term_relationships')} (post_id, term_id) VALUES (?, ?)`,
               [rel.post_id, rel.term_id]
             );
           }
@@ -170,13 +193,13 @@ export async function POST(request: NextRequest) {
     if (importData.data.media_folders) {
       for (const folder of importData.data.media_folders) {
         const [existing] = await db.query<RowDataPacket[]>(
-          'SELECT id FROM media_folders WHERE name = ? AND parent_id <=> ?',
+          `SELECT id FROM ${getSiteTable(currentSiteId, 'media_folders')} WHERE name = ? AND parent_id <=> ?`,
           [folder.name, folder.parent_id]
         );
 
         if (existing.length === 0) {
           await db.query(
-            'INSERT INTO media_folders (name, parent_id, created_at, updated_at) VALUES (?, ?, ?, ?)',
+            `INSERT INTO ${getSiteTable(currentSiteId, 'media_folders')} (name, parent_id, created_at, updated_at) VALUES (?, ?, ?, ?)`,
             [folder.name, folder.parent_id, folder.created_at, folder.updated_at]
           );
           stats.mediaFolders++;
@@ -188,7 +211,7 @@ export async function POST(request: NextRequest) {
     if (importData.data.media) {
       for (const media of importData.data.media) {
         const [existing] = await db.query<RowDataPacket[]>(
-          'SELECT id FROM media WHERE filename = ? AND url = ?',
+          `SELECT id FROM ${getSiteTable(currentSiteId, 'media')} WHERE filename = ? AND url = ?`,
           [media.filename, media.url]
         );
 
@@ -197,7 +220,7 @@ export async function POST(request: NextRequest) {
           let folderId = media.folder_id;
           if (folderId) {
             const [folderExists] = await db.query<RowDataPacket[]>(
-              'SELECT id FROM media_folders WHERE id = ?',
+              `SELECT id FROM ${getSiteTable(currentSiteId, 'media_folders')} WHERE id = ?`,
               [folderId]
             );
             if (folderExists.length === 0) {
@@ -216,7 +239,7 @@ export async function POST(request: NextRequest) {
           }
 
           await db.query(
-            `INSERT INTO media 
+            `INSERT INTO ${getSiteTable(currentSiteId, 'media')} 
             (filename, original_name, title, alt_text, mime_type, size, url, sizes, folder_id, uploaded_by, deleted_at, created_at) 
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
@@ -252,7 +275,7 @@ export async function POST(request: NextRequest) {
       
       for (const post of sortedPosts) {
         const [existing] = await db.query<RowDataPacket[]>(
-          'SELECT id FROM posts WHERE slug = ? AND post_type = ?',
+          `SELECT id FROM ${getSiteTable(currentSiteId, 'posts')} WHERE slug = ? AND post_type = ?`,
           [post.slug, post.post_type]
         );
 
@@ -262,7 +285,7 @@ export async function POST(request: NextRequest) {
           let featuredImageId = post.featured_image_id;
           if (featuredImageId) {
             const [imageExists] = await db.query<RowDataPacket[]>(
-              'SELECT id FROM media WHERE id = ?',
+              `SELECT id FROM ${getSiteTable(currentSiteId, 'media')} WHERE id = ?`,
               [featuredImageId]
             );
             if (imageExists.length === 0) {
@@ -284,7 +307,7 @@ export async function POST(request: NextRequest) {
           }
 
           const [result] = await db.query<ResultSetHeader>(
-            `INSERT INTO posts 
+            `INSERT INTO ${getSiteTable(currentSiteId, 'posts')} 
             (title, slug, content, excerpt, status, post_type, author_id, featured_image_id, 
              parent_id, menu_order, published_at, scheduled_publish_at, created_at, updated_at) 
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -302,7 +325,7 @@ export async function POST(request: NextRequest) {
           if (post.meta && Array.isArray(post.meta)) {
             for (const meta of post.meta) {
               await db.query(
-                'INSERT INTO post_meta (post_id, meta_key, meta_value) VALUES (?, ?, ?)',
+                `INSERT INTO ${getSiteTable(currentSiteId, 'post_meta')} (post_id, meta_key, meta_value) VALUES (?, ?, ?)`,
                 [postId, meta.meta_key, meta.meta_value]
               );
             }
@@ -321,13 +344,13 @@ export async function POST(request: NextRequest) {
       // Import menu locations
       for (const location of menu_locations || []) {
         const [existing] = await db.query<RowDataPacket[]>(
-          'SELECT id FROM menu_locations WHERE name = ?',
+          `SELECT id FROM ${getSiteTable(currentSiteId, 'menu_locations')} WHERE name = ?`,
           [location.name]
         );
 
         if (existing.length === 0 && !location.is_builtin) {
           await db.query(
-            'INSERT INTO menu_locations (name, description, is_builtin, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+            `INSERT INTO ${getSiteTable(currentSiteId, 'menu_locations')} (name, description, is_builtin, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
             [location.name, location.description, location.is_builtin, location.created_at, location.updated_at]
           );
         }
@@ -336,14 +359,14 @@ export async function POST(request: NextRequest) {
       // Import menus
       for (const menu of menus || []) {
         const [existing] = await db.query<RowDataPacket[]>(
-          'SELECT id FROM menus WHERE name = ?',
+          `SELECT id FROM ${getSiteTable(currentSiteId, 'menus')} WHERE name = ?`,
           [menu.name]
         );
 
         let menuId: number;
         if (existing.length === 0) {
           const [result] = await db.query<ResultSetHeader>(
-            'INSERT INTO menus (name, location, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+            `INSERT INTO ${getSiteTable(currentSiteId, 'menus')} (name, location, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
             [menu.name, menu.location, menu.description, menu.created_at, menu.updated_at]
           );
           menuId = result.insertId;
@@ -367,7 +390,7 @@ export async function POST(request: NextRequest) {
             const newParentId = item.parent_id ? (menuItemIdMapping[item.parent_id] || null) : null;
             
             const [itemResult] = await db.query<ResultSetHeader>(
-              `INSERT INTO menu_items 
+              `INSERT INTO ${getSiteTable(currentSiteId, 'menu_items')} 
               (menu_id, parent_id, type, object_id, post_type, custom_url, custom_label, menu_order, target, created_at, updated_at) 
               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
               [
@@ -385,7 +408,7 @@ export async function POST(request: NextRequest) {
             if (item.meta && Array.isArray(item.meta)) {
               for (const meta of item.meta) {
                 await db.query(
-                  'INSERT INTO menu_item_meta (menu_item_id, meta_key, meta_value) VALUES (?, ?, ?)',
+                  `INSERT INTO ${getSiteTable(currentSiteId, 'menu_item_meta')} (menu_item_id, meta_key, meta_value) VALUES (?, ?, ?)`,
                   [itemResult.insertId, meta.meta_key, meta.meta_value]
                 );
               }
@@ -399,7 +422,7 @@ export async function POST(request: NextRequest) {
     if (importData.data.settings) {
       for (const setting of importData.data.settings) {
         await db.query(
-          'INSERT INTO settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)',
+          `INSERT INTO ${getSiteTable(currentSiteId, 'settings')} (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)`,
           [setting.setting_key, setting.setting_value]
         );
         stats.settings++;
@@ -457,6 +480,22 @@ export async function POST(request: NextRequest) {
       .filter(([_, count]) => count > 0)
       .map(([key, count]) => `${count} ${key}`)
       .join(', ');
+
+    // Log import activity
+    await logActivity({
+      userId: (session.user as any).id,
+      action: 'data_imported',
+      entityType: 'data',
+      entityName: `Import`,
+      details: {
+        file_type: file.name.toLowerCase().endsWith('.zip') ? 'zip' : 'json',
+        summary: summary || 'No new items imported',
+        stats: stats,
+      },
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+      siteId: currentSiteId,
+    });
 
     return NextResponse.json({
       success: true,

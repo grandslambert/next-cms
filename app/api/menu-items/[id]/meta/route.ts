@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
+import db, { getSiteTable } from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 
 export async function GET(
@@ -19,10 +19,12 @@ export async function GET(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    const siteId = (session.user as any).currentSiteId || 1;
+    const menuItemMetaTable = getSiteTable(siteId, 'menu_item_meta');
     const menuItemId = params.id;
 
     const [rows] = await db.query<RowDataPacket[]>(
-      'SELECT meta_key, meta_value FROM menu_item_meta WHERE menu_item_id = ?',
+      `SELECT meta_key, meta_value FROM ${menuItemMetaTable} WHERE menu_item_id = ?`,
       [menuItemId]
     );
 
@@ -54,6 +56,8 @@ export async function PUT(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    const siteId = (session.user as any).currentSiteId || 1;
+    const menuItemMetaTable = getSiteTable(siteId, 'menu_item_meta');
     const menuItemId = params.id;
     const body = await request.json();
     const { meta } = body; // Object with key-value pairs
@@ -63,13 +67,13 @@ export async function PUT(
     }
 
     // Delete existing meta
-    await db.query('DELETE FROM menu_item_meta WHERE menu_item_id = ?', [menuItemId]);
+    await db.query(`DELETE FROM ${menuItemMetaTable} WHERE menu_item_id = ?`, [menuItemId]);
 
     // Insert new meta
     for (const [key, value] of Object.entries(meta)) {
       if (value) { // Only save non-empty values
         await db.query<ResultSetHeader>(
-          'INSERT INTO menu_item_meta (menu_item_id, meta_key, meta_value) VALUES (?, ?, ?)',
+          `INSERT INTO ${menuItemMetaTable} (menu_item_id, meta_key, meta_value) VALUES (?, ?, ?)`,
           [menuItemId, key, value]
         );
       }
