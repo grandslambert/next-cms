@@ -10,8 +10,9 @@ This directory contains PowerShell test scripts that verify all REST API endpoin
 - **Taxonomies & Terms API** - 20 tests  
 - **Media API** - 18 tests
 - **Menus API** - 22 tests
+- **Users API** - 17 tests
 
-**Total: 71+ comprehensive tests**
+**Total: 88 comprehensive tests**
 
 ## Prerequisites
 
@@ -96,6 +97,9 @@ Run specific API test suite:
 
 # Menus API
 .\test-menus-api.ps1
+
+# Users API
+.\test-users-api.ps1
 ```
 
 ## Test Coverage
@@ -150,6 +154,23 @@ Run specific API test suite:
 - Protection for items with children
 - Error handling
 - Duplicate name prevention
+
+### Users API Tests
+- Authentication
+- List users (pagination)
+- Create user (with site assignments)
+- Get single user
+- Get current user (/auth/me)
+- Update user (PATCH)
+- Search users
+- Filter by role
+- Filter by site
+- Invalid ID handling
+- Duplicate username prevention
+- Self-deletion protection
+- Required field validation
+- Delete user
+- Verify deletion
 
 ## Test User Requirements
 

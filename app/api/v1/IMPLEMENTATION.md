@@ -203,13 +203,26 @@ Pages are handled by the Posts API with `post_type=page`. No separate endpoint n
 - [x] Permission checking (`manage_menus`)
 - [x] Activity logging
 
-## 🚧 Phase 5: User Management API (NEXT)
+## ✅ Phase 5: User Management API (COMPLETED)
 
-### Phase 5: User Management API
-- [ ] List users
-- [ ] Get user
-- [ ] Current user endpoint
-- [ ] Create/update/delete users
+### User Management API - Implemented
+- [x] List users (`GET /api/v1/users`)
+- [x] Get single user (`GET /api/v1/users/:id`)
+- [x] Create user (`POST /api/v1/users`)
+- [x] Update user (`PUT /api/v1/users/:id`)
+- [x] Partial update user (`PATCH /api/v1/users/:id`)
+- [x] Delete user (`DELETE /api/v1/users/:id`)
+- [x] Current user endpoint (`GET /api/v1/auth/me`) - Already implemented in Phase 2
+- [x] Search users (username, email, name)
+- [x] Filter by role and site
+- [x] Multi-site assignments
+- [x] Self-profile access (users can view/edit own profile)
+- [x] Password hashing with bcrypt
+- [x] Permission checking (`manage_users`)
+- [x] Self-deletion protection
+- [x] Duplicate username/email validation
+- [x] Activity logging
+- [x] Site assignments management
 
 ### Phase 6: Settings & Sites API
 - [ ] Settings endpoints

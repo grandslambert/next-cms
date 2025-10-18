@@ -25,7 +25,8 @@ $testFiles = @(
     "test-posts-api.ps1",
     "test-taxonomies-terms-api.ps1",
     "test-media-api.ps1",
-    "test-menus-api.ps1"
+    "test-menus-api.ps1",
+    "test-users-api.ps1"
 )
 
 $totalPassed = 0

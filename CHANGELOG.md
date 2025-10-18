@@ -5,28 +5,44 @@ All notable changes to Next CMS will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.3.2] - 2025-10-17
-
-### Changed
-- **Test Suite Organization** - Reorganized API test scripts
-  - Moved all test scripts to `tests/api/` directory
-  - Created `load-env.ps1` helper to automatically load credentials from `.env` file
-  - Tests now support loading from `.env` for local development
-  - Environment variables take precedence over `.env` file
-  - Updated all test scripts to use centralized environment loading
+## [2.3.3] - 2025-10-17
 
 ### Added
-- **Test Infrastructure**
-  - `run-all-tests.ps1` - Master test runner for all API test suites
-  - `load-env.ps1` - Environment variable loader with `.env` file support
-  - Comprehensive `README.md` in `tests/api/` with setup instructions
-  - Support for both local `.env` configuration and CI/CD environment variables
+- **Users API** - Complete user management system
+  - List users with pagination, search, and filtering
+  - Get single user with role and site information
+  - Create users with password hashing and site assignments
+  - Update users (PUT/PATCH) with self-profile support
+  - Delete users with protection against self-deletion
+  - Search across username, email, first name, and last name
+  - Filter by role ID and site assignment
+  - Multi-site user assignments with per-site roles
+  - Permission checking (`manage_users`)
+  - Self-profile access (users can view/edit own profile with restrictions)
+  - Duplicate username/email validation
+  - Password hashing with bcrypt
+  - Activity logging for all user operations
+- **Users API Test Suite** - 17 comprehensive tests
+  - User CRUD operations testing
+  - Search and filtering validation
+  - Permission and self-access testing
+  - Error handling and validation
+
+### Changed
+- **Test Suite** - Removed duplicate test scripts from root directory
+  - All test scripts now properly organized in `tests/api/`
+  - Cleaned up leftover test files from migration
 
 ### Documentation
-- Complete test suite documentation in `tests/api/README.md`
-- Setup instructions with multiple configuration options
-- Troubleshooting guide for common test issues
-- CI/CD integration examples
+- Complete API documentation for Users (`/api/v1/users/README.md`)
+- Self-access and permission rules
+- Multi-site assignment examples
+- Security notes and best practices
+- Updated test suite README with Users API coverage (88 total tests)
+
+## [2.3.2] - 2025-10-17
+
+See [changelog/v2.3.2.md](changelog/v2.3.2.md) for details.
 
 ## [2.3.1] - 2025-10-17
 
