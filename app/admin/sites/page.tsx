@@ -25,12 +25,7 @@ export default function SitesPage() {
   const queryClient = useQueryClient();
   const isSuperAdmin = (session?.user as any)?.isSuperAdmin;
 
-  // Redirect non-super-admins
-  if (status === 'authenticated' && !isSuperAdmin) {
-    router.push('/admin');
-    return null;
-  }
-
+  // Call all hooks before any early returns
   const { data, isLoading } = useQuery({
     queryKey: ['sites'],
     queryFn: async () => {
@@ -132,6 +127,12 @@ export default function SitesPage() {
       deleteMutation.mutate(site.id);
     }
   };
+
+  // Redirect non-super-admins after hooks are called
+  if (status === 'authenticated' && !isSuperAdmin) {
+    router.push('/admin');
+    return null;
+  }
 
   if (status === 'loading' || isLoading) {
     return (

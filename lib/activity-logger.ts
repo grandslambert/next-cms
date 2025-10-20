@@ -17,6 +17,8 @@ export type ActivityAction =
   // Taxonomy actions
   | 'taxonomy_created' | 'taxonomy_updated' | 'taxonomy_deleted'
   | 'term_created' | 'term_updated' | 'term_deleted'
+  // Site actions
+  | 'site_created' | 'site_updated' | 'site_deleted'
   // Settings actions
   | 'settings_updated'
   // Folder actions
@@ -28,7 +30,7 @@ export type ActivityAction =
   | 'data_exported' | 'data_imported';
 
 export type EntityType = 
-  | 'auth' | 'post' | 'media' | 'user' | 'role' | 'post_type' | 'taxonomy' | 'term' | 'settings' | 'folder' | 'menu' | 'menu_item' | 'data';
+  | 'auth' | 'post' | 'media' | 'user' | 'role' | 'post_type' | 'taxonomy' | 'term' | 'settings' | 'folder' | 'menu' | 'menu_item' | 'data' | 'site';
 
 interface LogActivityParams {
   userId: number;

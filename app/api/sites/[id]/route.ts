@@ -37,7 +37,7 @@ export async function PUT(
 ) {
   try {
     const session = await getServerSession(authOptions);
-    const isSuperAdmin = (session.user as any)?.isSuperAdmin;
+    const isSuperAdmin = (session?.user as any)?.isSuperAdmin;
 
     // Only super admins can update sites
     if (!isSuperAdmin) {
@@ -87,7 +87,7 @@ export async function PUT(
     );
 
     // Log activity
-    const userId = (session.user as any).id;
+    const userId = (session?.user as any)?.id;
     await logActivity({
       userId,
       action: 'site_updated',
@@ -120,7 +120,7 @@ export async function DELETE(
 ) {
   try {
     const session = await getServerSession(authOptions);
-    const isSuperAdmin = (session.user as any)?.isSuperAdmin;
+    const isSuperAdmin = (session?.user as any)?.isSuperAdmin;
 
     // Only super admins can delete sites
     if (!isSuperAdmin) {
@@ -156,7 +156,7 @@ export async function DELETE(
     );
 
     // Log activity
-    const userId = (session.user as any).id;
+    const userId = (session?.user as any)?.id;
     await logActivity({
       userId,
       action: 'site_deleted',

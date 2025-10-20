@@ -174,10 +174,11 @@ export async function POST(request: NextRequest) {
           const filepath = path.join(uploadDir, filename);
           
           // Get crop style from dimensions (default to 'inside')
-          const cropStyle = (dimensions as any).crop || 'inside';
+          const dims = dimensions as any;
+          const cropStyle = dims.crop || 'inside';
           
           const resized = await image
-            .resize(dimensions!.width, dimensions!.height, {
+            .resize(dims.width, dims.height, {
               fit: cropStyle, // Use configured crop style
               withoutEnlargement: cropStyle === 'inside', // Only for 'inside' fit
               position: 'centre', // Center the crop
@@ -265,10 +266,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to upload media' }, { status: 500 });
   }
 }
-
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
 

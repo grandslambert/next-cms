@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     const isSuperAdmin = (session?.user as any)?.isSuperAdmin || false;
-    const userRole = (session.user as any).role;
+    const userRole = (session?.user as any)?.role;
     
     if (!session?.user || (!isSuperAdmin && userRole !== 'admin')) {
       return NextResponse.json({ error: 'Unauthorized - Admin only' }, { status: 401 });
@@ -122,7 +122,7 @@ export async function POST(request: NextRequest) {
       uploadDirs.add(uploadDir);
     }
     
-    for (const dir of uploadDirs) {
+    for (const dir of Array.from(uploadDirs)) {
       await cleanupOldFiles(dir);
     }
 

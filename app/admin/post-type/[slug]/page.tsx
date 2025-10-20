@@ -307,11 +307,12 @@ export default function PostTypePage() {
 
   const emptyTrashMutation = useMutation({
     mutationFn: async () => {
-      await axios.delete('/api/posts/trash/empty');
+      const response = await axios.delete('/api/posts/trash/empty');
+      return response.data;
     },
-    onSuccess: (response) => {
+    onSuccess: (data) => {
       invalidatePostQueries();
-      toast.success(`Trash emptied: ${response.data.deleted_count} items deleted`);
+      toast.success(`Trash emptied: ${data.deleted_count} items deleted`);
     },
     onError: () => {
       toast.error('Failed to empty trash');

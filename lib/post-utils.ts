@@ -11,10 +11,11 @@ export async function buildSlugPath(postId: number | string, siteId: number = 1)
     const postsTable = getSiteTable(siteId, 'posts');
     
     while (currentId && iterations < maxIterations) {
-      const [rows] = await db.query<RowDataPacket[]>(
+      const result: [RowDataPacket[], any] = await db.query<RowDataPacket[]>(
         `SELECT slug, parent_id FROM ${postsTable} WHERE id = ?`,
         [currentId]
-      );
+      ) as any;
+      const rows = result[0];
       
       if (rows.length === 0) break;
       
