@@ -7,10 +7,10 @@ declare module 'next-auth' {
       email: string;
       name: string;
       role: string;
-      roleId?: number;
+      roleId?: string;
       permissions?: Record<string, boolean>;
       isSuperAdmin?: boolean;
-      currentSiteId?: number;
+      currentSiteId?: string;
       originalUserId?: string;
       isSwitched?: boolean;
     };
@@ -21,10 +21,10 @@ declare module 'next-auth' {
     email: string;
     name: string;
     role: string;
-    roleId?: number;
+    roleId?: string;
     permissions?: Record<string, boolean>;
     isSuperAdmin?: boolean;
-    currentSiteId?: number;
+    currentSiteId?: string;
     originalUserId?: string;
     isSwitched?: boolean;
   }
@@ -34,10 +34,10 @@ declare module 'next-auth/jwt' {
   interface JWT {
     id: string;
     role: string;
-    roleId?: number;
+    roleId?: string;
     permissions?: Record<string, boolean>;
     isSuperAdmin?: boolean;
-    currentSiteId?: number;
+    currentSiteId?: string;
     originalUserId?: string;
     isSwitched?: boolean;
   }

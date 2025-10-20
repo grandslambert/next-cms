@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { authOptions } from '@/lib/auth-mongo';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import db, { getSiteTable } from '@/lib/db';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';

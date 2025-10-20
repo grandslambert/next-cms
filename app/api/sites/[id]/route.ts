@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
-import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { authOptions } from '@/lib/auth-mongo';
+import connectDB from '@/lib/mongodb';
+import { Site, SiteUser } from '@/lib/models';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function GET(
@@ -10,21 +10,25 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    await connectDB();
+    
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const [rows] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM sites WHERE id = ?',
-      [params.id]
-    );
+    const site = await Site.findById(params.id).lean();
 
-    if (rows.length === 0) {
+    if (!site) {
       return NextResponse.json({ error: 'Site not found' }, { status: 404 });
     }
 
-    return NextResponse.json({ site: rows[0] });
+    // Add user count and id field
+    const userCount = await SiteUser.countDocuments({ site_id: site._id });
+    (site as any).user_count = userCount;
+    (site as any).id = site._id.toString();
+
+    return NextResponse.json({ site });
   } catch (error) {
     console.error('Error fetching site:', error);
     return NextResponse.json({ error: 'Failed to fetch site' }, { status: 500 });
@@ -36,6 +40,8 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
+    await connectDB();
+    
     const session = await getServerSession(authOptions);
     const isSuperAdmin = (session?.user as any)?.isSuperAdmin;
 
@@ -45,46 +51,30 @@ export async function PUT(
     }
 
     // Get site data before update
-    const [beforeRows] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM sites WHERE id = ?',
-      [params.id]
-    );
+    const site = await Site.findById(params.id);
 
-    if (beforeRows.length === 0) {
+    if (!site) {
       return NextResponse.json({ error: 'Site not found' }, { status: 404 });
     }
 
-    const beforeData = beforeRows[0];
-
+    const beforeData = site.toObject();
     const body = await request.json();
     const { name, display_name, domain, description, is_active } = body;
 
-    if (!name || !display_name) {
-      return NextResponse.json({ error: 'Name and display name are required' }, { status: 400 });
+    if (!display_name) {
+      return NextResponse.json({ error: 'Display name is required' }, { status: 400 });
     }
 
-    // Validate name (alphanumeric and underscores only)
-    if (!/^[a-z0-9_]+$/.test(name)) {
-      return NextResponse.json({ 
-        error: 'Name must contain only lowercase letters, numbers, and underscores' 
-      }, { status: 400 });
-    }
-
-    // Check if name already exists (excluding current site)
-    const [existing] = await db.query<RowDataPacket[]>(
-      'SELECT id FROM sites WHERE name = ? AND id != ?',
-      [name, params.id]
-    );
-
-    if (existing.length > 0) {
-      return NextResponse.json({ error: 'Site name already exists' }, { status: 400 });
-    }
+    // Note: name is typically immutable after creation in MongoDB
+    // Updating the name would require renaming all collection prefixes
 
     // Update site
-    await db.query<ResultSetHeader>(
-      'UPDATE sites SET name = ?, display_name = ?, domain = ?, description = ?, is_active = ? WHERE id = ?',
-      [name, display_name, domain || null, description || null, is_active !== false, params.id]
-    );
+    site.display_name = display_name;
+    if (domain !== undefined) site.domain = domain;
+    if (description !== undefined) site.description = description;
+    if (is_active !== undefined) site.is_active = is_active;
+    
+    await site.save();
 
     // Log activity
     const userId = (session?.user as any)?.id;
@@ -92,9 +82,9 @@ export async function PUT(
       userId,
       action: 'site_updated',
       entityType: 'site',
-      entityId: Number.parseInt(params.id),
+      entityId: site._id.toString(),
       entityName: display_name,
-      details: `Updated site: ${display_name} (${name})`,
+      details: `Updated site: ${display_name} (${site.name})`,
       changesBefore: { 
         name: beforeData.name, 
         display_name: beforeData.display_name,
@@ -102,12 +92,28 @@ export async function PUT(
         description: beforeData.description,
         is_active: beforeData.is_active
       },
-      changesAfter: { name, display_name, domain, description, is_active },
+      changesAfter: { 
+        name: site.name, 
+        display_name: site.display_name,
+        domain: site.domain,
+        description: site.description,
+        is_active: site.is_active
+      },
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
     });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ 
+      success: true,
+      site: {
+        id: site._id.toString(),
+        name: site.name,
+        display_name: site.display_name,
+        domain: site.domain,
+        description: site.description,
+        is_active: site.is_active
+      }
+    });
   } catch (error) {
     console.error('Error updating site:', error);
     return NextResponse.json({ error: 'Failed to update site' }, { status: 500 });
@@ -119,6 +125,8 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    await connectDB();
+    
     const session = await getServerSession(authOptions);
     const isSuperAdmin = (session?.user as any)?.isSuperAdmin;
 
@@ -128,32 +136,27 @@ export async function DELETE(
     }
 
     // Get site data before deletion
-    const [rows] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM sites WHERE id = ?',
-      [params.id]
-    );
+    const site = await Site.findById(params.id);
 
-    if (rows.length === 0) {
+    if (!site) {
       return NextResponse.json({ error: 'Site not found' }, { status: 404 });
     }
 
-    const site = rows[0];
-
-    // Prevent deletion of site ID 1 (default site)
-    if (Number.parseInt(params.id) === 1) {
+    // Prevent deletion of first/default site
+    const firstSite = await Site.findOne().sort({ created_at: 1 });
+    if (firstSite && site._id.equals(firstSite._id)) {
       return NextResponse.json({ 
-        error: 'Cannot delete the default site' 
-      }, { status: 400 });
+        error: 'Cannot delete the first/default site' 
+      }, { status: 403 });
     }
 
-    // Note: Site tables are NOT automatically deleted for safety
-    // Super admin should manually drop site_<id>_* tables if needed
+    // Delete the site
+    await Site.findByIdAndDelete(params.id);
 
-    // Delete site (this will cascade delete site_users entries)
-    await db.query<ResultSetHeader>(
-      'DELETE FROM sites WHERE id = ?',
-      [params.id]
-    );
+    // Note: In MongoDB, collections with prefix site_<id>_ will remain
+    // They need to be manually dropped if desired
+    console.log(`✓ Deleted site: ${site.display_name} (ID: ${site._id})`);
+    console.log(`   Note: Collections with prefix site_${site._id}_ still exist and must be manually dropped`);
 
     // Log activity
     const userId = (session?.user as any)?.id;
@@ -161,20 +164,24 @@ export async function DELETE(
       userId,
       action: 'site_deleted',
       entityType: 'site',
-      entityId: Number.parseInt(params.id),
+      entityId: site._id.toString(),
       entityName: site.display_name,
-      details: `Deleted site: ${site.display_name} (${site.name}). Note: Site tables (site_${site.id}_*) were not automatically deleted for safety.`,
+      details: `Deleted site: ${site.display_name} (${site.name})`,
+      changesBefore: { 
+        name: site.name, 
+        display_name: site.display_name 
+      },
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
     });
 
     return NextResponse.json({ 
       success: true,
-      warning: `Site deleted. Tables (site_${site.id}_*) were not automatically deleted for safety. Drop them manually if needed.`
+      message: 'Site deleted successfully',
+      warning: `Note: Collections with prefix site_${site._id}_ must be manually dropped if needed`
     });
   } catch (error) {
     console.error('Error deleting site:', error);
     return NextResponse.json({ error: 'Failed to delete site' }, { status: 500 });
   }
 }
-

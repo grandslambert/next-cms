@@ -1,9 +1,9 @@
 import Link from 'next/link';
-import { getMenuByLocation } from '@/lib/menu-helpers';
+import { getMenuByLocation } from '@/lib/menu-helpers-mongo';
 
 interface MenuProps {
   location: string;
-  siteId?: number;
+  siteId?: string;
   className?: string;
   itemClassName?: string;
   linkClassName?: string;
@@ -12,7 +12,7 @@ interface MenuProps {
 
 export default async function Menu({
   location,
-  siteId = 1, // Default to site 1 for public-facing menus
+  siteId, // Optional MongoDB ObjectId string
   className = '',
   itemClassName = '',
   linkClassName = 'hover:text-primary-600 transition-colors',
@@ -25,10 +25,10 @@ export default async function Menu({
   }
 
   // Filter only top-level items
-  const topLevelItems = menuItems.filter(item => !item.parent_id || item.parent_id === 0);
+  const topLevelItems = menuItems.filter(item => !item.parent_id);
 
   // Get children for a parent item
-  const getChildren = (parentId: number) => {
+  const getChildren = (parentId: string) => {
     return menuItems.filter(item => item.parent_id === parentId);
   };
 

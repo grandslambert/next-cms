@@ -53,6 +53,7 @@ export default function RolesPage() {
       const res = await axios.get('/api/post-types');
       return res.data;
     },
+    enabled: !isSuperAdmin, // Super admins don't need post-type-specific permissions
   });
 
   const createMutation = useMutation({

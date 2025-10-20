@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { usePermission } from '@/hooks/usePermission';
+import { useSession } from 'next-auth/react';
 import NavigationHeader from '@/components/admin/navigation/NavigationHeader';
 import MenuList from '@/components/admin/navigation/MenuList';
 import MenuForm from '@/components/admin/navigation/MenuForm';
@@ -12,6 +13,8 @@ import MenuItemsList from '@/components/admin/navigation/MenuItemsList';
 import AddMenuItemForm from '@/components/admin/navigation/AddMenuItemForm';
 
 export default function NavigationPage() {
+  const { data: session } = useSession();
+  const isSuperAdmin = (session?.user as any)?.isSuperAdmin || false;
   const { isLoading: permissionLoading } = usePermission('manage_menus');
   const [selectedMenuId, setSelectedMenuId] = useState<number | null>(null);
   const [menuPreferenceLoaded, setMenuPreferenceLoaded] = useState(false);
@@ -138,22 +141,24 @@ export default function NavigationPage() {
     }
   }, [selectedMenuId, menusData]);
 
-  // Fetch post types
+  // Fetch post types (skip for super admins)
   const { data: postTypesData } = useQuery({
     queryKey: ['post-types'],
     queryFn: async () => {
       const res = await axios.get('/api/post-types');
       return res.data;
     },
+    enabled: !isSuperAdmin, // Super admins don't manage menus for specific sites
   });
 
-  // Fetch taxonomies
+  // Fetch taxonomies (skip for super admins)
   const { data: taxonomiesData } = useQuery({
     queryKey: ['taxonomies'],
     queryFn: async () => {
       const res = await axios.get('/api/taxonomies');
       return res.data;
     },
+    enabled: !isSuperAdmin, // Super admins don't manage menus for specific sites
   });
 
   // Fetch posts for selected post type

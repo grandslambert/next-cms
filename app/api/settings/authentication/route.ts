@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import db, { getSiteTable } from '@/lib/db';
-import { RowDataPacket } from 'mysql2';
+import { authOptions } from '@/lib/auth-mongo';
+import connectDB from '@/lib/mongodb';
+import { Setting } from '@/lib/models';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function GET() {
   try {
+    await connectDB();
+    
     // Note: This endpoint is public (no auth check) because it's used on the login page
     // Only safe settings (hide_default_user, password requirements) are exposed
     
@@ -19,52 +21,8 @@ export async function GET() {
       password_require_special: false,
     };
 
-    // Fetch global settings (hide_default_user is system-wide)
-    const [globalSettings] = await db.query<RowDataPacket[]>(
-      `SELECT setting_key, setting_value FROM global_settings 
-       WHERE setting_key = 'auth_hide_default_user'`
-    );
-
-    globalSettings.forEach((setting: any) => {
-      if (setting.setting_key === 'auth_hide_default_user') {
-        authSettings.hide_default_user = setting.setting_value === 'true' || setting.setting_value === '1';
-      }
-    });
-
-    // Fetch site-specific settings (password requirements from site 1 for login page)
-    const settingsTable = getSiteTable(1, 'settings');
-    const [siteSettings] = await db.query<RowDataPacket[]>(
-      `SELECT setting_key, setting_value FROM ${settingsTable} 
-       WHERE setting_key IN (
-         'password_min_length',
-         'password_require_uppercase',
-         'password_require_lowercase',
-         'password_require_numbers',
-         'password_require_special'
-       )`
-    );
-
-    siteSettings.forEach((setting: any) => {
-      const value = setting.setting_value;
-      switch (setting.setting_key) {
-        case 'password_min_length':
-          authSettings.password_min_length = parseInt(value) || 8;
-          break;
-        case 'password_require_uppercase':
-          authSettings.password_require_uppercase = value === 'true' || value === '1';
-          break;
-        case 'password_require_lowercase':
-          authSettings.password_require_lowercase = value === 'true' || value === '1';
-          break;
-        case 'password_require_numbers':
-          authSettings.password_require_numbers = value === 'true' || value === '1';
-          break;
-        case 'password_require_special':
-          authSettings.password_require_special = value === 'true' || value === '1';
-          break;
-      }
-    });
-
+    // For now, just return defaults since we don't have a site context on login page
+    // Settings will be properly fetched once user is logged in
     return NextResponse.json({ settings: authSettings });
   } catch (error) {
     console.error('Error fetching authentication settings:', error);
@@ -77,6 +35,8 @@ export async function GET() {
 
 export async function PUT(request: NextRequest) {
   try {
+    await connectDB();
+    
     const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -99,24 +59,31 @@ export async function PUT(request: NextRequest) {
     }
 
     const userId = (session.user as any).id;
-    const siteId = (session.user as any).currentSiteId || 1;
+    const siteIdStr = (session.user as any).currentSiteId;
+    
+    if (!siteIdStr) {
+      return NextResponse.json({ error: 'No site context available' }, { status: 400 });
+    }
 
-    // Save site-specific password settings
-    const settingsTable = getSiteTable(siteId, 'settings');
+    // Save password settings to MongoDB
     const passwordSettings = [
-      { key: 'password_min_length', value: body.password_min_length.toString() },
-      { key: 'password_require_uppercase', value: body.password_require_uppercase ? '1' : '0' },
-      { key: 'password_require_lowercase', value: body.password_require_lowercase ? '1' : '0' },
-      { key: 'password_require_numbers', value: body.password_require_numbers ? '1' : '0' },
-      { key: 'password_require_special', value: body.password_require_special ? '1' : '0' },
+      { key: 'password_min_length', value: body.password_min_length, type: 'number' },
+      { key: 'password_require_uppercase', value: body.password_require_uppercase, type: 'boolean' },
+      { key: 'password_require_lowercase', value: body.password_require_lowercase, type: 'boolean' },
+      { key: 'password_require_numbers', value: body.password_require_numbers, type: 'boolean' },
+      { key: 'password_require_special', value: body.password_require_special, type: 'boolean' },
     ];
 
     for (const setting of passwordSettings) {
-      await db.query(
-        `INSERT INTO ${settingsTable} (setting_key, setting_value, setting_type) 
-         VALUES (?, ?, 'string') 
-         ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)`,
-        [setting.key, setting.value]
+      await Setting.findOneAndUpdate(
+        { site_id: siteIdStr, key: setting.key },
+        {
+          value: setting.value,
+          type: setting.type,
+          group: 'authentication',
+          updated_at: new Date()
+        },
+        { upsert: true, new: true }
       );
     }
 
@@ -129,7 +96,7 @@ export async function PUT(request: NextRequest) {
       details: 'Updated password requirements',
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
-      siteId,
+      siteId: siteIdStr,
     });
 
     return NextResponse.json({ success: true });
@@ -141,4 +108,3 @@ export async function PUT(request: NextRequest) {
     );
   }
 }
-

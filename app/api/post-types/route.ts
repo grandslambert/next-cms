@@ -1,25 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import db, { getSiteTable } from '@/lib/db';
-import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { authOptions } from '@/lib/auth-mongo';
+import connectDB from '@/lib/mongodb';
+import { PostType } from '@/lib/models';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function GET() {
   try {
+    await connectDB();
+    
     const session = await getServerSession(authOptions);
     const siteId = (session?.user as any)?.currentSiteId || 1;
-    const postTypesTable = getSiteTable(siteId, 'post_types');
     
-    const [rows] = await db.query<RowDataPacket[]>(
-      `SELECT * FROM ${postTypesTable} ORDER BY menu_position ASC, name ASC`
-    );
-    
-    // Parse JSON supports field
-    const postTypes = rows.map((row: any) => ({
-      ...row,
-      supports: row.supports ? JSON.parse(row.supports) : {}
-    }));
+    const postTypes = await PostType.find({ site_id: siteId })
+      .sort({ menu_position: 1, name: 1 })
+      .lean();
 
     return NextResponse.json({ postTypes });
   } catch (error) {
@@ -30,16 +25,29 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    await connectDB();
+    
     const session = await getServerSession(authOptions);
     if (!session?.user || (session.user as any).role !== 'admin') {
       return NextResponse.json({ error: 'Unauthorized - Admin only' }, { status: 401 });
     }
 
     const siteId = (session.user as any).currentSiteId || 1;
-    const postTypesTable = getSiteTable(siteId, 'post_types');
-
     const body = await request.json();
-    const { name, slug, label, singular_label, description, icon, url_structure, supports, menu_position, show_in_dashboard, hierarchical } = body;
+    const { 
+      name, 
+      slug, 
+      label, 
+      singular_label, 
+      description, 
+      icon, 
+      supports, 
+      menu_position, 
+      hierarchical,
+      has_archive,
+      rewrite_slug,
+      taxonomies 
+    } = body;
 
     if (!name || !label || !singular_label) {
       return NextResponse.json({ error: 'Name, label, and singular label are required' }, { status: 400 });
@@ -52,31 +60,34 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Use slug or default to name
-    const postTypeSlug = slug || name;
+    // Check if post type already exists
+    const existing = await PostType.findOne({ site_id: siteId, name });
+    if (existing) {
+      return NextResponse.json({ error: 'Post type with this name already exists' }, { status: 400 });
+    }
 
-    const [result] = await db.query<ResultSetHeader>(
-      `INSERT INTO ${postTypesTable} (name, slug, label, singular_label, description, icon, url_structure, supports, show_in_dashboard, hierarchical, menu_position)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        name,
-        postTypeSlug,
-        label,
-        singular_label,
-        description || '',
-        icon || '📄',
-        url_structure || 'default',
-        JSON.stringify(supports || {}),
-        show_in_dashboard !== false,
-        hierarchical || false,
-        menu_position || 5
-      ]
-    );
-
-    const [newPostType] = await db.query<RowDataPacket[]>(
-      `SELECT * FROM ${postTypesTable} WHERE id = ?`,
-      [result.insertId]
-    );
+    // Create post type
+    const postType = await PostType.create({
+      site_id: siteId,
+      name,
+      slug: slug || name,
+      labels: {
+        singular_name: singular_label,
+        plural_name: label,
+        add_new: `Add New ${singular_label}`,
+        edit_item: `Edit ${singular_label}`,
+        view_item: `View ${singular_label}`,
+      },
+      description: description || '',
+      is_hierarchical: hierarchical || false,
+      is_public: true,
+      supports: supports || ['title', 'editor'],
+      menu_icon: icon || '📄',
+      menu_position: menu_position || 5,
+      has_archive: has_archive !== false,
+      rewrite_slug: rewrite_slug || slug || name,
+      taxonomies: taxonomies || [],
+    });
 
     // Log activity
     const userId = (session.user as any).id;
@@ -84,7 +95,7 @@ export async function POST(request: NextRequest) {
       userId,
       action: 'post_type_created',
       entityType: 'post_type',
-      entityId: result.insertId,
+      entityId: postType._id.toString(),
       entityName: label,
       details: `Created post type: ${label} (${name})`,
       ipAddress: getClientIp(request),
@@ -92,18 +103,9 @@ export async function POST(request: NextRequest) {
       siteId,
     });
 
-    return NextResponse.json({ 
-      postType: {
-        ...newPostType[0],
-        supports: JSON.parse(newPostType[0].supports)
-      }
-    }, { status: 201 });
+    return NextResponse.json({ postType }, { status: 201 });
   } catch (error: any) {
     console.error('Error creating post type:', error);
-    if (error.code === 'ER_DUP_ENTRY') {
-      return NextResponse.json({ error: 'Post type with this name already exists' }, { status: 400 });
-    }
     return NextResponse.json({ error: 'Failed to create post type' }, { status: 500 });
   }
 }
-

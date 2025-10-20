@@ -1,36 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import db, { getSiteTable } from '@/lib/db';
-import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { authOptions } from '@/lib/auth-mongo';
+import connectDB from '@/lib/mongodb';
+import { Setting } from '@/lib/models';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function GET(request: NextRequest) {
   try {
+    await connectDB();
+    
     const session = await getServerSession(authOptions);
     const siteId = (session?.user as any)?.currentSiteId || 1;
-    const settingsTable = getSiteTable(siteId, 'settings');
     
-    const [rows] = await db.query<RowDataPacket[]>(
-      `SELECT * FROM ${settingsTable}`
-    );
+    const settingsRecords = await Setting.find({ site_id: siteId }).lean();
 
     // Convert to key-value object
     const settings: any = {};
-    rows.forEach((row: any) => {
-      if (row.setting_type === 'json' && row.setting_value) {
-        try {
-          settings[row.setting_key] = JSON.parse(row.setting_value);
-        } catch {
-          settings[row.setting_key] = row.setting_value;
-        }
-      } else if (row.setting_type === 'boolean') {
-        settings[row.setting_key] = row.setting_value === 'true' || row.setting_value === '1';
-      } else if (row.setting_type === 'number') {
-        settings[row.setting_key] = Number(row.setting_value);
-      } else {
-        settings[row.setting_key] = row.setting_value;
-      }
+    settingsRecords.forEach((record: any) => {
+      settings[record.key] = record.value;
     });
 
     return NextResponse.json({ settings });
@@ -42,14 +29,14 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
+    await connectDB();
+    
     const session = await getServerSession(authOptions);
     if (!session?.user || (session.user as any).role !== 'admin') {
       return NextResponse.json({ error: 'Unauthorized - Admin only' }, { status: 401 });
     }
 
     const siteId = (session.user as any).currentSiteId || 1;
-    const settingsTable = getSiteTable(siteId, 'settings');
-
     const body = await request.json();
     const { settings } = body;
 
@@ -58,48 +45,34 @@ export async function PUT(request: NextRequest) {
     }
 
     // Fetch current settings BEFORE updating (for activity log)
-    const [currentRows] = await db.query<RowDataPacket[]>(
-      `SELECT * FROM ${settingsTable}`
-    );
-
+    const currentRecords = await Setting.find({ site_id: siteId }).lean();
     const beforeSettings: any = {};
-    currentRows.forEach((row: any) => {
-      if (row.setting_type === 'json' && row.setting_value) {
-        try {
-          beforeSettings[row.setting_key] = JSON.parse(row.setting_value);
-        } catch {
-          beforeSettings[row.setting_key] = row.setting_value;
-        }
-      } else if (row.setting_type === 'boolean') {
-        beforeSettings[row.setting_key] = row.setting_value === 'true' || row.setting_value === '1';
-      } else if (row.setting_type === 'number') {
-        beforeSettings[row.setting_key] = Number(row.setting_value);
-      } else {
-        beforeSettings[row.setting_key] = row.setting_value;
-      }
+    currentRecords.forEach((record: any) => {
+      beforeSettings[record.key] = record.value;
     });
 
     // Update each setting
     for (const [key, value] of Object.entries(settings)) {
       let settingType = 'string';
-      let settingValue = value;
 
-      if (typeof value === 'object') {
+      if (typeof value === 'object' && value !== null) {
         settingType = 'json';
-        settingValue = JSON.stringify(value);
       } else if (typeof value === 'boolean') {
         settingType = 'boolean';
-        settingValue = value ? '1' : '0';
       } else if (typeof value === 'number') {
         settingType = 'number';
-        settingValue = value.toString();
       }
 
-      await db.query<ResultSetHeader>(
-        `INSERT INTO ${settingsTable} (setting_key, setting_value, setting_type) 
-         VALUES (?, ?, ?)
-         ON DUPLICATE KEY UPDATE setting_value = ?, setting_type = ?`,
-        [key, settingValue, settingType, settingValue, settingType]
+      // Upsert setting
+      await Setting.findOneAndUpdate(
+        { site_id: siteId, key },
+        { 
+          value, 
+          type: settingType,
+          group: 'general', // Default group, can be customized per setting
+          updated_at: new Date()
+        },
+        { upsert: true, new: true }
       );
     }
 
@@ -141,4 +114,3 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to update settings' }, { status: 500 });
   }
 }
-

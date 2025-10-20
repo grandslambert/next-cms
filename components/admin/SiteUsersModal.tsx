@@ -59,8 +59,8 @@ export default function SiteUsersModal({ site, onClose }: SiteUsersModalProps) {
   const addUserMutation = useMutation({
     mutationFn: async ({ userId, roleId }: { userId: string; roleId: string }) => {
       const res = await axios.post(`/api/sites/${site.id}/users`, {
-        user_id: Number.parseInt(userId),
-        role_id: Number.parseInt(roleId),
+        user_id: userId,
+        role_id: roleId,
       });
       return res.data;
     },
@@ -78,7 +78,7 @@ export default function SiteUsersModal({ site, onClose }: SiteUsersModalProps) {
   });
 
   const updateRoleMutation = useMutation({
-    mutationFn: async ({ userId, roleId }: { userId: number; roleId: number }) => {
+    mutationFn: async ({ userId, roleId }: { userId: string; roleId: string }) => {
       const res = await axios.put(`/api/sites/${site.id}/users/${userId}`, {
         role_id: roleId,
       });
@@ -94,7 +94,7 @@ export default function SiteUsersModal({ site, onClose }: SiteUsersModalProps) {
   });
 
   const removeUserMutation = useMutation({
-    mutationFn: async (userId: number) => {
+    mutationFn: async (userId: string) => {
       const res = await axios.delete(`/api/sites/${site.id}/users/${userId}`);
       return res.data;
     },
@@ -116,11 +116,11 @@ export default function SiteUsersModal({ site, onClose }: SiteUsersModalProps) {
     addUserMutation.mutate({ userId: selectedUserId, roleId: selectedRoleId });
   };
 
-  const handleRoleChange = (userId: number, newRoleId: string) => {
-    updateRoleMutation.mutate({ userId, roleId: Number.parseInt(newRoleId) });
+  const handleRoleChange = (userId: string, newRoleId: string) => {
+    updateRoleMutation.mutate({ userId, roleId: newRoleId });
   };
 
-  const handleRemoveUser = (userId: number, username: string) => {
+  const handleRemoveUser = (userId: string, username: string) => {
     if (confirm(`Are you sure you want to remove ${username} from this site?`)) {
       removeUserMutation.mutate(userId);
     }

@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
-import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { authOptions } from '@/lib/auth-mongo';
+import connectDB from '@/lib/mongodb';
+import { Site, SiteUser } from '@/lib/models';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 import fs from 'fs/promises';
 import path from 'path';
 
 export async function GET(request: NextRequest) {
   try {
+    await connectDB();
+    
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -17,35 +19,39 @@ export async function GET(request: NextRequest) {
     const isSuperAdmin = (session.user as any)?.isSuperAdmin;
     const userId = (session.user as any)?.id;
 
-    let query: string;
-    let params: any[];
+    let sites;
 
     // Super admins see all sites, others only see sites they're assigned to
     if (isSuperAdmin) {
-      query = `
-        SELECT s.*, 
-          (SELECT COUNT(*) FROM site_users su WHERE su.site_id = s.id) as user_count
-        FROM sites s
-        ORDER BY s.created_at DESC
-      `;
-      params = [];
+      sites = await Site.find().sort({ created_at: -1 }).lean();
+      
+      // Add user count and map _id to id for each site
+      for (const site of sites) {
+        const userCount = await SiteUser.countDocuments({ site_id: site._id });
+        (site as any).user_count = userCount;
+        (site as any).id = site._id.toString();
+      }
     } else {
-      query = `
-        SELECT s.*,
-          su.role_id as user_role_id,
-          r.name as user_role_name
-        FROM sites s
-        INNER JOIN site_users su ON s.id = su.site_id
-        LEFT JOIN roles r ON su.role_id = r.id
-        WHERE su.user_id = ? AND s.is_active = TRUE
-        ORDER BY s.created_at DESC
-      `;
-      params = [userId];
+      // Get sites user is assigned to
+      const siteAssignments = await SiteUser.find({ user_id: userId })
+        .populate('site_id')
+        .populate('role_id')
+        .lean();
+      
+      sites = siteAssignments
+        .filter(assignment => (assignment.site_id as any)?.is_active)
+        .map(assignment => {
+          const siteData = assignment.site_id as any;
+          return {
+            ...siteData,
+            id: siteData._id.toString(),
+            user_role_id: assignment.role_id,
+            user_role_name: (assignment.role_id as any)?.name
+          };
+        });
     }
 
-    const [rows] = await db.query<RowDataPacket[]>(query, params);
-
-    return NextResponse.json({ sites: rows });
+    return NextResponse.json({ sites });
   } catch (error) {
     console.error('Error fetching sites:', error);
     return NextResponse.json({ error: 'Failed to fetch sites' }, { status: 500 });
@@ -54,6 +60,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    await connectDB();
+    
     const session = await getServerSession(authOptions);
     const isSuperAdmin = (session?.user as any)?.isSuperAdmin;
 
@@ -77,81 +85,22 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if name already exists
-    const [existing] = await db.query<RowDataPacket[]>(
-      'SELECT id FROM sites WHERE name = ?',
-      [name]
-    );
-
-    if (existing.length > 0) {
+    const existing = await Site.findOne({ name });
+    if (existing) {
       return NextResponse.json({ error: 'Site name already exists' }, { status: 400 });
     }
 
-    // Create site
-    const [result] = await db.query<ResultSetHeader>(
-      'INSERT INTO sites (name, display_name, domain, description, is_active) VALUES (?, ?, ?, ?, ?)',
-      [name, display_name, domain || null, description || null, is_active !== false]
-    );
+    // Create site in MongoDB
+    const newSite = await Site.create({
+      name,
+      display_name,
+      domain: domain || '',
+      description: description || '',
+      is_active: is_active !== false,
+    });
 
-    const siteId = result.insertId;
-
-    // Create site tables using the template
-    try {
-      const templatePath = path.join(process.cwd(), 'database', 'site-tables-template.sql');
-      const template = await fs.readFile(templatePath, 'utf-8');
-      
-      // Replace {PREFIX} with site_<id>_
-      const prefix = `site_${siteId}_`;
-      const sql = template.replace(/\{PREFIX\}/g, prefix);
-      
-      // Split by semicolons and execute each statement
-      // Filter out comments and empty statements
-      const statements = sql
-        .split(';')
-        .map(s => s.trim())
-        .filter(s => {
-          // Remove empty lines and comment-only lines
-          if (s.length === 0) return false;
-          const lines = s.split('\n').filter(line => {
-            const trimmed = line.trim();
-            return trimmed.length > 0 && !trimmed.startsWith('--');
-          });
-          return lines.length > 0;
-        });
-      
-      console.log(`Creating ${statements.length} statements for site ${siteId}...`);
-      
-      let createdCount = 0;
-      for (let i = 0; i < statements.length; i++) {
-        const statement = statements[i];
-        try {
-          // Remove comment lines from the statement
-          const cleanStatement = statement
-            .split('\n')
-            .filter(line => !line.trim().startsWith('--'))
-            .join('\n')
-            .trim();
-          
-          if (cleanStatement.length > 0) {
-            await db.query(cleanStatement);
-            createdCount++;
-          }
-        } catch (stmtError: any) {
-          console.error(`Error executing statement ${i + 1}:`, stmtError.message);
-          console.error('Statement:', statement.substring(0, 200));
-          throw stmtError;
-        }
-      }
-      
-      console.log(`✓ Created ${createdCount} tables/inserts for site ${siteId} (${prefix}*)`);
-    } catch (execError) {
-      console.error('Error creating site tables:', execError);
-      // Rollback site creation if table creation fails
-      await db.query('DELETE FROM sites WHERE id = ?', [siteId]);
-      return NextResponse.json({ 
-        error: 'Failed to create site tables. Site creation rolled back.',
-        details: execError instanceof Error ? execError.message : String(execError)
-      }, { status: 500 });
-    }
+    console.log(`✓ Created site: ${display_name} (ID: ${newSite._id})`);
+    console.log(`   Note: MongoDB collections will be created automatically as site_${newSite._id}_*`);
 
     // Log activity
     const userId = (session?.user as any)?.id;
@@ -159,7 +108,7 @@ export async function POST(request: NextRequest) {
       userId,
       action: 'site_created',
       entityType: 'site',
-      entityId: siteId,
+      entityId: newSite._id.toString(),
       entityName: display_name,
       details: `Created site: ${display_name} (${name})`,
       changesAfter: { name, display_name, domain, description, is_active },
@@ -169,7 +118,14 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ 
       success: true, 
-      site: { id: siteId, name, display_name, domain, description, is_active }
+      site: {
+        id: newSite._id.toString(),
+        name: newSite.name,
+        display_name: newSite.display_name,
+        domain: newSite.domain,
+        description: newSite.description,
+        is_active: newSite.is_active
+      }
     });
   } catch (error) {
     console.error('Error creating site:', error);

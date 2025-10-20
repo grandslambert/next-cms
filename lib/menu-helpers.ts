@@ -37,6 +37,11 @@ export interface MenuItem {
 
 export async function getMenuByLocation(location: string, siteId: number = 1): Promise<MenuItem[]> {
   try {
+    // Check if MySQL is configured - return empty array if not
+    if (!process.env.DB_HOST || !process.env.DB_USER || !process.env.DB_NAME) {
+      return [];
+    }
+    
     // Get site-prefixed table names
     const menusTable = getSiteTable(siteId, 'menus');
     const menuItemsTable = getSiteTable(siteId, 'menu_items');
@@ -154,7 +159,10 @@ export async function getMenuByLocation(location: string, siteId: number = 1): P
 
     return itemRows as unknown as MenuItem[];
   } catch (error) {
-    console.error('Error fetching menu:', error);
+    // Only log error if MySQL is actually configured (not just missing)
+    if (process.env.DB_HOST && process.env.DB_USER && process.env.DB_NAME) {
+      console.error('Error fetching menu:', error);
+    }
     return [];
   }
 }

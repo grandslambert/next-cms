@@ -1,5 +1,5 @@
-import db, { getSiteTable } from '@/lib/db';
-import { ResultSetHeader } from 'mysql2';
+import connectDB from '@/lib/mongodb';
+import { ActivityLog } from '@/lib/models';
 
 export type ActivityAction = 
   // Auth actions
@@ -33,17 +33,17 @@ export type EntityType =
   | 'auth' | 'post' | 'media' | 'user' | 'role' | 'post_type' | 'taxonomy' | 'term' | 'settings' | 'folder' | 'menu' | 'menu_item' | 'data' | 'site';
 
 interface LogActivityParams {
-  userId: number;
+  userId: number | string;
   action: ActivityAction;
   entityType: EntityType;
-  entityId?: number | null;
+  entityId?: number | string | null;
   entityName?: string | null;
   details?: string | Record<string, any> | null;
   changesBefore?: Record<string, any> | null;
   changesAfter?: Record<string, any> | null;
   ipAddress?: string | null;
   userAgent?: string | null;
-  siteId?: number | null; // Site context for multi-site support (null for global activities)
+  siteId?: number | string | null; // Site context for multi-site support (null for global activities)
 }
 
 export async function logActivity({
@@ -60,21 +60,31 @@ export async function logActivity({
   siteId = null, // Site context (null for global/system-wide activities)
 }: LogActivityParams): Promise<void> {
   try {
+    await connectDB();
+
     // Convert details to JSON string if it's an object
     const detailsStr = details 
       ? (typeof details === 'string' ? details : JSON.stringify(details))
-      : null;
+      : undefined;
 
     // Convert changes to JSON strings
-    const changesBeforeStr = changesBefore ? JSON.stringify(changesBefore) : null;
-    const changesAfterStr = changesAfter ? JSON.stringify(changesAfter) : null;
+    const changesBeforeStr = changesBefore ? JSON.stringify(changesBefore) : undefined;
+    const changesAfterStr = changesAfter ? JSON.stringify(changesAfter) : undefined;
 
-    // Use global activity_log table with site_id column
-    await db.execute<ResultSetHeader>(
-      `INSERT INTO activity_log (user_id, action, entity_type, entity_id, entity_name, details, changes_before, changes_after, ip_address, user_agent, site_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [userId, action, entityType, entityId, entityName, detailsStr, changesBeforeStr, changesAfterStr, ipAddress, userAgent, siteId]
-    );
+    // Save to MongoDB
+    await ActivityLog.create({
+      user_id: userId,
+      action,
+      entity_type: entityType,
+      entity_id: entityId?.toString(),
+      entity_name: entityName || undefined,
+      details: detailsStr,
+      changes_before: changesBeforeStr,
+      changes_after: changesAfterStr,
+      ip_address: ipAddress || undefined,
+      user_agent: userAgent || undefined,
+      site_id: siteId || undefined,
+    });
   } catch (error) {
     // Log error but don't throw - we don't want logging failures to break the app
     console.error('Failed to log activity:', error);

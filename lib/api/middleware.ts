@@ -4,7 +4,7 @@
 
 import { NextRequest } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { authOptions } from '@/lib/auth-mongo';
 
 export interface ApiContext {
   user: any;
@@ -25,7 +25,7 @@ export async function getApiContext(req: NextRequest): Promise<ApiContext | null
 
     return {
       user: session.user,
-      siteId: session.user.currentSiteId || 1,
+      siteId: session.user.currentSiteId || '1',
       isAuthenticated: true,
     };
   } catch (error) {

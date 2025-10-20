@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSession } from 'next-auth/react';
 import axios from 'axios';
@@ -14,14 +14,14 @@ export default function UsersPage() {
   const { data: session, update } = useSession();
   const router = useRouter();
   const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [username, setUsername] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [roleId, setRoleId] = useState(3); // Default to Author role
+  const [roleId, setRoleId] = useState<string>(''); // Will be set when roles load
   const queryClient = useQueryClient();
 
   // Get user switching data
@@ -57,6 +57,17 @@ export default function UsersPage() {
     },
   });
 
+  // Set default role when roles load
+  useEffect(() => {
+    if (rolesData?.roles && rolesData.roles.length > 0 && !roleId) {
+      // Find the first non-super-admin role
+      const defaultRole = rolesData.roles.find((role: any) => role.name !== 'super_admin');
+      if (defaultRole) {
+        setRoleId(defaultRole.id);
+      }
+    }
+  }, [rolesData, roleId]);
+
   const createMutation = useMutation({
     mutationFn: async (data: any) => {
       const res = await axios.post('/api/users', data);
@@ -73,7 +84,7 @@ export default function UsersPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: any }) => {
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
       const res = await axios.put(`/api/users/${id}`, data);
       return res.data;
     },
@@ -88,7 +99,7 @@ export default function UsersPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: number) => {
+    mutationFn: async (id: string) => {
       await axios.delete(`/api/users/${id}`);
     },
     onSuccess: () => {
@@ -135,11 +146,11 @@ export default function UsersPage() {
     setLastName(user.last_name || '');
     setEmail(user.email);
     setPassword(''); // Don't pre-fill password for security
-    setRoleId(user.role_id !== null && user.role_id !== undefined ? user.role_id : 3);
+    setRoleId(user.role_id !== null && user.role_id !== undefined ? user.role_id : '');
     setShowForm(true);
   };
 
-  const handleDelete = (id: number, username: string) => {
+  const handleDelete = (id: string, username: string) => {
     if (confirm(`Are you sure you want to delete user "${username}"?`)) {
       deleteMutation.mutate(id);
     }
@@ -158,7 +169,7 @@ export default function UsersPage() {
     setEmail('');
     setPassword('');
     setShowPassword(false);
-    setRoleId(3); // Default to Author
+    setRoleId(''); // Will use first available role
     setEditingId(null);
     setShowForm(false);
   };
@@ -441,7 +452,7 @@ export default function UsersPage() {
                 <select
                   id="role"
                   value={roleId}
-                  onChange={(e) => setRoleId(Number.parseInt(e.target.value))}
+                  onChange={(e) => setRoleId(e.target.value)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
                   {rolesData?.roles

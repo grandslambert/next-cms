@@ -2,7 +2,7 @@
 
 This project follows [Semantic Versioning 2.0.0](https://semver.org/).
 
-## Current Version: 2.3.4
+## Current Version: 3.0.0
 
 ## Version Format
 

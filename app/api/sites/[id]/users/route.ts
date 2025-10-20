@@ -1,15 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
-import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { authOptions } from '@/lib/auth-mongo';
+import connectDB from '@/lib/mongodb';
+import { SiteUser, User, Role, Site } from '@/lib/models';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import mongoose from 'mongoose';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
+    await connectDB();
+    
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -20,28 +23,39 @@ export async function GET(
       return NextResponse.json({ error: 'Forbidden - Super Admin only' }, { status: 403 });
     }
 
-    // Get all users assigned to this site with their roles
-    const [siteUsers] = await db.query<RowDataPacket[]>(
-      `SELECT 
-        su.id,
-        su.user_id,
-        su.role_id,
-        u.username,
-        u.email,
-        u.first_name,
-        u.last_name,
-        r.name as role_name,
-        r.display_name as role_display_name,
-        su.created_at
-       FROM site_users su
-       INNER JOIN users u ON su.user_id = u.id
-       INNER JOIN roles r ON su.role_id = r.id
-       WHERE su.site_id = ?
-       ORDER BY u.username ASC`,
-      [params.id]
-    );
+    // Validate site ID
+    if (!params.id || !/^[0-9a-fA-F]{24}$/.test(params.id)) {
+      return NextResponse.json({ error: 'Invalid site ID' }, { status: 400 });
+    }
 
-    return NextResponse.json({ users: siteUsers });
+    // Get all users assigned to this site with their roles
+    const siteUsers = await SiteUser.find({ site_id: params.id })
+      .populate({
+        path: 'user_id',
+        select: 'username email first_name last_name'
+      })
+      .populate({
+        path: 'role_id',
+        select: 'name label'
+      })
+      .sort({ 'user_id.username': 1 })
+      .lean();
+
+    // Format for the UI
+    const formattedUsers = siteUsers.map((su: any) => ({
+      id: su._id.toString(),
+      user_id: su.user_id?._id?.toString(),
+      role_id: su.role_id?._id?.toString(),
+      username: su.user_id?.username,
+      email: su.user_id?.email,
+      first_name: su.user_id?.first_name,
+      last_name: su.user_id?.last_name,
+      role_name: su.role_id?.name,
+      role_display_name: su.role_id?.label,
+      created_at: su.assigned_at,
+    }));
+
+    return NextResponse.json({ users: formattedUsers });
   } catch (error) {
     console.error('Error fetching site users:', error);
     return NextResponse.json({ error: 'Failed to fetch site users' }, { status: 500 });
@@ -53,6 +67,8 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
+    await connectDB();
+    
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -69,47 +85,45 @@ export async function POST(
       return NextResponse.json({ error: 'User ID and role ID are required' }, { status: 400 });
     }
 
-    // Check if site exists
-    const [sites] = await db.query<RowDataPacket[]>(
-      'SELECT id, display_name FROM sites WHERE id = ?',
-      [params.id]
-    );
+    // Validate IDs
+    if (!/^[0-9a-fA-F]{24}$/.test(params.id) || !/^[0-9a-fA-F]{24}$/.test(user_id) || !/^[0-9a-fA-F]{24}$/.test(role_id)) {
+      return NextResponse.json({ error: 'Invalid ID format' }, { status: 400 });
+    }
 
-    if (sites.length === 0) {
+    // Check if site exists
+    const site = await Site.findById(params.id);
+    if (!site) {
       return NextResponse.json({ error: 'Site not found' }, { status: 404 });
     }
 
     // Check if user exists
-    const [users] = await db.query<RowDataPacket[]>(
-      'SELECT id, username FROM users WHERE id = ?',
-      [user_id]
-    );
-
-    if (users.length === 0) {
+    const user = await User.findById(user_id);
+    if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // Check if user is already assigned to this site
-    const [existing] = await db.query<RowDataPacket[]>(
-      'SELECT id FROM site_users WHERE site_id = ? AND user_id = ?',
-      [params.id, user_id]
-    );
+    // Check if role exists
+    const role = await Role.findById(role_id);
+    if (!role) {
+      return NextResponse.json({ error: 'Role not found' }, { status: 404 });
+    }
 
-    if (existing.length > 0) {
+    // Check if user is already assigned to this site
+    const existing = await SiteUser.findOne({ 
+      site_id: params.id, 
+      user_id: user_id 
+    });
+
+    if (existing) {
       return NextResponse.json({ error: 'User is already assigned to this site' }, { status: 409 });
     }
 
     // Add user to site
-    const [result] = await db.execute<ResultSetHeader>(
-      'INSERT INTO site_users (site_id, user_id, role_id) VALUES (?, ?, ?)',
-      [params.id, user_id, role_id]
-    );
-
-    // Get role info for logging
-    const [roles] = await db.query<RowDataPacket[]>(
-      'SELECT display_name FROM roles WHERE id = ?',
-      [role_id]
-    );
+    const siteUser = await SiteUser.create({
+      site_id: params.id,
+      user_id: user_id,
+      role_id: role_id,
+    });
 
     // Log activity
     const userId = (session.user as any).id;
@@ -117,21 +131,22 @@ export async function POST(
       userId,
       action: 'site_user_added' as any,
       entityType: 'site' as any,
-      entityId: Number.parseInt(params.id),
-      entityName: sites[0].display_name,
-      details: `Added user ${users[0].username} to site ${sites[0].display_name} as ${roles[0]?.display_name || 'unknown role'}`,
+      entityId: params.id,
+      entityName: site.display_name,
+      details: `Added user ${user.username} to site ${site.display_name} as ${role.label}`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
+      siteId: params.id,
     });
 
     return NextResponse.json({ 
       success: true,
-      id: result.insertId,
+      id: siteUser._id.toString(),
       message: 'User added to site successfully'
     }, { status: 201 });
   } catch (error: any) {
     console.error('Error adding user to site:', error);
-    if (error.code === 'ER_DUP_ENTRY') {
+    if (error.code === 11000) { // MongoDB duplicate key error
       return NextResponse.json({ error: 'User is already assigned to this site' }, { status: 409 });
     }
     return NextResponse.json({ error: 'Failed to add user to site' }, { status: 500 });

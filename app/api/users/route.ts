@@ -1,67 +1,96 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import db, { getSiteTable } from '@/lib/db';
+import { authOptions } from '@/lib/auth-mongo';
+import connectDB from '@/lib/mongodb';
+import { User, SiteUser } from '@/lib/models';
 import bcrypt from 'bcryptjs';
-import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
-import { validatePassword } from '@/lib/password-validator';
+import mongoose from 'mongoose';
 
 export async function GET(request: NextRequest) {
   try {
+    await connectDB();
+    
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const isSuperAdmin = (session.user as any)?.isSuperAdmin || false;
-    const currentSiteId = (session.user as any)?.currentSiteId || 1;
+    const currentSiteIdStr = (session.user as any)?.currentSiteId;
+    
+    // Convert string ID to ObjectId if it's a valid 24-character hex string
+    let currentSiteId = null;
+    if (currentSiteIdStr && typeof currentSiteIdStr === 'string' && /^[0-9a-fA-F]{24}$/.test(currentSiteIdStr)) {
+      currentSiteId = mongoose.Types.ObjectId.createFromHexString(currentSiteIdStr);
+    }
 
-    let rows: RowDataPacket[];
+    let users;
 
     if (isSuperAdmin) {
       // Super admin sees all users with their site assignments
-      const [allUsers] = await db.query<RowDataPacket[]>(
-        `SELECT u.id, u.username, u.first_name, u.last_name, u.email, u.role_id, 
-                r.name as role_name, r.display_name as role_display_name, 
-                u.created_at, u.updated_at 
-         FROM users u
-         LEFT JOIN roles r ON u.role_id = r.id
-         ORDER BY u.created_at DESC`
-      );
+      users = await User.find()
+        .populate('role', 'name label permissions')
+        .select('-password')
+        .sort({ created_at: -1 })
+        .lean();
       
-      // Fetch site assignments for each user
-      for (const user of allUsers) {
-        const [siteAssignments] = await db.query<RowDataPacket[]>(
-          `SELECT s.id, s.name, s.display_name, su.role_id, r.display_name as role_display_name
-           FROM site_users su
-           JOIN sites s ON su.site_id = s.id
-           LEFT JOIN roles r ON su.role_id = r.id
-           WHERE su.user_id = ?
-           ORDER BY s.name ASC`,
-          [user.id]
-        );
-        (user as any).sites = siteAssignments;
+      // Fetch site assignments for each user and map _id to id
+      for (const user of users) {
+        try {
+          const siteAssignments = await SiteUser.find({ user_id: user._id })
+            .populate('site_id', 'name display_name')
+            .populate('role_id', 'name label')
+            .lean();
+          
+          (user as any).id = user._id.toString(); // Add id field for compatibility
+          (user as any).role_name = (user.role as any)?.name;
+          (user as any).role_display_name = (user.role as any)?.label;
+          (user as any).sites = siteAssignments.map(sa => ({
+            id: (sa.site_id as any)?._id?.toString(),
+            name: (sa.site_id as any)?.name,
+            display_name: (sa.site_id as any)?.display_name,
+            role_id: (sa.role_id as any)?._id?.toString(),
+            role_display_name: (sa.role_id as any)?.label,
+          }));
+        } catch (error) {
+          console.error('Error fetching site assignments for user:', user._id, error);
+          (user as any).id = user._id.toString();
+          (user as any).role_name = (user.role as any)?.name;
+          (user as any).role_display_name = (user.role as any)?.label;
+          (user as any).sites = [];
+        }
       }
-      
-      rows = allUsers;
     } else {
       // Site admins only see users assigned to their current site
-      const [siteUsers] = await db.query<RowDataPacket[]>(
-        `SELECT u.id, u.username, u.first_name, u.last_name, u.email, u.role_id, 
-                r.name as role_name, r.display_name as role_display_name, 
-                u.created_at, u.updated_at 
-         FROM users u
-         LEFT JOIN roles r ON u.role_id = r.id
-         INNER JOIN site_users su ON u.id = su.user_id
-         WHERE su.site_id = ?
-         ORDER BY u.created_at DESC`,
-        [currentSiteId]
-      );
-      rows = siteUsers;
+      if (!currentSiteId) {
+        return NextResponse.json({ users: [] });
+      }
+      const siteAssignments = await SiteUser.find({ site_id: currentSiteId })
+        .populate({
+          path: 'user_id',
+          populate: { path: 'role', select: 'name label permissions' }
+        })
+        .populate('role_id', 'name label')
+        .lean();
+      
+      users = siteAssignments.map(sa => {
+        const user = sa.user_id as any;
+        return {
+          ...user,
+          id: user._id.toString(),
+          role_name: user.role?.name,
+          role_display_name: user.role?.label,
+          sites: [{
+            id: currentSiteId.toString(),
+            role_id: (sa.role_id as any)?._id?.toString(),
+            role_display_name: (sa.role_id as any)?.label,
+          }]
+        };
+      });
     }
 
-    return NextResponse.json({ users: rows });
+    return NextResponse.json({ users });
   } catch (error) {
     console.error('Error fetching users:', error);
     return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 });
@@ -70,6 +99,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    await connectDB();
+    
     const session = await getServerSession(authOptions);
     const isSuperAdmin = (session?.user as any)?.isSuperAdmin || false;
     const hasPermission = (session?.user as any)?.permissions?.manage_users || false;
@@ -79,115 +110,142 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { username, first_name, last_name, email, password, role_id } = body;
+    const { username, first_name, last_name, email, password, role_id, sites } = body;
 
-    if (!username || !first_name || !email || !password || role_id === undefined || role_id === null) {
-      return NextResponse.json({ error: 'Username, first name, email, password, and role are required' }, { status: 400 });
-    }
-
-    // Get site ID for multi-site support
-    const siteId = (session.user as any).currentSiteId || 1;
-    const settingsTable = getSiteTable(siteId, 'settings');
-
-    // Fetch password requirements
-    const [pwSettings] = await db.query<RowDataPacket[]>(
-      `SELECT setting_key, setting_value FROM ${settingsTable} 
-       WHERE setting_key IN (
-         'password_min_length',
-         'password_require_uppercase',
-         'password_require_lowercase',
-         'password_require_numbers',
-         'password_require_special'
-       )`
-    );
-
-    const requirements = {
-      minLength: 8,
-      requireUppercase: true,
-      requireLowercase: true,
-      requireNumbers: true,
-      requireSpecial: false,
-    };
-
-    for (const setting of pwSettings) {
-      const value = setting.setting_value;
-      switch (setting.setting_key) {
-        case 'password_min_length':
-          requirements.minLength = Number.parseInt(value) || 8;
-          break;
-        case 'password_require_uppercase':
-          requirements.requireUppercase = value === '1';
-          break;
-        case 'password_require_lowercase':
-          requirements.requireLowercase = value === '1';
-          break;
-        case 'password_require_numbers':
-          requirements.requireNumbers = value === '1';
-          break;
-        case 'password_require_special':
-          requirements.requireSpecial = value === '1';
-          break;
-      }
-    }
-
-    // Validate password
-    const validation = validatePassword(password, requirements);
-    if (!validation.isValid) {
+    if (!username || !first_name || !email || !password || !role_id) {
       return NextResponse.json({ 
-        error: 'Password does not meet requirements', 
-        details: validation.errors 
+        error: 'Username, first name, email, password, and role are required' 
+      }, { status: 400 });
+    }
+
+    // Validate password (basic validation)
+    if (password.length < 8) {
+      return NextResponse.json({ 
+        error: 'Password must be at least 8 characters long' 
+      }, { status: 400 });
+    }
+
+    // Check if username already exists
+    const existingUser = await User.findOne({ 
+      $or: [{ username }, { email }] 
+    });
+    
+    if (existingUser) {
+      return NextResponse.json({ 
+        error: existingUser.username === username 
+          ? 'Username already exists' 
+          : 'Email already exists' 
       }, { status: 400 });
     }
 
     // Hash password
-    const hashedPassword = bcrypt.hashSync(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-    const [result] = await db.query<ResultSetHeader>(
-      'INSERT INTO users (username, first_name, last_name, email, password, role_id) VALUES (?, ?, ?, ?, ?, ?)',
-      [username, first_name, last_name || '', email, hashedPassword, role_id]
-    );
-
-    const newUserId = result.insertId;
-
-    // If not super admin, automatically assign the new user to the current site
-    if (!isSuperAdmin) {
-      await db.query<ResultSetHeader>(
-        'INSERT INTO site_users (site_id, user_id, role_id) VALUES (?, ?, ?)',
-        [siteId, newUserId, role_id]
-      );
+    // Validate and convert role_id to ObjectId BEFORE using it
+    if (!role_id || !/^[0-9a-fA-F]{24}$/.test(role_id)) {
+      return NextResponse.json({ error: 'Invalid role ID format' }, { status: 400 });
     }
 
-    const [newUser] = await db.query<RowDataPacket[]>(
-      `SELECT u.id, u.username, u.first_name, u.last_name, u.email, u.role_id,
-              r.name as role_name, r.display_name as role_display_name, u.created_at 
-       FROM users u
-       LEFT JOIN roles r ON u.role_id = r.id
-       WHERE u.id = ?`,
-      [newUserId]
-    );
+    // Validate role exists
+    const roleExists = await mongoose.model('Role').findById(role_id);
+    if (!roleExists) {
+      return NextResponse.json({ 
+        error: 'Invalid role selected' 
+      }, { status: 400 });
+    }
 
-    // Log activity
-    const currentUserId = (session.user as any).id;
-    const siteAssignmentText = isSuperAdmin ? '' : ` and assigned to site ${siteId}`;
-    await logActivity({
-      userId: currentUserId,
-      action: 'user_created',
-      entityType: 'user',
-      entityId: newUserId,
-      entityName: username,
-      details: `Created user: ${username} (${first_name} ${last_name})${siteAssignmentText}`,
-      ipAddress: getClientIp(request),
-      userAgent: getUserAgent(request),
-      siteId,
+    // Create user
+    const newUser = await User.create({
+      username,
+      first_name,
+      last_name,
+      email,
+      password: hashedPassword,
+      role: mongoose.Types.ObjectId.createFromHexString(role_id),
+      is_super_admin: false,
+      status: 'active',
     });
 
-    return NextResponse.json({ user: newUser[0] }, { status: 201 });
+    // Assign user to sites
+    const siteIdStr = (session.user as any).currentSiteId;
+    
+    console.log('Site assignment - siteIdStr:', siteIdStr, 'type:', typeof siteIdStr);
+    console.log('Sites from body:', sites);
+    
+    let siteId = null;
+    if (siteIdStr && typeof siteIdStr === 'string' && /^[0-9a-fA-F]{24}$/.test(siteIdStr)) {
+      siteId = mongoose.Types.ObjectId.createFromHexString(siteIdStr);
+    }
+    
+    if (!siteId) {
+      return NextResponse.json({ 
+        error: 'No site context available. Current site ID: ' + siteIdStr 
+      }, { status: 400 });
+    }
+    
+    const sitesToAssign = sites && sites.length > 0 ? sites : [{ site_id: siteId, role_id }];
+    console.log('Sites to assign:', sitesToAssign);
+
+    for (const siteAssignment of sitesToAssign) {
+      try {
+        // Convert IDs to ObjectIds if they're valid hex strings
+        let assignmentSiteId = siteAssignment.site_id;
+        if (typeof siteAssignment.site_id === 'string' && /^[0-9a-fA-F]{24}$/.test(siteAssignment.site_id)) {
+          assignmentSiteId = mongoose.Types.ObjectId.createFromHexString(siteAssignment.site_id);
+        }
+        
+        const assignmentRoleId = siteAssignment.role_id || role_id;
+        let assignmentRoleObjId = assignmentRoleId;
+        if (typeof assignmentRoleId === 'string' && /^[0-9a-fA-F]{24}$/.test(assignmentRoleId)) {
+          assignmentRoleObjId = mongoose.Types.ObjectId.createFromHexString(assignmentRoleId);
+        }
+          
+        await SiteUser.create({
+          site_id: assignmentSiteId,
+          user_id: newUser._id,
+          role_id: assignmentRoleObjId,
+        });
+      } catch (siteError: any) {
+        console.error('Failed to add user to site:', siteError);
+        // Delete the user we just created since site assignment failed
+        await User.findByIdAndDelete(newUser._id);
+        return NextResponse.json({ 
+          error: 'Failed to add user to site: ' + (siteError.message || 'Unknown error')
+        }, { status: 500 });
+      }
+    }
+
+    // Log activity
+    const userId = (session.user as any).id;
+    await logActivity({
+      userId,
+      action: 'user_created',
+      entityType: 'user',
+      entityId: newUser._id.toString(),
+      entityName: username,
+      details: `Created user: ${username} (${email})`,
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+      siteId: siteId.toString(),
+    });
+
+    // Return user without password
+    const userResponse = await User.findById(newUser._id)
+      .populate('role', 'name label permissions')
+      .select('-password')
+      .lean();
+
+    // Add id field for compatibility
+    const responseUser = {
+      ...userResponse,
+      id: userResponse?._id.toString(),
+      role_name: (userResponse?.role as any)?.name,
+      role_display_name: (userResponse?.role as any)?.label,
+    };
+
+    return NextResponse.json({ user: responseUser }, { status: 201 });
   } catch (error: any) {
     console.error('Error creating user:', error);
-    if (error.code === 'ER_DUP_ENTRY') {
-      return NextResponse.json({ error: 'A user with this username or email already exists' }, { status: 409 });
-    }
     return NextResponse.json({ error: 'Failed to create user' }, { status: 500 });
   }
 }
-

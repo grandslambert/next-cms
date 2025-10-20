@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { authOptions } from '@/lib/auth-mongo';
 import db, { getSiteTable } from '@/lib/db';
 import { unlink } from 'fs/promises';
 import path from 'path';

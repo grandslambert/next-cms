@@ -1,20 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import db, { getSiteTable } from '@/lib/db';
-import { RowDataPacket, ResultSetHeader } from 'mysql2';
-import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import { authOptions } from '@/lib/auth-mongo';
+import connectDB from '@/lib/mongodb';
+import { Taxonomy } from '@/lib/models';
 
 export async function GET() {
   try {
+    await connectDB();
+    
     const session = await getServerSession(authOptions);
     const siteId = (session?.user as any)?.currentSiteId || 1;
-    const taxonomiesTable = getSiteTable(siteId, 'taxonomies');
     
-    const [rows] = await db.query<RowDataPacket[]>(
-      `SELECT * FROM ${taxonomiesTable} ORDER BY menu_position ASC, label ASC`
-    );
-    return NextResponse.json({ taxonomies: rows });
+    const taxonomies = await Taxonomy.find({ site_id: siteId })
+      .sort({ name: 1 })
+      .lean();
+
+    // Format for UI - convert _id to id
+    const formattedTaxonomies = taxonomies.map((tax: any) => ({
+      ...tax,
+      id: tax._id?.toString(),
+      label: tax.labels?.plural_name,
+    }));
+
+    return NextResponse.json({ taxonomies: formattedTaxonomies });
   } catch (error) {
     console.error('Error fetching taxonomies:', error);
     return NextResponse.json({ error: 'Failed to fetch taxonomies' }, { status: 500 });
@@ -23,69 +31,58 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    await connectDB();
+    
     const session = await getServerSession(authOptions);
     if (!session?.user || (session.user as any).role !== 'admin') {
       return NextResponse.json({ error: 'Unauthorized - Admin only' }, { status: 401 });
     }
 
-    const userId = (session.user as any).id;
     const siteId = (session.user as any).currentSiteId || 1;
-    const taxonomiesTable = getSiteTable(siteId, 'taxonomies');
-
     const body = await request.json();
-    const { name, label, singular_label, description, hierarchical, show_in_menu, show_in_dashboard, menu_position } = body;
+    const { name, label, singular_label, description, hierarchical, post_types } = body;
 
     if (!name || !label || !singular_label) {
-      return NextResponse.json({ error: 'Name, label, and singular label are required' }, { status: 400 });
-    }
-
-    // Validate name format (lowercase, alphanumeric, underscores only)
-    if (!/^[a-z_][a-z0-9_]*$/.test(name)) {
       return NextResponse.json({ 
-        error: 'Name must be lowercase alphanumeric with underscores only' 
+        error: 'Name, label, and singular label are required' 
       }, { status: 400 });
     }
 
-    const [result] = await db.query<ResultSetHeader>(
-      `INSERT INTO ${taxonomiesTable} (name, label, singular_label, description, hierarchical, show_in_menu, show_in_dashboard, menu_position)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        name,
-        label,
-        singular_label,
-        description || '',
-        hierarchical || false,
-        show_in_menu !== false,
-        show_in_dashboard || false,
-        menu_position || 20
-      ]
-    );
+    // Check if taxonomy already exists
+    const existing = await Taxonomy.findOne({ site_id: siteId, name });
+    if (existing) {
+      return NextResponse.json({ error: 'Taxonomy with this name already exists' }, { status: 400 });
+    }
 
-    const [newTaxonomy] = await db.query<RowDataPacket[]>(
-      `SELECT * FROM ${taxonomiesTable} WHERE id = ?`,
-      [result.insertId]
-    );
-
-    // Log activity
-    await logActivity({
-      userId,
-      action: 'taxonomy_created',
-      entityType: 'taxonomy',
-      entityId: result.insertId,
-      entityName: label,
-      details: `Created taxonomy: ${label} (${name})`,
-      ipAddress: getClientIp(request),
-      userAgent: getUserAgent(request),
-      siteId,
+    // Create taxonomy
+    const taxonomy = await Taxonomy.create({
+      site_id: siteId,
+      name,
+      slug: name,
+      labels: {
+        singular_name: singular_label,
+        plural_name: label,
+        all_items: `All ${label}`,
+        edit_item: `Edit ${singular_label}`,
+        add_new_item: `Add New ${singular_label}`,
+      },
+      description: description || '',
+      is_hierarchical: hierarchical || false,
+      is_public: true,
+      show_in_dashboard: true,
+      post_types: post_types || [],
+      rewrite_slug: name,
     });
 
-    return NextResponse.json({ taxonomy: newTaxonomy[0] }, { status: 201 });
+    return NextResponse.json({ 
+      taxonomy: {
+        ...taxonomy.toObject(),
+        id: taxonomy._id.toString(),
+        label: taxonomy.labels.plural_name,
+      }
+    }, { status: 201 });
   } catch (error: any) {
     console.error('Error creating taxonomy:', error);
-    if (error.code === 'ER_DUP_ENTRY') {
-      return NextResponse.json({ error: 'A taxonomy with this name already exists' }, { status: 409 });
-    }
     return NextResponse.json({ error: 'Failed to create taxonomy' }, { status: 500 });
   }
 }
-

@@ -70,12 +70,14 @@ export default function AdminDashboard() {
     }
   }, [role, router]);
 
+  // Don't load dashboard data for super admins (they get redirected to /admin/sites)
   const { data: postsData, isLoading: postsLoading } = useQuery({
     queryKey: ['recent-posts-all-types'],
     queryFn: async () => {
       const res = await axios.get('/api/posts?post_type=all&limit=10');
       return res.data;
     },
+    enabled: !isSuperAdmin, // Skip for super admins
   });
 
   const { data: mediaData, isLoading: mediaLoading } = useQuery({
@@ -84,6 +86,7 @@ export default function AdminDashboard() {
       const res = await axios.get('/api/media?limit=12');
       return res.data;
     },
+    enabled: !isSuperAdmin, // Skip for super admins
   });
 
   const { data: usersData, isLoading: usersLoading } = useQuery({
@@ -92,7 +95,7 @@ export default function AdminDashboard() {
       const res = await axios.get('/api/users');
       return res.data;
     },
-    enabled: isSuperAdmin || !!permissions.manage_users,
+    enabled: !isSuperAdmin && !!permissions.manage_users, // Skip for super admins
   });
 
   const { data: postTypesData, isLoading: postTypesLoading } = useQuery({
@@ -101,6 +104,7 @@ export default function AdminDashboard() {
       const res = await axios.get('/api/post-types');
       return res.data;
     },
+    enabled: !isSuperAdmin, // Skip for super admins
   });
 
   const { data: taxonomiesData, isLoading: taxonomiesLoading } = useQuery({
@@ -109,6 +113,7 @@ export default function AdminDashboard() {
       const res = await axios.get('/api/taxonomies');
       return res.data;
     },
+    enabled: !isSuperAdmin, // Skip for super admins
   });
 
   // Filter post types to show in dashboard based on user permissions

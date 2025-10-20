@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import db from '@/lib/db';
-import { RowDataPacket } from 'mysql2';
+import { authOptions } from '@/lib/auth-mongo';
+import connectDB from '@/lib/mongodb';
+import { GlobalSetting } from '@/lib/models';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function GET() {
   try {
+    await connectDB();
+    
     const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -18,19 +20,16 @@ export async function GET() {
     }
 
     // Fetch global settings
-    const [settings] = await db.query<RowDataPacket[]>(
-      `SELECT setting_key, setting_value FROM global_settings`
-    );
+    const settings = await GlobalSetting.find().lean();
 
     const globalSettings = {
       hide_default_user: false,
     };
 
     settings.forEach((setting: any) => {
-      const value = setting.setting_value;
-      switch (setting.setting_key) {
+      switch (setting.key) {
         case 'auth_hide_default_user':
-          globalSettings.hide_default_user = value === 'true' || value === '1';
+          globalSettings.hide_default_user = setting.value === true || setting.value === 'true' || setting.value === '1';
           break;
       }
     });
@@ -47,6 +46,8 @@ export async function GET() {
 
 export async function PUT(request: NextRequest) {
   try {
+    await connectDB();
+    
     const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -60,12 +61,15 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
     const userId = (session.user as any).id;
 
-    // Save global settings
-    await db.query(
-      `INSERT INTO global_settings (setting_key, setting_value, setting_type) 
-       VALUES ('auth_hide_default_user', ?, 'boolean') 
-       ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)`,
-      [body.hide_default_user ? '1' : '0']
+    // Save global setting (upsert)
+    await GlobalSetting.findOneAndUpdate(
+      { key: 'auth_hide_default_user' },
+      { 
+        value: body.hide_default_user,
+        type: 'boolean',
+        description: 'Hide default user from login screen'
+      },
+      { upsert: true, new: true }
     );
 
     // Log activity
@@ -88,4 +92,3 @@ export async function PUT(request: NextRequest) {
     );
   }
 }
-

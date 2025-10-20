@@ -1,8 +1,18 @@
 # Next CMS
 
-> Version 2.3.4
+> Version 3.0.0
 
-A powerful, modern content management system built with Next.js 14, TypeScript, Tailwind CSS, and MySQL with multi-site support.
+A powerful, modern content management system built with Next.js 14, TypeScript, Tailwind CSS, and MongoDB with multi-site support.
+
+## 📖 Quick Start
+
+**New to Next CMS?** Start here: **[QUICKSTART.md](QUICKSTART.md)**
+
+The Quick Start guide will walk you through:
+- Installing MongoDB
+- Setting up the environment
+- Initializing the database
+- Starting your first CMS
 
 ## 🚀 Features
 

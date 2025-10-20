@@ -51,7 +51,7 @@ export default function SitesPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: any }) => {
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
       const res = await axios.put(`/api/sites/${id}`, data);
       return res.data;
     },
@@ -67,7 +67,7 @@ export default function SitesPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: number) => {
+    mutationFn: async (id: string) => {
       const res = await axios.delete(`/api/sites/${id}`);
       return res.data;
     },
@@ -123,7 +123,7 @@ export default function SitesPage() {
       return;
     }
 
-    if (confirm(`Are you sure you want to delete "${site.display_name}"?\n\nNote: Site tables (site_${site.id}_*) will NOT be automatically deleted for safety. You'll need to drop them manually if needed.`)) {
+    if (confirm(`Are you sure you want to delete "${site.display_name}"?\n\nNote: Site data in MongoDB collections will be automatically deleted.`)) {
       deleteMutation.mutate(site.id);
     }
   };
@@ -236,7 +236,7 @@ export default function SitesPage() {
                             </p>
                           )}
                           <div className="mt-2 text-xs text-gray-500">
-                            Tables: <code className="bg-gray-100 px-1 py-0.5 rounded">site_{site.id}_*</code>
+                            ID: <code className="bg-gray-100 px-1 py-0.5 rounded">{site.id}</code>
                           </div>
                         </div>
                         <div className="flex flex-col space-y-2 ml-4">

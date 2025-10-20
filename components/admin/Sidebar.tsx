@@ -164,22 +164,24 @@ export default function Sidebar() {
     };
   }, [hoverTimeout]);
   
-  // Fetch custom post types
+  // Fetch custom post types (skip for super admins - they don't need them in sidebar)
   const { data: postTypesData } = useQuery({
     queryKey: ['post-types'],
     queryFn: async () => {
       const res = await axios.get('/api/post-types');
       return res.data;
     },
+    enabled: !isSuperAdmin, // Super admins don't need post types in sidebar
   });
 
-  // Fetch taxonomies
+  // Fetch taxonomies (skip for super admins - they don't need them in sidebar)
   const { data: taxonomiesData } = useQuery({
     queryKey: ['taxonomies'],
     queryFn: async () => {
       const res = await axios.get('/api/taxonomies');
       return res.data;
     },
+    enabled: !isSuperAdmin, // Super admins don't need taxonomies in sidebar
   });
 
   // Build menu items including custom post types
@@ -411,7 +413,7 @@ export default function Sidebar() {
           <span>Logout</span>
         </button>
         <div className="text-center text-xs text-gray-500 mt-2">
-          Next CMS v2.3.4
+          Next CMS v3.0.0
         </div>
       </div>
     </aside>
