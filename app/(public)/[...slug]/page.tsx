@@ -1,430 +1,163 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { formatDate, truncate } from '@/lib/utils';
-import { getImageUrl } from '@/lib/image-utils';
-import { getPostByFullPath } from '@/lib/post-utils';
-import { buildPostUrls } from '@/lib/post-url-builder';
-import db, { getSiteTable } from '@/lib/db';
-import { RowDataPacket } from 'mysql2';
+import { connectDB } from '@/lib/db';
+import { Post, PostType, Taxonomy, Term } from '@/lib/models';
+import { getDefaultSite } from '@/lib/url-utils';
+import { formatDate } from '@/lib/utils';
+import Link from 'next/link';
+import mongoose from 'mongoose';
 
-// For public routes, default to site 1 (can be enhanced with domain-based routing later)
-const PUBLIC_SITE_ID = 1;
-
-// Helper function to check and get taxonomy
-async function getTaxonomy(taxonomySlug: string, siteId: number = PUBLIC_SITE_ID) {
+async function getContent(slugPath: string[]) {
   try {
-    const taxonomiesTable = getSiteTable(siteId, 'taxonomies');
-    const [rows] = await db.query<RowDataPacket[]>(
-      `SELECT * FROM ${taxonomiesTable} WHERE name = ?`,
-      [taxonomySlug]
-    );
-    return rows[0] || null;
-  } catch (error) {
-    console.error('Error fetching taxonomy:', error);
-    return null;
-  }
-}
+    const site = await getDefaultSite();
+    if (!site) return null;
 
-// Helper function to get taxonomy terms
-async function getTerms(taxonomyId: number, siteId: number = PUBLIC_SITE_ID) {
-  try {
-    const termsTable = getSiteTable(siteId, 'terms');
-    const termRelationshipsTable = getSiteTable(siteId, 'term_relationships');
-    const postsTable = getSiteTable(siteId, 'posts');
-    
-    const [rows] = await db.query<RowDataPacket[]>(
-      `SELECT t.*, COUNT(tr.post_id) as post_count,
-              parent.name as parent_name, parent.slug as parent_slug
-       FROM ${termsTable} t
-       LEFT JOIN ${termRelationshipsTable} tr ON t.id = tr.term_id
-       LEFT JOIN ${postsTable} p ON tr.post_id = p.id AND p.status = 'published'
-       LEFT JOIN ${termsTable} parent ON t.parent_id = parent.id
-       WHERE t.taxonomy_id = ?
-       GROUP BY t.id
-       ORDER BY t.parent_id ASC, t.name ASC`,
-      [taxonomyId]
-    );
-    return rows;
-  } catch (error) {
-    console.error('Error fetching terms:', error);
-    return [];
-  }
-}
+    await connectDB();
 
-// Helper function to get a specific term
-async function getTerm(taxonomyId: number, termSlug: string, siteId: number = PUBLIC_SITE_ID) {
-  try {
-    const termsTable = getSiteTable(siteId, 'terms');
-    const [rows] = await db.query<RowDataPacket[]>(
-      `SELECT * FROM ${termsTable} WHERE taxonomy_id = ? AND slug = ?`,
-      [taxonomyId, termSlug]
-    );
-    return rows[0] || null;
-  } catch (error) {
-    console.error('Error fetching term:', error);
-    return null;
-  }
-}
+    const slug = slugPath[slugPath.length - 1];
+    const firstSegment = slugPath[0];
 
-// Helper function to get posts by term
-async function getPostsByTerm(termId: number, siteId: number = PUBLIC_SITE_ID) {
-  try {
-    const termRelationshipsTable = getSiteTable(siteId, 'term_relationships');
-    const postsTable = getSiteTable(siteId, 'posts');
-    const mediaTable = getSiteTable(siteId, 'media');
-    const postTypesTable = getSiteTable(siteId, 'post_types');
-    
-    const [rows] = await db.query<RowDataPacket[]>(
-      `SELECT p.*, CONCAT(u.first_name, ' ', u.last_name) as author_name,
-              m.url as featured_image, m.sizes as featured_image_sizes,
-              pt.url_structure, pt.hierarchical, pt.slug as post_type_slug
-       FROM ${termRelationshipsTable} tr
-       JOIN ${postsTable} p ON tr.post_id = p.id
-       LEFT JOIN users u ON p.author_id = u.id
-       LEFT JOIN ${mediaTable} m ON p.featured_image_id = m.id
-       LEFT JOIN ${postTypesTable} pt ON p.post_type = pt.name
-       WHERE tr.term_id = ? AND p.status = 'published'
-       ORDER BY p.published_at DESC`,
-      [termId]
-    );
-    return rows;
-  } catch (error) {
-    console.error('Error fetching posts:', error);
-    return [];
-  }
-}
+    // Check if it's a taxonomy archive
+    const taxonomy = await Taxonomy.findOne({
+      site_id: new mongoose.Types.ObjectId(site.id),
+      slug: firstSegment,
+    }).lean();
 
-// Helper function to build term hierarchy
-async function getTermHierarchy(termId: number, siteId: number = PUBLIC_SITE_ID): Promise<any[]> {
-  const hierarchy: any[] = [];
-  let currentId: number | null = termId;
-  const termsTable = getSiteTable(siteId, 'terms');
+    if (taxonomy && slugPath.length === 2) {
+      // It's a term archive
+      const term = await Term.findOne({
+        taxonomy_id: taxonomy._id,
+        slug: slugPath[1],
+      }).lean();
 
-  while (currentId) {
-    const [rows] = await db.query<RowDataPacket[]>(
-      `SELECT id, name, slug, parent_id FROM ${termsTable} WHERE id = ?`,
-      [currentId]
-    );
-
-    if (!rows.length) break;
-
-    const term = rows[0] as any;
-    hierarchy.unshift(term);
-    currentId = term.parent_id;
-  }
-
-  return hierarchy;
-}
-
-// Helper function to organize terms hierarchically
-function organizeHierarchically(terms: any[]) {
-  const termMap = new Map();
-  const rootTerms: any[] = [];
-
-  terms.forEach((term: any) => {
-    termMap.set(term.id, { ...term, children: [] });
-  });
-
-  terms.forEach((term: any) => {
-    const termWithChildren = termMap.get(term.id);
-    if (term.parent_id && termMap.has(term.parent_id)) {
-      const parent = termMap.get(term.parent_id);
-      parent.children.push(termWithChildren);
-    } else {
-      rootTerms.push(termWithChildren);
-    }
-  });
-
-  return rootTerms;
-}
-
-// Component to render a term card recursively
-function TermCard({ term, taxonomySlug, level = 0 }: { term: any; taxonomySlug: string; level?: number }) {
-  return (
-    <>
-      <Link
-        href={`/${taxonomySlug}/${term.slug}`}
-        className={`bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow ${level > 0 ? 'ml-8 border-l-4 border-primary-200' : ''}`}
-      >
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">
-          {level > 0 && <span className="text-primary-600 mr-2">↳</span>}
-          {term.name}
-        </h2>
-        {term.description && (
-          <p className="text-gray-600 text-sm mb-3">{term.description}</p>
-        )}
-        <div className="text-sm text-primary-600 font-medium">
-          {term.post_count} {term.post_count === 1 ? 'post' : 'posts'}
-        </div>
-      </Link>
-      {term.children && term.children.length > 0 && (
-        <div className="space-y-4">
-          {term.children.map((child: any) => (
-            <TermCard key={child.id} term={child} taxonomySlug={taxonomySlug} level={level + 1} />
-          ))}
-        </div>
-      )}
-    </>
-  );
-}
-
-async function getPostBySlug(segments: string[], siteId: number = PUBLIC_SITE_ID) {
-  try {
-    const postTypesTable = getSiteTable(siteId, 'post_types');
-    
-    // Determine if first segment is a post type slug
-    const [postTypes] = await db.query<RowDataPacket[]>(
-      `SELECT name, slug, url_structure FROM ${postTypesTable} WHERE slug != ""`
-    );
-    
-    const postTypeMap = new Map(postTypes.map((pt: any) => [pt.slug, { name: pt.name, structure: pt.url_structure }]));
-    
-    let postTypeSlug = '';
-    let remainingSegments = [...segments];
-    
-    // Check if first segment is a post type slug
-    if (segments.length > 1 && postTypeMap.has(segments[0])) {
-      postTypeSlug = segments[0];
-      remainingSegments = segments.slice(1);
-    }
-    
-    // Parse date components
-    let year, month, day;
-    let slugSegments = [...remainingSegments];
-    
-    // Remove date components from the start if present
-    if (slugSegments.length > 0 && /^\d{4}$/.test(slugSegments[0])) {
-      year = slugSegments[0];
-      slugSegments = slugSegments.slice(1);
-      
-      if (slugSegments.length > 0 && /^\d{1,2}$/.test(slugSegments[0])) {
-        month = slugSegments[0];
-        slugSegments = slugSegments.slice(1);
-        
-        if (slugSegments.length > 0 && /^\d{1,2}$/.test(slugSegments[0])) {
-          day = slugSegments[0];
-          slugSegments = slugSegments.slice(1);
-        }
-      }
-    }
-    
-    // Remaining segments are the hierarchical slug path
-    if (slugSegments.length === 0) {
-      return null;
-    }
-    
-    // Use the helper function to get post by full path
-    return await getPostByFullPath(slugSegments, postTypeSlug, year, month, day);
-  } catch (error) {
-    console.error('Error fetching post:', error);
-    return null;
-  }
-}
-
-export default async function UnifiedCatchAll({ params }: { params: { slug: string[] } }) {
-  const segments = params.slug;
-
-  // Check if this is a taxonomy archive page (single segment)
-  if (segments.length === 1) {
-    const taxonomy = await getTaxonomy(segments[0]);
-    
-    if (taxonomy) {
-      const terms = await getTerms(taxonomy.id);
-      const organizedTerms = taxonomy.hierarchical 
-        ? organizeHierarchically(terms)
-        : terms;
-
-      return (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <div className="mb-12">
-            <h1 className="text-4xl font-bold text-gray-900 mb-4">{taxonomy.label}</h1>
-            {taxonomy.description && (
-              <p className="text-xl text-gray-600">{taxonomy.description}</p>
-            )}
-          </div>
-
-          {terms.length > 0 ? (
-            taxonomy.hierarchical ? (
-              <div className="space-y-4">
-                {organizedTerms.map((term: any) => (
-                  <TermCard key={term.id} term={term} taxonomySlug={segments[0]} />
-                ))}
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {terms.map((term: any) => (
-                  <Link
-                    key={term.id}
-                    href={`/${segments[0]}/${term.slug}`}
-                    className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow"
-                  >
-                    <h2 className="text-xl font-semibold text-gray-900 mb-2">{term.name}</h2>
-                    {term.description && (
-                      <p className="text-gray-600 text-sm mb-3">{term.description}</p>
-                    )}
-                    <div className="text-sm text-primary-600 font-medium">
-                      {term.post_count} {term.post_count === 1 ? 'post' : 'posts'}
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            )
-          ) : (
-            <div className="text-center py-12">
-              <div className="text-6xl mb-4">🏷️</div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">No terms yet</h3>
-              <p className="text-gray-600">No {taxonomy.label.toLowerCase()} have been created.</p>
-            </div>
-          )}
-        </div>
-      );
-    }
-  }
-
-  // Check if this is a taxonomy term page (two segments)
-  if (segments.length === 2) {
-    const taxonomy = await getTaxonomy(segments[0]);
-    
-    if (taxonomy) {
-      const term = await getTerm(taxonomy.id, segments[1]);
-      
       if (term) {
-        const posts = await getPostsByTerm(term.id);
-        const hierarchy = taxonomy.hierarchical 
-          ? await getTermHierarchy(term.id)
-          : [term];
-        const postsWithUrls = await buildPostUrls(posts);
-
-        return (
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-            <div className="mb-8">
-              <nav className="text-sm text-gray-500 mb-4 flex items-center flex-wrap">
-                <Link href={`/${segments[0]}`} className="hover:text-primary-600">
-                  {taxonomy.label}
-                </Link>
-                {taxonomy.hierarchical && hierarchy.length > 1 ? (
-                  <>
-                    {hierarchy.slice(0, -1).map((ancestorTerm: any) => (
-                      <span key={ancestorTerm.id} className="flex items-center">
-                        <span className="mx-2">/</span>
-                        <Link 
-                          href={`/${segments[0]}/${ancestorTerm.slug}`}
-                          className="hover:text-primary-600"
-                        >
-                          {ancestorTerm.name}
-                        </Link>
-                      </span>
-                    ))}
-                    <span className="mx-2">/</span>
-                    <span className="text-gray-900">{term.name}</span>
-                  </>
-                ) : (
-                  <>
-                    <span className="mx-2">/</span>
-                    <span className="text-gray-900">{term.name}</span>
-                  </>
-                )}
-              </nav>
-              
-              <h1 className="text-4xl font-bold text-gray-900 mb-4">{term.name}</h1>
-              {term.description && (
-                <p className="text-xl text-gray-600">{term.description}</p>
-              )}
-            </div>
-
-            {postsWithUrls.length > 0 ? (
-              <div className="space-y-8">
-                {postsWithUrls.map((post: any) => (
-                  <article key={post.id} className="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow">
-                    <div className="md:flex">
-                      {post.featured_image && (
-                        <div className="md:w-1/3">
-                          <div className="aspect-video md:aspect-square bg-gray-200">
-                            <img
-                              src={getImageUrl(post.featured_image, post.featured_image_sizes, 'medium')}
-                              alt={post.title}
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                        </div>
-                      )}
-                      <div className={`p-6 ${post.featured_image ? 'md:w-2/3' : 'w-full'}`}>
-                        <div className="flex items-center text-sm text-gray-500 mb-3">
-                          <span>{formatDate(post.published_at)}</span>
-                          <span className="mx-2">•</span>
-                          <span>By {post.author_name}</span>
-                        </div>
-                        <h2 className="text-2xl font-bold text-gray-900 mb-3">
-                          <Link href={post.url} className="hover:text-primary-600">
-                            {post.title}
-                          </Link>
-                        </h2>
-                        {post.excerpt && (
-                          <p className="text-gray-600 mb-4">
-                            {truncate(post.excerpt, 200)}
-                          </p>
-                        )}
-                        <Link
-                          href={post.url}
-                          className="inline-flex items-center text-primary-600 hover:text-primary-700 font-semibold"
-                        >
-                          Read More →
-                        </Link>
-                      </div>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-12">
-                <div className="text-6xl mb-4">📝</div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">No posts yet</h3>
-                <p className="text-gray-600">No posts have been tagged with {term.name}.</p>
-              </div>
-            )}
-          </div>
-        );
+        return { type: 'term', data: { term, taxonomy } };
       }
     }
+
+    if (taxonomy && slugPath.length === 1) {
+      return { type: 'taxonomy', data: taxonomy };
+    }
+
+    // Check if it's a page
+    const page = await Post.findOne({
+      site_id: new mongoose.Types.ObjectId(site.id),
+      post_type: 'page',
+      slug,
+      status: 'published',
+    })
+      .populate('author_id', 'username email')
+      .populate('featured_image_id')
+      .lean();
+
+    if (page) {
+      const featuredImage = page.featured_image_id as any;
+      return {
+        type: 'page',
+        data: {
+          ...page,
+          id: page._id.toString(),
+          author_name: (page.author_id as any)?.username || 'Unknown',
+          featured_image: featuredImage?.filepath || null,
+        },
+      };
+    }
+
+    // Check if it's a custom post type
+    const postType = await PostType.findOne({
+      site_id: new mongoose.Types.ObjectId(site.id),
+      slug: firstSegment,
+    }).lean();
+
+    if (postType && slugPath.length > 1) {
+      const post = await Post.findOne({
+        site_id: new mongoose.Types.ObjectId(site.id),
+        post_type: postType.name,
+        slug,
+        status: 'published',
+      })
+        .populate('author_id', 'username email')
+        .populate('featured_image_id')
+        .lean();
+
+      if (post) {
+        const featuredImage = post.featured_image_id as any;
+        return {
+          type: 'post',
+          data: {
+            ...post,
+            id: post._id.toString(),
+            author_name: (post.author_id as any)?.username || 'Unknown',
+            featured_image: featuredImage?.filepath || null,
+          },
+        };
+      }
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error fetching content:', error);
+    return null;
   }
+}
 
-  // If not a taxonomy/term, try to find a post/page
-  const post = await getPostBySlug(segments);
+export default async function SlugPage({ params }: { params: { slug: string[] } }) {
+  const content = await getContent(params.slug);
 
-  if (!post) {
+  if (!content) {
     notFound();
   }
 
-  return (
-    <article className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      <header className="mb-8">
-        <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
-          {post.title}
-        </h1>
-        <div className="flex items-center text-gray-600 mb-6">
-          <span>{formatDate(post.published_at || post.created_at)}</span>
-          {post.author_name && (
-            <>
-              <span className="mx-2">•</span>
-              <span>By {post.author_name}</span>
-            </>
-          )}
-        </div>
+  if (content.type === 'page' || content.type === 'post') {
+    const post = content.data as any;
+    
+    return (
+      <article className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {post.featured_image && (
-          <div className="aspect-video bg-gray-200 rounded-lg overflow-hidden mb-6">
+          <div className="aspect-video overflow-hidden rounded-lg mb-8">
             <img
-              src={getImageUrl(post.featured_image, post.featured_image_sizes, 'large')}
+              src={post.featured_image}
               alt={post.title}
               className="w-full h-full object-cover"
             />
           </div>
         )}
-      </header>
+        
+        <h1 className="text-4xl font-bold text-gray-900 mb-4">{post.title}</h1>
+        
+        <div className="flex items-center text-gray-600 mb-8">
+          <span>By {post.author_name}</span>
+          <span className="mx-2">•</span>
+          <time>{formatDate(post.published_at)}</time>
+        </div>
 
-      <div 
-        className="content-body prose-lg max-w-none"
-        dangerouslySetInnerHTML={{ __html: post.content }}
-      />
-    </article>
-  );
+        <div 
+          className="prose prose-lg max-w-none"
+          dangerouslySetInnerHTML={{ __html: post.content }}
+        />
+      </article>
+    );
+  }
+
+  if (content.type === 'taxonomy') {
+    const taxonomy = content.data as any;
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <h1 className="text-4xl font-bold text-gray-900 mb-8">{taxonomy.label}</h1>
+        <p className="text-gray-600">Taxonomy archive page (implementation pending)</p>
+      </div>
+    );
+  }
+
+  if (content.type === 'term') {
+    const { term, taxonomy } = content.data as any;
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <h1 className="text-4xl font-bold text-gray-900 mb-2">{term.name}</h1>
+        <p className="text-gray-600 mb-8">in {taxonomy.label}</p>
+        <p className="text-gray-600">Term archive page (implementation pending)</p>
+      </div>
+    );
+  }
+
+  notFound();
 }

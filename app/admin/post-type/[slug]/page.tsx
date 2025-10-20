@@ -120,7 +120,8 @@ export default function PostTypePage() {
       router.push('/admin/login');
       return;
     }
-    const hasPermission = permissions[`manage_posts_${postTypeSlug}`];
+    // Check for specific permission OR manage_posts_all
+    const hasPermission = permissions[`manage_posts_${postTypeSlug}`] || permissions.manage_posts_all;
     if (!hasPermission) {
       router.push('/admin');
     }
@@ -558,8 +559,8 @@ export default function PostTypePage() {
       {/* Sticky Header */}
       <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">{postTypeData.label}</h1>
-          <p className="text-sm text-gray-600">{postTypeData.description}</p>
+          <h1 className="text-2xl font-bold">{postTypeData?.label || 'Posts'}</h1>
+          <p className="text-sm text-gray-600">{postTypeData?.description || ''}</p>
         </div>
         <div className="flex space-x-2">
           {statusFilter === 'trash' && data?.posts && data.posts.length > 0 && (
@@ -638,7 +639,7 @@ export default function PostTypePage() {
             href={`/admin/post-type/${postTypeSlug}/new`}
             className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
           >
-            + Add New {postTypeData.singular_label}
+            + Add New {postTypeData?.singular_label || 'Post'}
           </Link>
         </div>
       </div>
@@ -709,7 +710,7 @@ export default function PostTypePage() {
               <div className="relative flex-1 ml-auto max-w-md">
                 <input
                   type="text"
-                  placeholder={`Search ${postTypeData.label.toLowerCase()}...`}
+                  placeholder={`Search ${postTypeData?.label?.toLowerCase() || 'posts'}...`}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full px-4 py-2 pl-10 pr-10 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
@@ -948,7 +949,7 @@ export default function PostTypePage() {
                           href={`/admin/post-type/${postTypeSlug}/${post.id}`}
                           className="text-sm font-medium text-gray-900 hover:text-primary-600 flex items-center"
                         >
-                          {!!postTypeData.hierarchical && post.level > 0 && (
+                          {!!postTypeData?.hierarchical && post.level > 0 && (
                             <span className="text-gray-400 mr-2">
                               {'—'.repeat(post.level)} 
                             </span>
@@ -957,7 +958,7 @@ export default function PostTypePage() {
                         </Link>
                       ) : (
                         <div className="text-sm font-medium text-gray-900 flex items-center">
-                          {!!postTypeData.hierarchical && post.level > 0 && (
+                          {!!postTypeData?.hierarchical && post.level > 0 && (
                             <span className="text-gray-400 mr-2">
                               {'—'.repeat(post.level)} 
                             </span>
@@ -1140,12 +1141,12 @@ export default function PostTypePage() {
           </>
         ) : (
           <div className="p-8 text-center text-gray-500">
-            <p className="mb-4">No {postTypeData.label.toLowerCase()} yet</p>
+            <p className="mb-4">No {postTypeData?.label?.toLowerCase() || 'posts'} yet</p>
             <Link
               href={`/admin/post-type/${postTypeSlug}/new`}
               className="text-primary-600 hover:text-primary-700"
             >
-              Create your first {postTypeData.singular_label.toLowerCase()}
+              Create your first {postTypeData?.singular_label?.toLowerCase() || 'post'}
             </Link>
           </div>
         )}

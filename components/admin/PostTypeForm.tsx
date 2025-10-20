@@ -110,7 +110,8 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
       router.push('/admin/login');
       return;
     }
-    const hasPermission = permissions[`manage_posts_${postTypeSlug}`];
+    // Check for specific permission OR manage_posts_all
+    const hasPermission = permissions[`manage_posts_${postTypeSlug}`] || permissions.manage_posts_all;
     if (!hasPermission) {
       router.push('/admin');
     }

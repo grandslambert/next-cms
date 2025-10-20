@@ -2,7 +2,9 @@
  * MongoDB Database Initialization Script
  * Creates initial collections, indexes, and seed data
  * 
- * Usage: npx ts-node scripts/init-mongodb.ts
+ * Usage: 
+ *   npx ts-node --project tsconfig.node.json scripts/init-mongodb.ts
+ *   npx ts-node --project tsconfig.node.json scripts/init-mongodb.ts --clear
  */
 
 import mongoose from 'mongoose';
@@ -13,7 +15,25 @@ import * as dotenv from 'dotenv';
 dotenv.config();
 
 // Import models
-import { User, Role, Site, SiteUser, Setting, PostType, Taxonomy } from '../lib/models';
+import { 
+  User, 
+  Role, 
+  Site, 
+  SiteUser, 
+  Setting, 
+  GlobalSetting,
+  UserMeta,
+  ActivityLog,
+  PostType, 
+  Taxonomy, 
+  Term,
+  Post,
+  Menu,
+  MenuItem,
+  MenuLocation,
+  Media,
+  MediaFolder,
+} from '../lib/models';
 
 const MONGODB_URI = process.env.MONGODB_URI || '';
 
@@ -38,6 +58,19 @@ async function initializeDatabase() {
         Role.deleteMany({}),
         Site.deleteMany({}),
         SiteUser.deleteMany({}),
+        Setting.deleteMany({}),
+        GlobalSetting.deleteMany({}),
+        UserMeta.deleteMany({}),
+        ActivityLog.deleteMany({}),
+        PostType.deleteMany({}),
+        Taxonomy.deleteMany({}),
+        Term.deleteMany({}),
+        Post.deleteMany({}),
+        Menu.deleteMany({}),
+        MenuItem.deleteMany({}),
+        MenuLocation.deleteMany({}),
+        Media.deleteMany({}),
+        MediaFolder.deleteMany({}),
       ]);
       console.log('✅ Existing data cleared');
     }
@@ -49,12 +82,14 @@ async function initializeDatabase() {
       process.exit(0);
     }
 
-    console.log('📝 Creating default roles...');
+    console.log('\n📝 Creating default roles...');
     
     // Create default roles
     const superAdminRole = await Role.create({
       name: 'super_admin',
       label: 'Super Administrator',
+      display_name: 'Super Administrator',
+      description: 'Full system access including multi-site management',
       permissions: {
         manage_sites: true,
         manage_users: true,
@@ -67,50 +102,81 @@ async function initializeDatabase() {
     const adminRole = await Role.create({
       name: 'admin',
       label: 'Administrator',
+      display_name: 'Administrator',
+      description: 'Full site access and management',
       permissions: {
+        view_dashboard: true,
         manage_posts_all: true,
-        manage_pages_all: true,
         manage_media: true,
         manage_taxonomies: true,
         manage_menus: true,
         manage_settings: true,
         manage_users: true,
+        can_publish: true,
+        can_delete: true,
+        can_delete_others: true,
+        manage_others_posts: true,
+        view_others_posts: true,
       },
     });
 
     const editorRole = await Role.create({
       name: 'editor',
       label: 'Editor',
+      display_name: 'Editor',
+      description: 'Can publish and manage posts including posts of other users',
       permissions: {
+        view_dashboard: true,
         manage_posts_all: true,
-        manage_pages_all: true,
         manage_media: true,
         manage_taxonomies: true,
+        edit_published_posts: true,
+        delete_published_posts: true,
+        can_publish: true,
+        can_delete: true,
+        can_delete_others: true,
+        manage_others_posts: true,
+        view_others_posts: true,
       },
     });
 
     const authorRole = await Role.create({
       name: 'author',
       label: 'Author',
+      display_name: 'Author',
+      description: 'Can publish and manage their own posts',
       permissions: {
-        manage_posts_own: true,
-        manage_pages_own: true,
+        view_dashboard: true,
+        manage_posts_all: true,
         manage_media_own: true,
+        publish_posts: true,
+        upload_files: true,
+        can_publish: true,
+        can_delete: true,
       },
     });
 
     const contributorRole = await Role.create({
       name: 'contributor',
       label: 'Contributor',
+      display_name: 'Contributor',
+      description: 'Can write and manage their own posts but cannot publish',
       permissions: {
+        view_dashboard: true,
         create_posts: true,
         edit_posts_own: true,
+        delete_posts_own: true,
+        manage_posts_post: true,
+        manage_posts_page: true,
+        can_delete: true,
       },
     });
 
     const subscriberRole = await Role.create({
       name: 'subscriber',
       label: 'Subscriber',
+      display_name: 'Subscriber',
+      description: 'Can read content and manage their profile',
       permissions: {
         read: true,
       },
@@ -119,6 +185,8 @@ async function initializeDatabase() {
     const guestRole = await Role.create({
       name: 'guest',
       label: 'Guest',
+      display_name: 'Guest',
+      description: 'Limited access to read content',
       permissions: {
         read_own: true,
       },
@@ -126,21 +194,22 @@ async function initializeDatabase() {
 
     console.log('✅ Created 7 default roles');
 
-    console.log('🏢 Creating default site...');
+    console.log('\n🏢 Creating default site...');
     
     // Create default site
     const defaultSite = await Site.create({
       name: 'default',
       display_name: 'Default Site',
       description: 'The default site for Next CMS',
+      domain: 'localhost:3000',
       is_active: true,
     });
 
     console.log('✅ Created default site');
 
-    console.log('👤 Creating super admin user...');
+    console.log('\n👤 Creating super admin user...');
     
-    // Create super admin user (superAdminRole already created above)
+    // Create super admin user
     const hashedPassword = await bcrypt.hash('SuperAdmin123!', 10);
     const superAdmin = await User.create({
       username: 'superadmin',
@@ -148,7 +217,7 @@ async function initializeDatabase() {
       password: hashedPassword,
       first_name: 'Super',
       last_name: 'Admin',
-      role: superAdminRole._id, // Use the role ObjectId from above
+      role: superAdminRole._id,
       is_super_admin: true,
       status: 'active',
     });
@@ -157,24 +226,66 @@ async function initializeDatabase() {
     console.log('   Username: superadmin');
     console.log('   Password: SuperAdmin123!');
     console.log('   Email: admin@example.com');
+    console.log('   ⚠️  CHANGE THIS PASSWORD IMMEDIATELY AFTER FIRST LOGIN!');
 
-    // Assign super admin to default site
-    await SiteUser.create({
-      site_id: defaultSite._id,
-      user_id: superAdmin._id,
-      role_id: superAdminRole._id,
+    console.log('\n👤 Creating default site administrator...');
+    
+    // Create default site admin user
+    const hashedAdminPassword = await bcrypt.hash('Admin123!', 10);
+    const siteAdmin = await User.create({
+      username: 'admin',
+      email: 'siteadmin@example.com',
+      password: hashedAdminPassword,
+      first_name: 'Site',
+      last_name: 'Administrator',
+      role: adminRole._id,
+      is_super_admin: false,
+      status: 'active',
     });
 
-    console.log('✅ Assigned super admin to default site');
+    console.log('✅ Created site administrator user');
+    console.log('   Username: admin');
+    console.log('   Password: Admin123!');
+    console.log('   Email: siteadmin@example.com');
+    console.log('   ⚠️  CHANGE THIS PASSWORD IMMEDIATELY AFTER FIRST LOGIN!');
 
-    // Create default settings for the site
-    console.log('\n📝 Creating default settings...');
+    // Assign site admin to default site (NOT the super admin)
+    await SiteUser.create({
+      site_id: defaultSite._id,
+      user_id: siteAdmin._id,
+      role_id: adminRole._id,
+    });
+
+    console.log('✅ Assigned site administrator to default site');
+
+    // Create global settings
+    console.log('\n⚙️  Creating global settings...');
+    const globalSettings = [
+      { key: 'auth_hide_default_user', value: false, type: 'boolean', description: 'Hide default user from login screen' },
+    ];
+
+    for (const setting of globalSettings) {
+      await GlobalSetting.create(setting);
+    }
+
+    console.log(`✅ Created ${globalSettings.length} global settings`);
+
+    // Create default site settings
+    console.log('\n📝 Creating default site settings...');
     const defaultSettings = [
-      { key: 'site_title', value: 'Next CMS', type: 'string', group: 'general', label: 'Site Title' },
-      { key: 'site_tagline', value: 'A modern content management system', type: 'string', group: 'general', label: 'Site Tagline' },
-      { key: 'session_timeout', value: 30, type: 'number', group: 'authentication', label: 'Session Timeout (minutes)' },
-      { key: 'max_upload_size', value: 10, type: 'number', group: 'media', label: 'Max Upload Size (MB)' },
+      { key: 'site_title', value: 'Next CMS', type: 'string', group: 'general', label: 'Site Title', description: 'The name of your website' },
+      { key: 'site_tagline', value: 'A modern content management system', type: 'string', group: 'general', label: 'Site Tagline', description: 'A short description of your site' },
+      { key: 'site_description', value: 'A powerful CMS built with Next.js and MongoDB', type: 'text', group: 'general', label: 'Site Description' },
+      { key: 'posts_per_page', value: 10, type: 'number', group: 'general', label: 'Posts Per Page', description: 'Number of posts to show per page' },
+      { key: 'session_timeout', value: 30, type: 'number', group: 'authentication', label: 'Session Timeout (minutes)', description: 'How long users stay logged in' },
+      { key: 'max_upload_size', value: 10, type: 'number', group: 'media', label: 'Max Upload Size (MB)', description: 'Maximum file upload size' },
       { key: 'allowed_file_types', value: ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'], type: 'json', group: 'media', label: 'Allowed File Types' },
+      { key: 'thumbnail_width', value: 150, type: 'number', group: 'media', label: 'Thumbnail Width (px)' },
+      { key: 'thumbnail_height', value: 150, type: 'number', group: 'media', label: 'Thumbnail Height (px)' },
+      { key: 'medium_width', value: 300, type: 'number', group: 'media', label: 'Medium Width (px)' },
+      { key: 'medium_height', value: 300, type: 'number', group: 'media', label: 'Medium Height (px)' },
+      { key: 'large_width', value: 1024, type: 'number', group: 'media', label: 'Large Width (px)' },
+      { key: 'large_height', value: 1024, type: 'number', group: 'media', label: 'Large Height (px)' },
     ];
 
     for (const setting of defaultSettings) {
@@ -184,126 +295,352 @@ async function initializeDatabase() {
       });
     }
 
-    console.log(`✅ Created ${defaultSettings.length} default settings`);
+    console.log(`✅ Created ${defaultSettings.length} site settings`);
 
     // Create default post types
     console.log('\n📝 Creating default post types...');
-    const defaultPostTypes = [
-      {
-        name: 'post',
-        slug: 'posts',
-        labels: {
-          singular_name: 'Post',
-          plural_name: 'Posts',
-          add_new: 'Add New Post',
-          edit_item: 'Edit Post',
-          view_item: 'View Post',
-        },
-        description: 'Standard blog posts',
-        is_hierarchical: false,
-        is_public: true,
-        supports: ['title', 'editor', 'thumbnail', 'excerpt', 'comments'],
-        menu_icon: '📝',
-        menu_position: 5,
-        show_in_dashboard: true,
-        has_archive: true,
-        rewrite_slug: 'blog',
-        taxonomies: ['category', 'tag'],
+    const postPostType = await PostType.create({
+      site_id: defaultSite._id,
+      name: 'post',
+      slug: 'posts',
+      labels: {
+        singular_name: 'Post',
+        plural_name: 'Posts',
+        add_new: 'Add New Post',
+        edit_item: 'Edit Post',
+        view_item: 'View Post',
+        all_items: 'All Posts',
       },
-      {
-        name: 'page',
-        slug: 'pages',
-        labels: {
-          singular_name: 'Page',
-          plural_name: 'Pages',
-          add_new: 'Add New Page',
-          edit_item: 'Edit Page',
-          view_item: 'View Page',
-        },
-        description: 'Static pages',
-        is_hierarchical: true,
-        is_public: true,
-        supports: ['title', 'editor', 'thumbnail', 'custom_fields'],
-        menu_icon: '📄',
-        menu_position: 20,
-        show_in_dashboard: true,
-        has_archive: false,
-        taxonomies: [],
+      description: 'Standard blog posts',
+      is_hierarchical: false,
+      is_public: true,
+      supports: ['title', 'editor', 'thumbnail', 'excerpt', 'comments', 'custom_fields', 'author'],
+      menu_icon: '📝',
+      menu_position: 5,
+      show_in_dashboard: true,
+      has_archive: true,
+      rewrite_slug: 'blog',
+      taxonomies: ['category', 'tag'],
+    });
+
+    const pagePostType = await PostType.create({
+      site_id: defaultSite._id,
+      name: 'page',
+      slug: 'pages',
+      labels: {
+        singular_name: 'Page',
+        plural_name: 'Pages',
+        add_new: 'Add New Page',
+        edit_item: 'Edit Page',
+        view_item: 'View Page',
+        all_items: 'All Pages',
       },
-    ];
+      description: 'Static pages',
+      is_hierarchical: true,
+      is_public: true,
+      supports: ['title', 'editor', 'thumbnail', 'excerpt', 'custom_fields', 'author'],
+      menu_icon: '📄',
+      menu_position: 20,
+      show_in_dashboard: true,
+      has_archive: false,
+      taxonomies: [],
+    });
 
-    for (const postType of defaultPostTypes) {
-      await PostType.create({
-        site_id: defaultSite._id,
-        ...postType,
-      });
-    }
-
-    console.log(`✅ Created ${defaultPostTypes.length} default post types`);
+    console.log('✅ Created 2 default post types');
 
     // Create default taxonomies
     console.log('\n📝 Creating default taxonomies...');
-    const defaultTaxonomies = [
-      {
-        name: 'category',
-        slug: 'category',
-        labels: {
-          singular_name: 'Category',
-          plural_name: 'Categories',
-          all_items: 'All Categories',
-          edit_item: 'Edit Category',
-          add_new_item: 'Add New Category',
-        },
-        description: 'Post categories',
-        is_hierarchical: true,
-        is_public: true,
-        show_in_dashboard: true,
-        post_types: ['post'],
-        rewrite_slug: 'category',
+    const categoryTaxonomy = await Taxonomy.create({
+      site_id: defaultSite._id,
+      name: 'category',
+      slug: 'category',
+      labels: {
+        singular_name: 'Category',
+        plural_name: 'Categories',
+        all_items: 'All Categories',
+        edit_item: 'Edit Category',
+        add_new_item: 'Add New Category',
       },
-      {
-        name: 'tag',
-        slug: 'tag',
-        labels: {
-          singular_name: 'Tag',
-          plural_name: 'Tags',
-          all_items: 'All Tags',
-          edit_item: 'Edit Tag',
-          add_new_item: 'Add New Tag',
-        },
-        description: 'Post tags',
-        is_hierarchical: false,
-        is_public: true,
-        show_in_dashboard: true,
-        post_types: ['post'],
-        rewrite_slug: 'tag',
+      description: 'Post categories',
+      is_hierarchical: true,
+      is_public: true,
+      show_in_dashboard: true,
+      post_types: ['post'],
+      rewrite_slug: 'category',
+    });
+
+    const tagTaxonomy = await Taxonomy.create({
+      site_id: defaultSite._id,
+      name: 'tag',
+      slug: 'tag',
+      labels: {
+        singular_name: 'Tag',
+        plural_name: 'Tags',
+        all_items: 'All Tags',
+        edit_item: 'Edit Tag',
+        add_new_item: 'Add New Tag',
       },
-    ];
+      description: 'Post tags',
+      is_hierarchical: false,
+      is_public: true,
+      show_in_dashboard: true,
+      post_types: ['post'],
+      rewrite_slug: 'tag',
+    });
 
-    for (const taxonomy of defaultTaxonomies) {
-      await Taxonomy.create({
-        site_id: defaultSite._id,
-        ...taxonomy,
-      });
-    }
+    console.log('✅ Created 2 default taxonomies');
 
-    console.log(`✅ Created ${defaultTaxonomies.length} default taxonomies`);
+    // Create default terms
+    console.log('\n📝 Creating default terms...');
+    const uncategorizedTerm = await Term.create({
+      site_id: defaultSite._id,
+      taxonomy: 'category',
+      name: 'Uncategorized',
+      slug: 'uncategorized',
+      description: 'Default category for posts without a category',
+    });
 
+    console.log('✅ Created default "Uncategorized" category');
+
+    // Create default pages
+    console.log('\n📝 Creating default pages...');
+    
+    const homePage = await Post.create({
+      site_id: defaultSite._id,
+      post_type: 'page',
+      title: 'Home',
+      slug: 'home',
+      content: '<h1>Welcome to Next CMS</h1><p>This is your homepage. Edit it to customize your site!</p>',
+      excerpt: 'Welcome to your new CMS',
+      status: 'published',
+      visibility: 'public',
+      author_id: siteAdmin._id,
+      published_at: new Date(),
+    });
+
+    const aboutPage = await Post.create({
+      site_id: defaultSite._id,
+      post_type: 'page',
+      title: 'About',
+      slug: 'about',
+      content: '<h1>About Us</h1><p>Tell your visitors about your site and organization.</p>',
+      excerpt: 'Learn more about us',
+      status: 'published',
+      visibility: 'public',
+      author_id: siteAdmin._id,
+      published_at: new Date(),
+    });
+
+    const contactPage = await Post.create({
+      site_id: defaultSite._id,
+      post_type: 'page',
+      title: 'Contact',
+      slug: 'contact',
+      content: '<h1>Contact Us</h1><p>Get in touch with us!</p>',
+      excerpt: 'Contact information',
+      status: 'published',
+      visibility: 'public',
+      author_id: siteAdmin._id,
+      published_at: new Date(),
+    });
+
+    console.log('✅ Created 3 default pages (Home, About, Contact)');
+
+    // Create a sample blog post
+    console.log('\n📝 Creating sample blog post...');
+    
+    const helloWorldPost = await Post.create({
+      site_id: defaultSite._id,
+      post_type: 'post',
+      title: 'Hello World!',
+      slug: 'hello-world',
+      content: '<h2>Welcome to Next CMS</h2><p>This is your first blog post. You can edit or delete it to get started with your content!</p><p><strong>Features:</strong></p><ul><li>Powerful content management</li><li>Multi-site support</li><li>Flexible taxonomies</li><li>Media management</li><li>And much more!</li></ul>',
+      excerpt: 'Welcome to your new CMS! This is your first blog post.',
+      status: 'published',
+      visibility: 'public',
+      author_id: siteAdmin._id,
+      published_at: new Date(),
+      allow_comments: true,
+    });
+
+    console.log('✅ Created sample "Hello World" post');
+
+    // Create default menus
+    console.log('\n📝 Creating default menus...');
+    
+    const mainMenu = await Menu.create({
+      site_id: defaultSite._id,
+      name: 'main-menu',
+      display_name: 'Main Menu',
+      location: 'header',
+    });
+
+    const footerMenu = await Menu.create({
+      site_id: defaultSite._id,
+      name: 'footer-menu',
+      display_name: 'Footer Menu',
+      location: 'footer',
+    });
+
+    console.log('✅ Created 2 default menus');
+
+    // Create menu items for main menu
+    console.log('\n📝 Creating menu items...');
+    
+    const homeMenuItem = await MenuItem.create({
+      site_id: defaultSite._id,
+      menu_id: mainMenu._id,
+      custom_label: 'Home',
+      type: 'post',
+      object_id: homePage._id,
+      custom_url: '/',
+      menu_order: 1,
+      target: '_self',
+    });
+
+    const aboutMenuItem = await MenuItem.create({
+      site_id: defaultSite._id,
+      menu_id: mainMenu._id,
+      custom_label: 'About',
+      type: 'post',
+      object_id: aboutPage._id,
+      custom_url: '/about',
+      menu_order: 2,
+      target: '_self',
+    });
+
+    const blogMenuItem = await MenuItem.create({
+      site_id: defaultSite._id,
+      menu_id: mainMenu._id,
+      custom_label: 'Blog',
+      type: 'custom',
+      custom_url: '/blog',
+      menu_order: 3,
+      target: '_self',
+    });
+
+    const contactMenuItem = await MenuItem.create({
+      site_id: defaultSite._id,
+      menu_id: mainMenu._id,
+      custom_label: 'Contact',
+      type: 'post',
+      object_id: contactPage._id,
+      custom_url: '/contact',
+      menu_order: 4,
+      target: '_self',
+    });
+
+    // Footer menu items
+    const privacyMenuItem = await MenuItem.create({
+      site_id: defaultSite._id,
+      menu_id: footerMenu._id,
+      custom_label: 'Privacy Policy',
+      type: 'custom',
+      custom_url: '/privacy',
+      menu_order: 1,
+      target: '_self',
+    });
+
+    const termsMenuItem = await MenuItem.create({
+      site_id: defaultSite._id,
+      menu_id: footerMenu._id,
+      custom_label: 'Terms of Service',
+      type: 'custom',
+      custom_url: '/terms',
+      menu_order: 2,
+      target: '_self',
+    });
+
+    console.log('✅ Created 6 menu items');
+
+    // Create menu locations (theme location definitions)
+    console.log('\n📝 Creating menu locations...');
+    
+    await MenuLocation.create({
+      site_id: defaultSite._id,
+      name: 'header',
+      display_name: 'Header Menu',
+      description: 'Primary header navigation',
+    });
+
+    await MenuLocation.create({
+      site_id: defaultSite._id,
+      name: 'footer',
+      display_name: 'Footer Menu',
+      description: 'Footer navigation',
+    });
+
+    console.log('✅ Created 2 menu locations');
+
+    // Create sample user meta (user preferences)
+    console.log('\n📝 Creating sample user meta...');
+    
+    await UserMeta.create({
+      user_id: siteAdmin._id,
+      site_id: defaultSite._id,
+      meta_key: 'dashboard_layout',
+      meta_value: 'grid',
+    });
+
+    await UserMeta.create({
+      user_id: siteAdmin._id,
+      site_id: defaultSite._id,
+      meta_key: 'items_per_page',
+      meta_value: '25',
+    });
+
+    console.log('✅ Created sample user meta');
+
+    // Create sample media folder
+    console.log('\n📝 Creating sample media folder...');
+    
+    const imagesFolder = await MediaFolder.create({
+      site_id: defaultSite._id,
+      name: 'Images',
+      parent_id: null,
+    });
+
+    console.log('✅ Created sample media folder');
+
+    // Summary
     console.log('\n✨ Database initialization complete!');
     console.log('\n📋 Summary:');
     console.log(`   Roles: ${await Role.countDocuments()}`);
     console.log(`   Users: ${await User.countDocuments()}`);
     console.log(`   Sites: ${await Site.countDocuments()}`);
     console.log(`   Site Users: ${await SiteUser.countDocuments()}`);
-    console.log(`   Settings: ${await Setting.countDocuments()}`);
+    console.log(`   Global Settings: ${await GlobalSetting.countDocuments()}`);
+    console.log(`   Site Settings: ${await Setting.countDocuments()}`);
+    console.log(`   User Meta: ${await UserMeta.countDocuments()}`);
+    console.log(`   Activity Log: ${await ActivityLog.countDocuments()} (empty on init)`);
     console.log(`   Post Types: ${await PostType.countDocuments()}`);
     console.log(`   Taxonomies: ${await Taxonomy.countDocuments()}`);
+    console.log(`   Terms: ${await Term.countDocuments()}`);
+    console.log(`   Posts/Pages: ${await Post.countDocuments()}`);
+    console.log(`   Menus: ${await Menu.countDocuments()}`);
+    console.log(`   Menu Items: ${await MenuItem.countDocuments()}`);
+    console.log(`   Menu Locations: ${await MenuLocation.countDocuments()}`);
+    console.log(`   Media Folders: ${await MediaFolder.countDocuments()}`);
     
+    console.log('\n🎉 Your Next CMS installation is ready!');
     console.log('\n🚀 Next steps:');
     console.log('   1. Start the application: npm run dev');
     console.log('   2. Login at http://localhost:3000/admin/login');
-    console.log('   3. Use the credentials above');
-    console.log('   4. Change the password immediately!');
+    console.log('');
+    console.log('   👑 Super Admin Access (for site management):');
+    console.log('      Username: superadmin');
+    console.log('      Password: SuperAdmin123!');
+    console.log('');
+    console.log('   👤 Site Admin Access (for content management):');
+    console.log('      Username: admin');
+    console.log('      Password: Admin123!');
+    console.log('');
+    console.log('   ⚠️  CHANGE BOTH PASSWORDS IMMEDIATELY!');
+    console.log('\n📚 Check out these pages:');
+    console.log('   • Home: http://localhost:3000');
+    console.log('   • About: http://localhost:3000/about');
+    console.log('   • Blog: http://localhost:3000/blog');
+    console.log('   • Contact: http://localhost:3000/contact');
 
   } catch (error) {
     console.error('❌ Error initializing database:', error);
@@ -316,4 +653,3 @@ async function initializeDatabase() {
 
 // Run the initialization
 initializeDatabase();
-

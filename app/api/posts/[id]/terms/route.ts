@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import db, { getSiteTable } from '@/lib/db';
-import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import connectDB from '@/lib/mongodb';
+import { Term, PostTerm, Taxonomy } from '@/lib/models';
 
 // Get terms for a specific post
 export async function GET(
@@ -10,38 +10,50 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    await connectDB();
+    
     const session = await getServerSession(authOptions);
-    const siteId = (session?.user as any)?.currentSiteId || 1;
     
-    const termsTable = getSiteTable(siteId, 'terms');
-    const termRelationshipsTable = getSiteTable(siteId, 'term_relationships');
-    const taxonomiesTable = getSiteTable(siteId, 'taxonomies');
-    const mediaTable = getSiteTable(siteId, 'media');
-    
-    const searchParams = request.nextUrl.searchParams;
-    const taxonomyId = searchParams.get('taxonomy_id');
-
-    let query = `
-      SELECT t.*, tax.name as taxonomy_name, tax.hierarchical,
-             m.url as image_url, m.sizes as image_sizes
-      FROM ${termsTable} t
-      INNER JOIN ${termRelationshipsTable} tr ON tr.term_id = t.id
-      INNER JOIN ${taxonomiesTable} tax ON t.taxonomy_id = tax.id
-      LEFT JOIN ${mediaTable} m ON t.image_id = m.id
-      WHERE tr.post_id = ?
-    `;
-    const queryParams: any[] = [params.id];
-
-    if (taxonomyId) {
-      query += ' AND t.taxonomy_id = ?';
-      queryParams.push(taxonomyId);
+    // Validate ID format
+    if (!/^[0-9a-fA-F]{24}$/.test(params.id)) {
+      return NextResponse.json({ error: 'Invalid post ID format' }, { status: 400 });
     }
 
-    query += ' ORDER BY t.name ASC';
+    const siteId = (session?.user as any)?.currentSiteId;
+    
+    const searchParams = request.nextUrl.searchParams;
+    const taxonomyName = searchParams.get('taxonomy');
 
-    const [rows] = await db.query<RowDataPacket[]>(query, queryParams);
+    // Get post-term relationships
+    const postTermQuery: any = { post_id: params.id };
+    if (taxonomyName) {
+      postTermQuery.taxonomy = taxonomyName;
+    }
 
-    return NextResponse.json({ terms: rows });
+    const postTerms = await PostTerm.find(postTermQuery).lean();
+    const termIds = postTerms.map(pt => pt.term_id);
+
+    if (termIds.length === 0) {
+      return NextResponse.json({ terms: [] });
+    }
+
+    // Get full term details
+    const terms = await Term.find({
+      _id: { $in: termIds },
+      site_id: siteId,
+    })
+    .sort({ name: 1 })
+    .lean();
+
+    // Format for UI
+    const formattedTerms = terms.map((term: any) => ({
+      ...term,
+      id: term._id.toString(),
+      taxonomy_name: term.taxonomy,
+      _id: undefined,
+    }));
+
+    return NextResponse.json({ terms: formattedTerms });
   } catch (error) {
     console.error('Error fetching post terms:', error);
     return NextResponse.json({ error: 'Failed to fetch post terms' }, { status: 500 });
@@ -54,44 +66,94 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
+    await connectDB();
+    
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const siteId = (session.user as any).currentSiteId || 1;
-    const termsTable = getSiteTable(siteId, 'terms');
-    const termRelationshipsTable = getSiteTable(siteId, 'term_relationships');
+    // Validate ID format
+    if (!/^[0-9a-fA-F]{24}$/.test(params.id)) {
+      return NextResponse.json({ error: 'Invalid post ID format' }, { status: 400 });
+    }
+
+    const siteId = (session.user as any).currentSiteId;
 
     const body = await request.json();
-    const { term_ids, taxonomy_id } = body;
+    const { term_ids, taxonomy, taxonomy_id } = body;
 
-    if (!taxonomy_id) {
-      return NextResponse.json({ error: 'Taxonomy ID is required' }, { status: 400 });
+    // Determine taxonomy name
+    let taxonomyName = taxonomy;
+    if (!taxonomyName && taxonomy_id && /^[0-9a-fA-F]{24}$/.test(taxonomy_id)) {
+      const taxonomyDoc = await Taxonomy.findById(taxonomy_id).lean();
+      if (taxonomyDoc) {
+        taxonomyName = taxonomyDoc.name;
+      }
+    }
+
+    if (!taxonomyName) {
+      return NextResponse.json({ error: 'Taxonomy is required' }, { status: 400 });
     }
 
     // Remove existing relationships for this taxonomy
-    await db.query<ResultSetHeader>(
-      `DELETE FROM ${termRelationshipsTable} 
-       WHERE post_id = ? 
-       AND term_id IN (SELECT id FROM ${termsTable} WHERE taxonomy_id = ?)`,
-      [params.id, taxonomy_id]
-    );
+    await PostTerm.deleteMany({
+      post_id: params.id,
+      taxonomy: taxonomyName,
+    });
 
     // Add new relationships
     if (term_ids && term_ids.length > 0) {
-      const values = term_ids.map((termId: number) => [params.id, termId]);
-      await db.query<ResultSetHeader>(
-        `INSERT INTO ${termRelationshipsTable} (post_id, term_id) VALUES ?`,
-        [values]
-      );
+      // Validate all term IDs
+      const validTermIds = term_ids.filter((id: string) => /^[0-9a-fA-F]{24}$/.test(id));
+      
+      if (validTermIds.length > 0) {
+        // Verify terms exist and belong to this taxonomy
+        const terms = await Term.find({
+          _id: { $in: validTermIds },
+          site_id: siteId,
+          taxonomy: taxonomyName,
+        }).lean();
 
-      // Update term counts
-      await db.query<ResultSetHeader>(
-        `UPDATE ${termsTable} 
-         SET count = (SELECT COUNT(*) FROM ${termRelationshipsTable} WHERE term_id = ${termsTable}.id)
-         WHERE taxonomy_id = ?`,
-        [taxonomy_id]
+        if (terms.length > 0) {
+          // Create post-term relationships
+          const postTermDocs = terms.map((term: any, index) => ({
+            site_id: siteId,
+            post_id: params.id,
+            term_id: term._id.toString(),
+            taxonomy: taxonomyName,
+            order: index,
+          }));
+
+          await PostTerm.insertMany(postTermDocs);
+
+          // Update term counts
+          const termCounts = await PostTerm.aggregate([
+            { $match: { taxonomy: taxonomyName } },
+            { $group: { _id: '$term_id', count: { $sum: 1 } } },
+          ]);
+
+          // Update each term's count
+          for (const tc of termCounts) {
+            await Term.findByIdAndUpdate(tc._id, { $set: { count: tc.count } });
+          }
+
+          // Reset count for terms not in the list
+          const countsMap = new Map(termCounts.map(tc => [tc._id, tc.count]));
+          const allTerms = await Term.find({ site_id: siteId, taxonomy: taxonomyName }).select('_id').lean();
+          for (const term of allTerms) {
+            const termId = term._id.toString();
+            if (!countsMap.has(termId)) {
+              await Term.findByIdAndUpdate(termId, { $set: { count: 0 } });
+            }
+          }
+        }
+      }
+    } else {
+      // If no terms provided, reset counts for all terms in this taxonomy
+      await Term.updateMany(
+        { site_id: siteId, taxonomy: taxonomyName },
+        { $set: { count: 0 } }
       );
     }
 
@@ -101,4 +163,3 @@ export async function PUT(
     return NextResponse.json({ error: 'Failed to update post terms' }, { status: 500 });
   }
 }
-

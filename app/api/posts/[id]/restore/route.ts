@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import { RowDataPacket, ResultSetHeader } from 'mysql2';
-import db, { getSiteTable } from '@/lib/db';
+import connectDB from '@/lib/mongodb';
+import { Post } from '@/lib/models';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function POST(
@@ -10,36 +10,38 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
+    await connectDB();
+    
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Validate ID format
+    if (!/^[0-9a-fA-F]{24}$/.test(params.id)) {
+      return NextResponse.json({ error: 'Invalid post ID format' }, { status: 400 });
+    }
+
     const userId = (session.user as any).id;
     const permissions = (session.user as any).permissions || {};
     const isSuperAdmin = (session.user as any)?.isSuperAdmin || false;
-    const siteId = (session.user as any).currentSiteId || 1;
-    
-    // Get site-prefixed table name
-    const postsTable = getSiteTable(siteId, 'posts');
+    const siteId = (session.user as any).currentSiteId;
 
     // Check if post exists and get author
-    const [existingPost] = await db.query<RowDataPacket[]>(
-      `SELECT author_id, post_type, status, title FROM ${postsTable} WHERE id = ?`,
-      [params.id]
-    );
+    const existingPost = await Post.findOne({
+      _id: params.id,
+      site_id: siteId,
+    });
 
-    if (existingPost.length === 0) {
+    if (!existingPost) {
       return NextResponse.json({ error: 'Post not found' }, { status: 404 });
     }
 
-    const post = existingPost[0];
-
-    if (post.status !== 'trash') {
+    if (existingPost.status !== 'trash') {
       return NextResponse.json({ error: 'Post is not in trash' }, { status: 400 });
     }
 
-    const isOwner = post.author_id === Number.parseInt(userId);
+    const isOwner = existingPost.author_id?.toString() === userId;
     const canDelete = isSuperAdmin || permissions.can_delete === true;
     const canDeleteOthers = isSuperAdmin || permissions.can_delete_others === true;
 
@@ -53,20 +55,20 @@ export async function POST(
     }
 
     // Restore post to draft status
-    await db.query<ResultSetHeader>(
-      `UPDATE ${postsTable} SET status = ? WHERE id = ?`,
-      ['draft', params.id]
+    await Post.findOneAndUpdate(
+      { _id: params.id, site_id: siteId },
+      { $set: { status: 'draft' } }
     );
 
     // Log activity
     await logActivity({
-      userId: Number.parseInt(userId),
+      userId,
       action: 'post_restored',
       entityType: 'post',
       siteId,
-      entityId: Number.parseInt(params.id),
-      entityName: post.title,
-      details: `Restored ${post.post_type} from trash: "${post.title}"`,
+      entityId: params.id,
+      entityName: existingPost.title,
+      details: `Restored ${existingPost.post_type} from trash: "${existingPost.title}"`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
     });
@@ -77,4 +79,3 @@ export async function POST(
     return NextResponse.json({ error: 'Failed to restore post' }, { status: 500 });
   }
 }
-

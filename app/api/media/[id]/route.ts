@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import db, { getSiteTable } from '@/lib/db';
-import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { connectDB } from '@/lib/db';
+import { Media } from '@/lib/models';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import mongoose from 'mongoose';
 
 export async function GET(
   request: NextRequest,
@@ -11,19 +12,29 @@ export async function GET(
 ) {
   try {
     const session = await getServerSession(authOptions);
-    const siteId = (session?.user as any)?.currentSiteId || 1;
-    const mediaTable = getSiteTable(siteId, 'media');
-    
-    const [rows] = await db.query<RowDataPacket[]>(
-      `SELECT * FROM ${mediaTable} WHERE id = ?`,
-      [params.id]
-    );
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
-    if (rows.length === 0) {
+    if (!mongoose.Types.ObjectId.isValid(params.id)) {
+      return NextResponse.json({ error: 'Invalid media ID' }, { status: 400 });
+    }
+
+    await connectDB();
+
+    const media = await Media.findById(params.id).populate('uploaded_by', 'username email').lean();
+
+    if (!media) {
       return NextResponse.json({ error: 'Media not found' }, { status: 404 });
     }
 
-    return NextResponse.json({ media: rows[0] });
+    return NextResponse.json({ 
+      media: {
+        ...media,
+        id: media._id.toString(),
+        uploaded_by_name: (media.uploaded_by as any)?.username || 'Unknown',
+      }
+    });
   } catch (error) {
     console.error('Error fetching media:', error);
     return NextResponse.json({ error: 'Failed to fetch media' }, { status: 500 });
@@ -41,58 +52,50 @@ export async function PUT(
     }
 
     const userId = (session.user as any).id;
-    const siteId = (session.user as any).currentSiteId || 1;
-    const mediaTable = getSiteTable(siteId, 'media');
+    const siteId = (session.user as any).currentSiteId;
+
+    if (!mongoose.Types.ObjectId.isValid(params.id)) {
+      return NextResponse.json({ error: 'Invalid media ID' }, { status: 400 });
+    }
 
     const body = await request.json();
-    const { title, alt_text } = body;
+    const { alt_text, caption, folder_id } = body;
 
-    // Get current values before update
-    const [current] = await db.query<RowDataPacket[]>(
-      `SELECT * FROM ${mediaTable} WHERE id = ?`,
-      [params.id]
+    await connectDB();
+
+    const updatedMedia = await Media.findByIdAndUpdate(
+      params.id,
+      {
+        alt_text: alt_text || '',
+        caption: caption || '',
+        folder_id: folder_id && mongoose.Types.ObjectId.isValid(folder_id) ? new mongoose.Types.ObjectId(folder_id) : null,
+      },
+      { new: true }
     );
 
-    if (current.length === 0) {
+    if (!updatedMedia) {
       return NextResponse.json({ error: 'Media not found' }, { status: 404 });
     }
 
-    const before = {
-      title: current[0].title || null,
-      alt_text: current[0].alt_text || null,
-    };
-
-    const after = {
-      title: title || null,
-      alt_text: alt_text || null,
-    };
-
-    await db.query<ResultSetHeader>(
-      `UPDATE ${mediaTable} SET title = ?, alt_text = ? WHERE id = ?`,
-      [title || null, alt_text || null, params.id]
-    );
-
-    const [updated] = await db.query<RowDataPacket[]>(
-      `SELECT * FROM ${mediaTable} WHERE id = ?`,
-      [params.id]
-    );
-
-    // Log activity with before/after values
+    // Log activity
     await logActivity({
       userId,
-      action: 'media_updated',
-      entityType: 'media',
-      entityId: Number.parseInt(params.id),
-      entityName: updated[0].original_name || updated[0].filename,
-      details: `Updated media: ${updated[0].original_name || updated[0].filename}`,
-      changesBefore: before,
-      changesAfter: after,
+      action: 'media_updated' as any,
+      entityType: 'media' as any,
+      entityId: params.id,
+      entityName: updatedMedia.original_filename,
+      details: `Updated media: ${updatedMedia.original_filename}`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
       siteId,
     });
 
-    return NextResponse.json({ media: updated[0] });
+    return NextResponse.json({ 
+      media: {
+        ...updatedMedia.toObject(),
+        id: updatedMedia._id.toString(),
+      }
+    });
   } catch (error) {
     console.error('Error updating media:', error);
     return NextResponse.json({ error: 'Failed to update media' }, { status: 500 });
@@ -109,48 +112,43 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const permissions = (session.user as any).permissions || {};
     const userId = (session.user as any).id;
-    const siteId = (session.user as any).currentSiteId || 1;
-    const mediaTable = getSiteTable(siteId, 'media');
-    
-    if (!permissions.manage_media) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    const siteId = (session.user as any).currentSiteId;
+
+    if (!mongoose.Types.ObjectId.isValid(params.id)) {
+      return NextResponse.json({ error: 'Invalid media ID' }, { status: 400 });
     }
 
-    // Get media info before deleting
-    const [media] = await db.query<RowDataPacket[]>(
-      `SELECT * FROM ${mediaTable} WHERE id = ?`,
-      [params.id]
-    );
+    await connectDB();
 
-    if (media.length === 0) {
+    const media = await Media.findById(params.id).lean();
+
+    if (!media) {
       return NextResponse.json({ error: 'Media not found' }, { status: 404 });
     }
 
-    // Soft delete - move to trash
-    await db.execute<ResultSetHeader>(
-      `UPDATE ${mediaTable} SET deleted_at = NOW() WHERE id = ?`,
-      [params.id]
-    );
+    // Move to trash (soft delete)
+    await Media.findByIdAndUpdate(params.id, {
+      status: 'trash',
+      deleted_at: new Date(),
+    });
 
     // Log activity
     await logActivity({
       userId,
-      action: 'media_trashed',
-      entityType: 'media',
-      entityId: Number.parseInt(params.id),
-      entityName: media[0].original_name || media[0].filename,
-      details: `Moved media to trash: ${media[0].original_name || media[0].filename}`,
+      action: 'media_deleted' as any,
+      entityType: 'media' as any,
+      entityId: params.id,
+      entityName: media.original_filename,
+      details: `Moved media to trash: ${media.original_filename}`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
       siteId,
     });
 
-    return NextResponse.json({ message: 'Media moved to trash successfully' });
+    return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error deleting media:', error);
     return NextResponse.json({ error: 'Failed to delete media' }, { status: 500 });
   }
 }
-

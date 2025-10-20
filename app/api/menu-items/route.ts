@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import db, { getSiteTable } from '@/lib/db';
-import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { connectDB } from '@/lib/db';
+import { MenuItem, MenuItemMeta, PostType, Taxonomy, Post, Term } from '@/lib/models';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import mongoose from 'mongoose';
 
 export async function GET(request: NextRequest) {
   try {
@@ -18,14 +19,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const siteId = (session.user as any).currentSiteId || 1;
-    const menuItemsTable = getSiteTable(siteId, 'menu_items');
-    const menuItemMetaTable = getSiteTable(siteId, 'menu_item_meta');
-    const postTypesTable = getSiteTable(siteId, 'post_types');
-    const taxonomiesTable = getSiteTable(siteId, 'taxonomies');
-    const postsTable = getSiteTable(siteId, 'posts');
-    const termsTable = getSiteTable(siteId, 'terms');
-
     const searchParams = request.nextUrl.searchParams;
     const menuId = searchParams.get('menu_id');
 
@@ -33,43 +26,49 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'menu_id is required' }, { status: 400 });
     }
 
-    const [rows] = await db.query<RowDataPacket[]>(
-      `SELECT mi.*,
-              pt.label as post_type_label,
-              tax.label as taxonomy_label,
-              p.title as post_title,
-              terms.name as term_name,
-              tax_for_term.label as term_taxonomy_label
-       FROM ${menuItemsTable} mi
-       LEFT JOIN ${postTypesTable} pt ON mi.type = 'post_type' AND mi.object_id = pt.id
-       LEFT JOIN ${taxonomiesTable} tax ON mi.type = 'taxonomy' AND mi.object_id = tax.id
-       LEFT JOIN ${postsTable} p ON mi.type = 'post' AND mi.object_id = p.id
-       LEFT JOIN ${termsTable} terms ON mi.type = 'term' AND mi.object_id = terms.id
-       LEFT JOIN ${taxonomiesTable} tax_for_term ON terms.taxonomy_id = tax_for_term.id
-       WHERE mi.menu_id = ? 
-       ORDER BY mi.menu_order ASC, mi.id ASC`,
-      [menuId]
-    );
-
-    // Fetch meta data for each item (if items exist)
-    if (rows.length > 0) {
-      const [metaRows] = await db.query<RowDataPacket[]>(
-        `SELECT menu_item_id, meta_key, meta_value 
-         FROM ${menuItemMetaTable} 
-         WHERE menu_item_id IN (?)`,
-        [rows.map((r: any) => r.id)]
-      );
-
-      // Attach meta to items
-      rows.forEach((item: any) => {
-        const itemMeta = (metaRows as any[]).filter((m: any) => m.menu_item_id === item.id);
-        itemMeta.forEach((m: any) => {
-          item[m.meta_key] = m.meta_value;
-        });
-      });
+    if (!mongoose.Types.ObjectId.isValid(menuId)) {
+      return NextResponse.json({ error: 'Invalid menu ID' }, { status: 400 });
     }
 
-    return NextResponse.json({ items: rows });
+    await connectDB();
+
+    const items = await MenuItem.find({ menu_id: new mongoose.Types.ObjectId(menuId) })
+      .sort({ menu_order: 1, _id: 1 })
+      .lean();
+
+    // Fetch additional data based on type
+    const enrichedItems = await Promise.all(items.map(async (item) => {
+      const enriched: any = { ...item, id: item._id.toString() };
+
+      // Fetch related object data based on type
+      if (item.type === 'post_type' && item.object_id) {
+        const postType = await PostType.findById(item.object_id).lean();
+        enriched.post_type_label = postType?.label;
+      } else if (item.type === 'taxonomy' && item.object_id) {
+        const taxonomy = await Taxonomy.findById(item.object_id).lean();
+        enriched.taxonomy_label = taxonomy?.label;
+      } else if (item.type === 'post' && item.object_id) {
+        const post = await Post.findById(item.object_id).lean();
+        enriched.post_title = post?.title;
+      } else if (item.type === 'term' && item.object_id) {
+        const term = await Term.findById(item.object_id).lean();
+        enriched.term_name = term?.name;
+        if (term?.taxonomy_id) {
+          const taxonomy = await Taxonomy.findById(term.taxonomy_id).lean();
+          enriched.term_taxonomy_label = taxonomy?.label;
+        }
+      }
+
+      // Fetch meta data for this item
+      const metaItems = await MenuItemMeta.find({ menu_item_id: item._id }).lean();
+      metaItems.forEach((meta) => {
+        enriched[meta.meta_key] = meta.meta_value;
+      });
+
+      return enriched;
+    }));
+
+    return NextResponse.json({ items: enrichedItems });
   } catch (error) {
     console.error('Error fetching menu items:', error);
     return NextResponse.json({ error: 'Failed to fetch menu items' }, { status: 500 });
@@ -89,14 +88,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const siteId = (session.user as any).currentSiteId || 1;
-    const menuItemsTable = getSiteTable(siteId, 'menu_items');
+    const siteId = (session.user as any).currentSiteId;
 
     const body = await request.json();
     const { menu_id, parent_id, type, object_id, post_type, custom_url, custom_label, menu_order, target } = body;
 
     if (!menu_id || !type) {
       return NextResponse.json({ error: 'menu_id and type are required' }, { status: 400 });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(menu_id)) {
+      return NextResponse.json({ error: 'Invalid menu ID' }, { status: 400 });
     }
 
     if (type === 'custom' && !custom_url) {
@@ -107,16 +109,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'object_id is required for this type' }, { status: 400 });
     }
 
-    const [result] = await db.query<ResultSetHeader>(
-      `INSERT INTO ${menuItemsTable} (menu_id, parent_id, type, object_id, post_type, custom_url, custom_label, menu_order, target) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [menu_id, parent_id || null, type, object_id || null, post_type || null, custom_url || null, custom_label || null, menu_order || 0, target || '_self']
-    );
+    // Validate object_id if provided
+    if (object_id && !mongoose.Types.ObjectId.isValid(object_id)) {
+      return NextResponse.json({ error: 'Invalid object ID' }, { status: 400 });
+    }
 
-    const [newItem] = await db.query<RowDataPacket[]>(
-      `SELECT * FROM ${menuItemsTable} WHERE id = ?`,
-      [result.insertId]
-    );
+    // Validate parent_id if provided
+    if (parent_id && !mongoose.Types.ObjectId.isValid(parent_id)) {
+      return NextResponse.json({ error: 'Invalid parent ID' }, { status: 400 });
+    }
+
+    await connectDB();
+
+    const newItem = await MenuItem.create({
+      menu_id: new mongoose.Types.ObjectId(menu_id),
+      parent_id: parent_id ? new mongoose.Types.ObjectId(parent_id) : null,
+      type,
+      object_id: object_id ? new mongoose.Types.ObjectId(object_id) : null,
+      post_type: post_type || null,
+      custom_url: custom_url || null,
+      custom_label: custom_label || null,
+      menu_order: menu_order || 0,
+      target: target || '_self',
+    });
 
     // Log activity
     const userId = (session.user as any).id;
@@ -124,7 +139,7 @@ export async function POST(request: NextRequest) {
       userId,
       action: 'menu_item_created' as any,
       entityType: 'menu_item' as any,
-      entityId: result.insertId,
+      entityId: newItem._id.toString(),
       entityName: custom_label || `${type} item`,
       details: `Added menu item to menu ID ${menu_id}`,
       ipAddress: getClientIp(request),
@@ -132,10 +147,14 @@ export async function POST(request: NextRequest) {
       siteId,
     });
 
-    return NextResponse.json({ item: newItem[0] });
+    return NextResponse.json({ 
+      item: {
+        ...newItem.toObject(),
+        id: newItem._id.toString(),
+      }
+    });
   } catch (error) {
     console.error('Error creating menu item:', error);
     return NextResponse.json({ error: 'Failed to create menu item' }, { status: 500 });
   }
 }
-

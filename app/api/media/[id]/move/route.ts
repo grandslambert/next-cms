@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import db, { getSiteTable } from '@/lib/db';
-import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { connectDB } from '@/lib/db';
+import { Media } from '@/lib/models';
+import mongoose from 'mongoose';
 
 export async function PUT(
   request: NextRequest,
@@ -14,55 +15,37 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const permissions = (session.user as any).permissions || {};
-    if (!permissions.manage_media) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (!mongoose.Types.ObjectId.isValid(params.id)) {
+      return NextResponse.json({ error: 'Invalid media ID' }, { status: 400 });
     }
-
-    const siteId = (session.user as any).currentSiteId || 1;
-    const mediaTable = getSiteTable(siteId, 'media');
-    const foldersTable = getSiteTable(siteId, 'media_folders');
 
     const body = await request.json();
     const { folder_id } = body;
 
-    // Check if media item exists
-    const [media] = await db.query<RowDataPacket[]>(
-      `SELECT * FROM ${mediaTable} WHERE id = ?`,
-      [params.id]
+    if (folder_id && !mongoose.Types.ObjectId.isValid(folder_id)) {
+      return NextResponse.json({ error: 'Invalid folder ID' }, { status: 400 });
+    }
+
+    await connectDB();
+
+    const media = await Media.findByIdAndUpdate(
+      params.id,
+      {
+        folder_id: folder_id ? new mongoose.Types.ObjectId(folder_id) : null,
+      },
+      { new: true }
     );
 
-    if (media.length === 0) {
+    if (!media) {
       return NextResponse.json({ error: 'Media not found' }, { status: 404 });
     }
 
-    // If folder_id is provided, verify it exists
-    if (folder_id) {
-      const [folder] = await db.query<RowDataPacket[]>(
-        `SELECT * FROM ${foldersTable} WHERE id = ?`,
-        [folder_id]
-      );
-
-      if (folder.length === 0) {
-        return NextResponse.json({ error: 'Folder not found' }, { status: 404 });
-      }
-    }
-
-    // Move media to folder (or root if folder_id is null)
-    await db.execute<ResultSetHeader>(
-      `UPDATE ${mediaTable} SET folder_id = ? WHERE id = ?`,
-      [folder_id || null, params.id]
-    );
-
-    const [updated] = await db.query<RowDataPacket[]>(
-      `SELECT * FROM ${mediaTable} WHERE id = ?`,
-      [params.id]
-    );
-
-    return NextResponse.json({ media: updated[0] });
+    return NextResponse.json({ 
+      success: true, 
+      media: { ...media.toObject(), id: media._id.toString() } 
+    });
   } catch (error) {
     console.error('Error moving media:', error);
     return NextResponse.json({ error: 'Failed to move media' }, { status: 500 });
   }
 }
-

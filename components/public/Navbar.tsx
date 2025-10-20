@@ -1,14 +1,23 @@
 import Link from 'next/link';
-import db from '@/lib/db';
-import { RowDataPacket } from 'mysql2';
+import { connectDB } from '@/lib/db';
+import { Setting } from '@/lib/models';
+import { getDefaultSite } from '@/lib/url-utils';
 import Menu from './Menu';
+import mongoose from 'mongoose';
 
 async function getSiteName() {
   try {
-    const [rows] = await db.query<RowDataPacket[]>(
-      "SELECT setting_value FROM settings WHERE setting_key = 'site_name'"
-    );
-    return rows[0]?.setting_value || 'Next CMS';
+    const site = await getDefaultSite();
+    if (!site) return 'Next CMS';
+
+    await connectDB();
+    
+    const setting = await Setting.findOne({
+      site_id: new mongoose.Types.ObjectId(site.id),
+      setting_key: 'site_name',
+    }).lean();
+
+    return setting?.setting_value || site.name || 'Next CMS';
   } catch {
     return 'Next CMS';
   }
@@ -34,4 +43,3 @@ export default async function Navbar() {
       </nav>
   );
 }
-

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import db, { getSiteTable } from '@/lib/db';
-import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { connectDB } from '@/lib/db';
+import { MediaFolder } from '@/lib/models';
+import mongoose from 'mongoose';
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,42 +12,24 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const permissions = (session.user as any).permissions || {};
-    const siteId = (session.user as any).currentSiteId || 1;
-    const mediaFoldersTable = getSiteTable(siteId, 'media_folders');
-    const mediaTable = getSiteTable(siteId, 'media');
-    
-    if (!permissions.manage_media) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    const siteId = (session.user as any).currentSiteId;
+
+    if (!siteId || !mongoose.Types.ObjectId.isValid(siteId)) {
+      return NextResponse.json({ error: 'Invalid site ID' }, { status: 400 });
     }
 
-    const searchParams = request.nextUrl.searchParams;
-    const parentId = searchParams.get('parent_id');
+    await connectDB();
 
-    let query = `
-      SELECT mf.*, 
-             COUNT(DISTINCT m.id) as file_count,
-             COUNT(DISTINCT sub.id) as subfolder_count
-      FROM ${mediaFoldersTable} mf
-      LEFT JOIN ${mediaTable} m ON m.folder_id = mf.id AND m.deleted_at IS NULL
-      LEFT JOIN ${mediaFoldersTable} sub ON sub.parent_id = mf.id
-    `;
-    const params: any[] = [];
+    const folders = await MediaFolder.find({ site_id: new mongoose.Types.ObjectId(siteId) })
+      .sort({ name: 1 })
+      .lean();
 
-    if (parentId) {
-      if (parentId === 'null' || parentId === '0') {
-        query += ' WHERE mf.parent_id IS NULL';
-      } else {
-        query += ' WHERE mf.parent_id = ?';
-        params.push(Number.parseInt(parentId));
-      }
-    }
+    const formattedFolders = folders.map((f) => ({
+      ...f,
+      id: f._id.toString(),
+    }));
 
-    query += ' GROUP BY mf.id ORDER BY mf.name ASC';
-
-    const [rows] = await db.query<RowDataPacket[]>(query, params);
-
-    return NextResponse.json({ folders: rows });
+    return NextResponse.json({ folders: formattedFolders });
   } catch (error) {
     console.error('Error fetching folders:', error);
     return NextResponse.json({ error: 'Failed to fetch folders' }, { status: 500 });
@@ -60,35 +43,34 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const permissions = (session.user as any).permissions || {};
-    const siteId = (session.user as any).currentSiteId || 1;
-    const mediaFoldersTable = getSiteTable(siteId, 'media_folders');
-    
-    if (!permissions.manage_media) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-
+    const siteId = (session.user as any).currentSiteId;
     const body = await request.json();
     const { name, parent_id } = body;
 
-    if (!name || name.trim() === '') {
-      return NextResponse.json({ error: 'Folder name is required' }, { status: 400 });
+    if (!name) {
+      return NextResponse.json({ error: 'name is required' }, { status: 400 });
     }
 
-    const [result] = await db.execute<ResultSetHeader>(
-      `INSERT INTO ${mediaFoldersTable} (name, parent_id) VALUES (?, ?)`,
-      [name.trim(), parent_id || null]
-    );
+    if (!siteId || !mongoose.Types.ObjectId.isValid(siteId)) {
+      return NextResponse.json({ error: 'Invalid site ID' }, { status: 400 });
+    }
 
-    const [newFolder] = await db.query<RowDataPacket[]>(
-      `SELECT * FROM ${mediaFoldersTable} WHERE id = ?`,
-      [result.insertId]
-    );
+    await connectDB();
 
-    return NextResponse.json({ folder: newFolder[0] }, { status: 201 });
+    const newFolder = await MediaFolder.create({
+      site_id: new mongoose.Types.ObjectId(siteId),
+      name,
+      parent_id: parent_id && mongoose.Types.ObjectId.isValid(parent_id) ? new mongoose.Types.ObjectId(parent_id) : null,
+    });
+
+    return NextResponse.json({ 
+      folder: {
+        ...newFolder.toObject(),
+        id: newFolder._id.toString(),
+      }
+    });
   } catch (error) {
     console.error('Error creating folder:', error);
     return NextResponse.json({ error: 'Failed to create folder' }, { status: 500 });
   }
 }
-

@@ -191,11 +191,17 @@ export default function Sidebar() {
   if (!isSuperAdmin && postTypesData?.postTypes) {
     postTypesData.postTypes.forEach((postType: any) => {
       const postTypePermission = `manage_posts_${postType.name}`;
-      if (permissions[postTypePermission]) {
+      
+      // User can see this post type if:
+      // 1. They have manage_posts_all (access to all post types), OR
+      // 2. They have the specific manage_posts_<posttype> permission
+      const hasAccess = permissions.manage_posts_all || permissions[postTypePermission];
+      
+      if (hasAccess && postType.show_in_dashboard !== false) {
         menuItems.push({
-          name: postType.label,
+          name: postType.labels?.plural_name || postType.label,
           href: `/admin/post-type/${postType.name}`,
-          icon: postType.icon || '📄',
+          icon: postType.menu_icon || '📄',
           position: postType.menu_position || 5,
           permission: postTypePermission,
         });
@@ -413,7 +419,7 @@ export default function Sidebar() {
           <span>Logout</span>
         </button>
         <div className="text-center text-xs text-gray-500 mt-2">
-          Next CMS v3.0.0
+          Next CMS v3.0.1
         </div>
       </div>
     </aside>

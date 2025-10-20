@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import db, { getSiteTable } from '@/lib/db';
-import { RowDataPacket } from 'mysql2';
+import { connectDB } from '@/lib/db';
+import { PostRevision } from '@/lib/models';
+import mongoose from 'mongoose';
 
 export async function GET(
   request: NextRequest,
@@ -14,48 +15,27 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const userId = (session.user as any).id;
-    const permissions = (session.user as any).permissions || {};
-    const isSuperAdmin = (session.user as any)?.isSuperAdmin || false;
-    const siteId = (session.user as any).currentSiteId || 1;
-    
-    // Get site-prefixed table names
-    const postsTable = getSiteTable(siteId, 'posts');
-    const postRevisionsTable = getSiteTable(siteId, 'post_revisions');
-
-    // Check if post exists and user has permission to view it
-    const [existingPost] = await db.query<RowDataPacket[]>(
-      `SELECT author_id, post_type FROM ${postsTable} WHERE id = ?`,
-      [params.id]
-    );
-
-    if (existingPost.length === 0) {
-      return NextResponse.json({ error: 'Post not found' }, { status: 404 });
+    if (!mongoose.Types.ObjectId.isValid(params.id)) {
+      return NextResponse.json({ error: 'Invalid post ID' }, { status: 400 });
     }
 
-    const post = existingPost[0];
-    const isOwner = post.author_id === Number.parseInt(userId);
-    const canManageOthers = isSuperAdmin || permissions.manage_others_posts === true;
+    await connectDB();
 
-    // Check if user can view this post's revisions
-    if (!isOwner && !canManageOthers) {
-      return NextResponse.json({ error: 'You can only view revisions of your own posts' }, { status: 403 });
-    }
+    const revisions = await PostRevision.find({ post_id: new mongoose.Types.ObjectId(params.id) })
+      .populate('author_id', 'username email')
+      .sort({ created_at: -1 })
+      .lean();
 
-    // Fetch revisions
-    const [revisions] = await db.query<RowDataPacket[]>(
-      `SELECT r.*, CONCAT(u.first_name, ' ', u.last_name) as author_name
-       FROM ${postRevisionsTable} r
-       LEFT JOIN users u ON r.author_id = u.id
-       WHERE r.post_id = ?
-       ORDER BY r.created_at DESC`,
-      [params.id]
-    );
+    // Format for UI compatibility
+    const formattedRevisions = revisions.map((rev) => ({
+      ...rev,
+      id: rev._id.toString(),
+      author_name: (rev.author_id as any)?.username || 'Unknown',
+    }));
 
-    return NextResponse.json({ revisions });
+    return NextResponse.json({ revisions: formattedRevisions });
   } catch (error) {
-    console.error('Error fetching revisions:', error);
-    return NextResponse.json({ error: 'Failed to fetch revisions' }, { status: 500 });
+    console.error('Error fetching post revisions:', error);
+    return NextResponse.json({ error: 'Failed to fetch post revisions' }, { status: 500 });
   }
 }
-

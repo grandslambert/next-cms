@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import db, { getSiteTable } from '@/lib/db';
-import { unlink } from 'node:fs/promises';
-import path from 'node:path';
-import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { connectDB } from '@/lib/db';
+import { Media } from '@/lib/models';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import mongoose from 'mongoose';
+import { unlink } from 'fs/promises';
+import path from 'path';
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,72 +15,66 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const permissions = (session.user as any).permissions || {};
-    if (!permissions.manage_media) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-
-    const siteId = (session.user as any).currentSiteId || 1;
-    const mediaTable = getSiteTable(siteId, 'media');
+    const userId = (session.user as any).id;
+    const siteId = (session.user as any).currentSiteId;
 
     const body = await request.json();
-    const { media_ids } = body;
+    const { ids } = body;
 
-    if (!media_ids || !Array.isArray(media_ids) || media_ids.length === 0) {
-      return NextResponse.json({ error: 'No media items selected' }, { status: 400 });
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return NextResponse.json({ error: 'ids array is required' }, { status: 400 });
     }
 
-    const placeholders = media_ids.map(() => '?').join(',');
+    // Validate all IDs
+    const invalidIds = ids.filter((id: string) => !mongoose.Types.ObjectId.isValid(id));
+    if (invalidIds.length > 0) {
+      return NextResponse.json({ error: 'Invalid media IDs found' }, { status: 400 });
+    }
 
-    // Get all media to delete files
-    const [mediaItems] = await db.query<RowDataPacket[]>(
-      `SELECT * FROM ${mediaTable} WHERE id IN (${placeholders}) AND deleted_at IS NOT NULL`,
-      media_ids
-    );
+    await connectDB();
 
-    let deletedCount = 0;
+    const objectIds = ids.map((id: string) => new mongoose.Types.ObjectId(id));
 
-    // Delete files from filesystem
-    for (const media of mediaItems) {
-      if (media.sizes) {
-        try {
-          const sizes = JSON.parse(media.sizes);
-          for (const [sizeName, sizeData] of Object.entries(sizes)) {
-            const sizeUrl = (sizeData as any).url;
-            const filepath = path.join(process.cwd(), 'public', sizeUrl);
-            try {
-              await unlink(filepath);
-            } catch (error) {
-              // File might not exist, continue
-            }
-          }
-        } catch (error) {
-          console.error('Error deleting sized files:', error);
-        }
-      } else {
-        // Old format - just delete main file
-        const filepath = path.join(process.cwd(), 'public', media.url);
-        try {
-          await unlink(filepath);
-        } catch (error) {
-          console.error('Error deleting file:', error);
-        }
+    // Get media files to delete
+    const mediaFiles = await Media.find({ 
+      _id: { $in: objectIds },
+      status: 'trash',
+    }).lean();
+
+    if (mediaFiles.length === 0) {
+      return NextResponse.json({ error: 'No media found in trash' }, { status: 404 });
+    }
+
+    // Delete physical files
+    for (const media of mediaFiles) {
+      try {
+        const filepath = path.join(process.cwd(), 'public', media.filepath);
+        await unlink(filepath);
+      } catch (fileError) {
+        console.error(`Error deleting file ${media.filepath}:`, fileError);
+        // Continue with next file
       }
-      deletedCount++;
     }
 
-    // Permanently delete from database
-    await db.execute<ResultSetHeader>(
-      `DELETE FROM ${mediaTable} WHERE id IN (${placeholders})`,
-      media_ids
-    );
+    // Delete from database
+    const result = await Media.deleteMany({ _id: { $in: objectIds } });
 
-    return NextResponse.json({ 
-      message: `Permanently deleted ${deletedCount} item${deletedCount !== 1 ? 's' : ''}` 
+    // Log activity
+    await logActivity({
+      userId,
+      action: 'media_bulk_permanently_deleted' as any,
+      entityType: 'media' as any,
+      entityId: 'multiple',
+      entityName: 'Multiple media files',
+      details: `Permanently deleted ${result.deletedCount} media file(s)`,
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+      siteId,
     });
+
+    return NextResponse.json({ success: true, deleted: result.deletedCount });
   } catch (error) {
     console.error('Error permanently deleting media:', error);
     return NextResponse.json({ error: 'Failed to permanently delete media' }, { status: 500 });
   }
 }
-

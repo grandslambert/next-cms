@@ -1,54 +1,47 @@
-import db from '@/lib/db';
-import { RowDataPacket } from 'mysql2';
+import { connectDB } from '@/lib/db';
+import { Site } from '@/lib/models';
 
-// Build full URL path including parent slugs for hierarchical posts
-export async function buildPostUrl(post: any, postType: any): Promise<string> {
+export async function getSiteByDomain(domain: string) {
   try {
-    const slugPath: string[] = [];
-    let currentId = post.id;
-    let iterations = 0;
-    const maxIterations = 10;
-    
-    // Build slug path from bottom to top
-    while (currentId && iterations < maxIterations) {
-      const [rows] = await db.query<RowDataPacket[]>(
-        'SELECT slug, parent_id FROM posts WHERE id = ?',
-        [currentId]
-      );
-      
-      if (rows.length === 0) break;
-      
-      slugPath.unshift(rows[0].slug);
-      currentId = rows[0].parent_id;
-      iterations++;
+    await connectDB();
+
+    const site = await Site.findOne({
+      $or: [
+        { domain },
+        { domain: domain.replace(/^www\./, '') },
+      ],
+    }).lean();
+
+    if (!site) {
+      return null;
     }
-    
-    // Build URL based on post type structure
-    const baseSlug = postType.slug || '';
-    const basePath = baseSlug ? `/${baseSlug}` : '';
-    
-    // Add date components if needed
-    if (post.published_at && postType.url_structure !== 'default') {
-      const date = new Date(post.published_at);
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      
-      switch (postType.url_structure) {
-        case 'year':
-          return `${basePath}/${year}/${slugPath.join('/')}`;
-        case 'year_month':
-          return `${basePath}/${year}/${month}/${slugPath.join('/')}`;
-        case 'year_month_day':
-          return `${basePath}/${year}/${month}/${day}/${slugPath.join('/')}`;
-      }
-    }
-    
-    // Default structure
-    return basePath ? `${basePath}/${slugPath.join('/')}` : `/${slugPath.join('/')}`;
+
+    return {
+      ...site,
+      id: site._id.toString(),
+    };
   } catch (error) {
-    console.error('Error building post URL:', error);
-    return '/';
+    console.error('Error fetching site by domain:', error);
+    return null;
   }
 }
 
+export async function getDefaultSite() {
+  try {
+    await connectDB();
+
+    const site = await Site.findOne().sort({ created_at: 1 }).lean();
+
+    if (!site) {
+      return null;
+    }
+
+    return {
+      ...site,
+      id: site._id.toString(),
+    };
+  } catch (error) {
+    console.error('Error fetching default site:', error);
+    return null;
+  }
+}

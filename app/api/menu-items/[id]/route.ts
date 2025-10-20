@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import db, { getSiteTable } from '@/lib/db';
-import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { connectDB } from '@/lib/db';
+import { MenuItem } from '@/lib/models';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import mongoose from 'mongoose';
 
 export async function PUT(
   request: NextRequest,
@@ -21,34 +22,40 @@ export async function PUT(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const siteId = (session.user as any).currentSiteId || 1;
-    const menuItemsTable = getSiteTable(siteId, 'menu_items');
+    const siteId = (session.user as any).currentSiteId;
+
+    if (!mongoose.Types.ObjectId.isValid(params.id)) {
+      return NextResponse.json({ error: 'Invalid menu item ID' }, { status: 400 });
+    }
 
     const body = await request.json();
     const { parent_id, post_type, custom_url, custom_label, menu_order, target } = body;
 
-    // Get current item BEFORE updating
-    const [beforeUpdate] = await db.query<RowDataPacket[]>(
-      `SELECT * FROM ${menuItemsTable} WHERE id = ?`,
-      [params.id]
-    );
+    // Validate parent_id if provided
+    if (parent_id && !mongoose.Types.ObjectId.isValid(parent_id)) {
+      return NextResponse.json({ error: 'Invalid parent ID' }, { status: 400 });
+    }
 
-    if (beforeUpdate.length === 0) {
+    await connectDB();
+
+    // Get current item BEFORE updating
+    const currentItem = await MenuItem.findById(params.id).lean();
+
+    if (!currentItem) {
       return NextResponse.json({ error: 'Menu item not found' }, { status: 404 });
     }
 
-    const currentItem = beforeUpdate[0];
-
-    await db.query<ResultSetHeader>(
-      `UPDATE ${menuItemsTable} 
-       SET parent_id = ?, post_type = ?, custom_url = ?, custom_label = ?, menu_order = ?, target = ?
-       WHERE id = ?`,
-      [parent_id || null, post_type || null, custom_url || null, custom_label || null, menu_order || 0, target || '_self', params.id]
-    );
-
-    const [updated] = await db.query<RowDataPacket[]>(
-      `SELECT * FROM ${menuItemsTable} WHERE id = ?`,
-      [params.id]
+    const updatedItem = await MenuItem.findByIdAndUpdate(
+      params.id,
+      {
+        parent_id: parent_id ? new mongoose.Types.ObjectId(parent_id) : null,
+        post_type: post_type || null,
+        custom_url: custom_url || null,
+        custom_label: custom_label || null,
+        menu_order: menu_order || 0,
+        target: target || '_self',
+      },
+      { new: true }
     );
 
     // Log activity
@@ -57,14 +64,14 @@ export async function PUT(
       userId,
       action: 'menu_item_updated' as any,
       entityType: 'menu_item' as any,
-      entityId: Number.parseInt(params.id),
+      entityId: params.id,
       entityName: custom_label || currentItem.custom_label || `${currentItem.type} item`,
       details: `Updated menu item`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
       siteId,
       changesBefore: {
-        parent_id: currentItem.parent_id,
+        parent_id: currentItem.parent_id?.toString() || null,
         post_type: currentItem.post_type,
         custom_url: currentItem.custom_url,
         custom_label: currentItem.custom_label,
@@ -72,16 +79,21 @@ export async function PUT(
         target: currentItem.target,
       },
       changesAfter: {
-        parent_id: updated[0].parent_id,
-        post_type: updated[0].post_type,
-        custom_url: updated[0].custom_url,
-        custom_label: updated[0].custom_label,
-        menu_order: updated[0].menu_order,
-        target: updated[0].target,
+        parent_id: updatedItem?.parent_id?.toString() || null,
+        post_type: updatedItem?.post_type,
+        custom_url: updatedItem?.custom_url,
+        custom_label: updatedItem?.custom_label,
+        menu_order: updatedItem?.menu_order,
+        target: updatedItem?.target,
       },
     });
 
-    return NextResponse.json({ item: updated[0] });
+    return NextResponse.json({ 
+      item: {
+        ...updatedItem?.toObject(),
+        id: updatedItem?._id.toString(),
+      }
+    });
   } catch (error) {
     console.error('Error updating menu item:', error);
     return NextResponse.json({ error: 'Failed to update menu item' }, { status: 500 });
@@ -104,20 +116,20 @@ export async function DELETE(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const siteId = (session.user as any).currentSiteId || 1;
-    const menuItemsTable = getSiteTable(siteId, 'menu_items');
+    const siteId = (session.user as any).currentSiteId;
 
-    // Get item details for logging
-    const [itemRows] = await db.query<RowDataPacket[]>(
-      `SELECT * FROM ${menuItemsTable} WHERE id = ?`,
-      [params.id]
-    );
-
-    if (itemRows.length === 0) {
-      return NextResponse.json({ error: 'Menu item not found' }, { status: 404 });
+    if (!mongoose.Types.ObjectId.isValid(params.id)) {
+      return NextResponse.json({ error: 'Invalid menu item ID' }, { status: 400 });
     }
 
-    const item = itemRows[0];
+    await connectDB();
+
+    // Get item details for logging
+    const item = await MenuItem.findById(params.id).lean();
+
+    if (!item) {
+      return NextResponse.json({ error: 'Menu item not found' }, { status: 404 });
+    }
 
     // Log activity before deleting
     const userId = (session.user as any).id;
@@ -125,15 +137,15 @@ export async function DELETE(
       userId,
       action: 'menu_item_deleted' as any,
       entityType: 'menu_item' as any,
-      entityId: Number.parseInt(params.id),
+      entityId: params.id,
       entityName: item.custom_label || `${item.type} item`,
-      details: `Deleted menu item from menu ID ${item.menu_id}`,
+      details: `Deleted menu item from menu ID ${item.menu_id.toString()}`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
       siteId,
     });
 
-    await db.query<ResultSetHeader>(`DELETE FROM ${menuItemsTable} WHERE id = ?`, [params.id]);
+    await MenuItem.findByIdAndDelete(params.id);
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -141,4 +153,3 @@ export async function DELETE(
     return NextResponse.json({ error: 'Failed to delete menu item' }, { status: 500 });
   }
 }
-

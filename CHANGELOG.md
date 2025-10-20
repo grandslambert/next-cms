@@ -5,6 +5,22 @@ All notable changes to Next CMS will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.1] - 2025-10-20
+
+### Fixed
+
+- **Dependencies**
+  - Removed `mysql2` package - all code fully migrated to MongoDB
+  
+- **Post Type Support Configuration**
+  - Fixed default support arrays for Posts and Pages to include all features (`title`, `editor`, `thumbnail`, `excerpt`, `comments`, `custom_fields`, `author`)
+  - Fixed TypeScript errors in post type API routes with proper type casting for MongoDB lean queries
+  - Updated database initialization script to ensure post editor displays all UI components
+
+See [changelog/v3.0.1.md](changelog/v3.0.1.md) for details.
+
+---
+
 ## [3.0.0] - 2025-10-20
 
 ### 🚨 BREAKING CHANGES

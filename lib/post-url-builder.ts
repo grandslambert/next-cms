@@ -1,89 +1,61 @@
-import db, { getSiteTable } from '@/lib/db';
-import { RowDataPacket } from 'mysql2';
+import { connectDB } from '@/lib/db';
+import { Post, PostType } from '@/lib/models';
+import mongoose from 'mongoose';
 
-// Helper function to build hierarchical slug path
-async function buildHierarchicalSlugPath(postId: number, siteId: number = 1): Promise<string> {
-  const slugs: string[] = [];
-  let currentId: number | null = postId;
-  const postsTable = getSiteTable(siteId, 'posts');
+export async function buildPostUrl(postId: string, siteId: string): Promise<string> {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(postId) || !mongoose.Types.ObjectId.isValid(siteId)) {
+      return '#';
+    }
 
-  while (currentId) {
-    const [rows] = await db.query<RowDataPacket[]>(
-      `SELECT slug, parent_id FROM ${postsTable} WHERE id = ?`,
-      [currentId]
-    );
+    await connectDB();
 
-    if (!rows.length) break;
+    const post = await Post.findById(postId).lean();
+    if (!post) {
+      return '#';
+    }
 
-    const post = rows[0] as any;
-    slugs.unshift(post.slug);
-    currentId = post.parent_id;
+    const postType = await PostType.findOne({
+      site_id: new mongoose.Types.ObjectId(siteId),
+      name: post.post_type,
+    }).lean();
+
+    // Build hierarchical slug path
+    const slugPath: string[] = [post.slug];
+    let currentParentId = post.parent_id;
+    let iterations = 0;
+
+    while (currentParentId && iterations < 10) {
+      const parent = await Post.findById(currentParentId).lean();
+      if (!parent) break;
+      slugPath.unshift(parent.slug);
+      currentParentId = parent.parent_id;
+      iterations++;
+    }
+
+    // Build URL based on post type structure
+    const baseSlug = postType?.slug || post.post_type;
+    const basePath = baseSlug ? `/${baseSlug}` : '';
+
+    if (post.published_at && postType?.url_structure && postType.url_structure !== 'default') {
+      const date = new Date(post.published_at);
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+
+      switch (postType.url_structure) {
+        case 'year':
+          return `${basePath}/${year}/${slugPath.join('/')}`;
+        case 'year_month':
+          return `${basePath}/${year}/${month}/${slugPath.join('/')}`;
+        case 'year_month_day':
+          return `${basePath}/${year}/${month}/${day}/${slugPath.join('/')}`;
+      }
+    }
+
+    return basePath ? `${basePath}/${slugPath.join('/')}` : `/${slugPath.join('/')}`;
+  } catch (error) {
+    console.error('Error building post URL:', error);
+    return '#';
   }
-
-  return slugs.join('/');
 }
-
-/**
- * Build the correct URL for a post based on its post type's URL structure
- * @param post - Post object with url_structure, hierarchical, published_at, slug, post_type_slug
- * @param siteId - Site ID for multi-site support
- * @returns The properly formatted URL
- */
-export async function buildPostUrl(post: any, siteId: number = 1): Promise<string> {
-  const urlStructure = post.url_structure || 'default';
-  const isHierarchical = post.hierarchical === 1 || post.hierarchical === true;
-  
-  // For hierarchical post types, build the full slug path
-  let slug = post.slug;
-  if (isHierarchical) {
-    slug = await buildHierarchicalSlugPath(post.id, siteId);
-    // Hierarchical posts always use just the slug path
-    return `/${slug}`;
-  }
-  
-  // For non-hierarchical, build URL based on structure
-  const publishDate = new Date(post.published_at || post.created_at);
-  const year = publishDate.getFullYear();
-  const month = String(publishDate.getMonth() + 1).padStart(2, '0');
-  const day = String(publishDate.getDate()).padStart(2, '0');
-  
-  // Get the post type slug (could be 'blog', 'news', etc.)
-  const postTypeSlug = post.post_type_slug || post.slug_prefix || post.post_type || 'post';
-  
-  let url = '';
-  
-  switch (urlStructure) {
-    case 'year':
-      url = `/${postTypeSlug}/${year}/${slug}`;
-      break;
-    case 'year_month':
-      url = `/${postTypeSlug}/${year}/${month}/${slug}`;
-      break;
-    case 'year_month_day':
-      url = `/${postTypeSlug}/${year}/${month}/${day}/${slug}`;
-      break;
-    case 'default':
-    default:
-      // Default is just /{post_type_slug}/{slug}
-      url = `/${postTypeSlug}/${slug}`;
-      break;
-  }
-  
-  return url;
-}
-
-/**
- * Build URLs for an array of posts
- * @param posts - Array of post objects
- * @param siteId - Site ID for multi-site support
- * @returns Array of posts with 'url' property added
- */
-export async function buildPostUrls(posts: any[], siteId: number = 1): Promise<any[]> {
-  return await Promise.all(
-    posts.map(async (post: any) => ({
-      ...post,
-      url: await buildPostUrl(post, siteId),
-    }))
-  );
-}
-

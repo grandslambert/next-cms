@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import db, { getSiteTable } from '@/lib/db';
+import connectDB from '@/lib/mongodb';
+import { Term } from '@/lib/models';
 import { slugify } from '@/lib/utils';
-import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function GET(
@@ -11,27 +11,37 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    const siteId = (session?.user as any)?.currentSiteId || 1;
-    const termsTable = getSiteTable(siteId, 'terms');
-    const taxonomiesTable = getSiteTable(siteId, 'taxonomies');
-    const mediaTable = getSiteTable(siteId, 'media');
+    await connectDB();
     
-    const [rows] = await db.query<RowDataPacket[]>(
-      `SELECT t.*, tax.name as taxonomy_name, tax.hierarchical,
-              m.url as image_url, m.sizes as image_sizes
-       FROM ${termsTable} t
-       INNER JOIN ${taxonomiesTable} tax ON t.taxonomy_id = tax.id
-       LEFT JOIN ${mediaTable} m ON t.image_id = m.id
-       WHERE t.id = ?`,
-      [params.id]
-    );
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
-    if (rows.length === 0) {
+    // Validate ID format
+    if (!/^[0-9a-fA-F]{24}$/.test(params.id)) {
+      return NextResponse.json({ error: 'Invalid term ID format' }, { status: 400 });
+    }
+
+    const siteId = (session.user as any).currentSiteId;
+    
+    const term = await Term.findOne({
+      _id: params.id,
+      site_id: siteId,
+    }).lean();
+
+    if (!term) {
       return NextResponse.json({ error: 'Term not found' }, { status: 404 });
     }
 
-    return NextResponse.json({ term: rows[0] });
+    return NextResponse.json({ 
+      term: {
+        id: term._id.toString(),
+        ...term,
+        taxonomy_name: term.taxonomy,
+        _id: undefined,
+      }
+    });
   } catch (error) {
     console.error('Error fetching term:', error);
     return NextResponse.json({ error: 'Failed to fetch term' }, { status: 500 });
@@ -43,19 +53,23 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
+    await connectDB();
+    
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Validate ID format
+    if (!/^[0-9a-fA-F]{24}$/.test(params.id)) {
+      return NextResponse.json({ error: 'Invalid term ID format' }, { status: 400 });
+    }
+
     const userId = (session.user as any).id;
-    const siteId = (session.user as any).currentSiteId || 1;
-    const termsTable = getSiteTable(siteId, 'terms');
-    const taxonomiesTable = getSiteTable(siteId, 'taxonomies');
-    const mediaTable = getSiteTable(siteId, 'media');
+    const siteId = (session.user as any).currentSiteId;
 
     const body = await request.json();
-    const { name, description, image_id, parent_id } = body;
+    const { name, description, parent_id } = body;
 
     if (!name) {
       return NextResponse.json({ error: 'Name is required' }, { status: 400 });
@@ -64,64 +78,68 @@ export async function PUT(
     const slug = slugify(name);
 
     // Get current term BEFORE updating (for activity log)
-    const [beforeUpdate] = await db.query<RowDataPacket[]>(
-      `SELECT t.*, tax.name as taxonomy_name
-       FROM ${termsTable} t
-       INNER JOIN ${taxonomiesTable} tax ON t.taxonomy_id = tax.id
-       WHERE t.id = ?`,
-      [params.id]
-    );
+    const currentTerm = await Term.findOne({
+      _id: params.id,
+      site_id: siteId,
+    });
 
-    if (beforeUpdate.length === 0) {
+    if (!currentTerm) {
       return NextResponse.json({ error: 'Term not found' }, { status: 404 });
     }
 
-    const currentTerm = beforeUpdate[0];
-
     // Check if new slug already exists for this taxonomy (excluding current term)
-    const [existing] = await db.query<RowDataPacket[]>(
-      `SELECT id FROM ${termsTable} WHERE taxonomy_id = ? AND slug = ? AND id != ?`,
-      [currentTerm.taxonomy_id, slug, params.id]
-    );
+    const existing = await Term.findOne({
+      site_id: siteId,
+      taxonomy: currentTerm.taxonomy,
+      slug,
+      _id: { $ne: params.id },
+    });
 
-    if (existing.length > 0) {
+    if (existing) {
       return NextResponse.json({ 
         error: 'A term with this name already exists in this taxonomy' 
       }, { status: 409 });
     }
 
-    await db.query<ResultSetHeader>(
-      `UPDATE ${termsTable} 
-       SET name = ?, slug = ?, description = ?, image_id = ?, parent_id = ?
-       WHERE id = ?`,
-      [name, slug, description || '', image_id || null, parent_id || null, params.id]
-    );
-
-    const [updated] = await db.query<RowDataPacket[]>(
-      `SELECT t.*, tax.name as taxonomy_name, tax.hierarchical,
-              m.url as image_url, m.sizes as image_sizes
-       FROM ${termsTable} t
-       INNER JOIN ${taxonomiesTable} tax ON t.taxonomy_id = tax.id
-       LEFT JOIN ${mediaTable} m ON t.image_id = m.id
-       WHERE t.id = ?`,
-      [params.id]
-    );
+    // Validate parent_id if provided
+    if (parent_id && /^[0-9a-fA-F]{24}$/.test(parent_id)) {
+      const parentExists = await Term.findById(parent_id);
+      if (!parentExists) {
+        return NextResponse.json({ error: 'Invalid parent term' }, { status: 400 });
+      }
+    }
 
     // Prepare before/after changes
     const changesBefore = {
       name: currentTerm.name,
       slug: currentTerm.slug,
       description: currentTerm.description,
-      image_id: currentTerm.image_id,
-      parent_id: currentTerm.parent_id,
+      parent_id: currentTerm.parent_id?.toString() || null,
     };
 
+    // Update term
+    const updatedTerm = await Term.findOneAndUpdate(
+      { _id: params.id, site_id: siteId },
+      { 
+        $set: { 
+          name,
+          slug,
+          description: description || '',
+          parent_id: (parent_id && /^[0-9a-fA-F]{24}$/.test(parent_id)) ? parent_id : null,
+        }
+      },
+      { new: true }
+    );
+
+    if (!updatedTerm) {
+      return NextResponse.json({ error: 'Failed to update term' }, { status: 500 });
+    }
+
     const changesAfter = {
-      name: updated[0].name,
-      slug: updated[0].slug,
-      description: updated[0].description,
-      image_id: updated[0].image_id,
-      parent_id: updated[0].parent_id,
+      name: updatedTerm.name,
+      slug: updatedTerm.slug,
+      description: updatedTerm.description,
+      parent_id: updatedTerm.parent_id?.toString() || null,
     };
 
     // Log activity
@@ -129,9 +147,9 @@ export async function PUT(
       userId,
       action: 'term_updated',
       entityType: 'term',
-      entityId: Number.parseInt(params.id),
+      entityId: params.id,
       entityName: name,
-      details: `Updated term: ${name} in ${updated[0].taxonomy_name}`,
+      details: `Updated term: ${name} in ${updatedTerm.taxonomy}`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
       changesBefore,
@@ -139,7 +157,14 @@ export async function PUT(
       siteId,
     });
 
-    return NextResponse.json({ term: updated[0] });
+    return NextResponse.json({ 
+      term: {
+        id: updatedTerm._id.toString(),
+        ...updatedTerm.toObject(),
+        taxonomy_name: updatedTerm.taxonomy,
+        _id: undefined,
+      }
+    });
   } catch (error: any) {
     console.error('Error updating term:', error);
     return NextResponse.json({ error: 'Failed to update term' }, { status: 500 });
@@ -151,38 +176,38 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    await connectDB();
+    
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Validate ID format
+    if (!/^[0-9a-fA-F]{24}$/.test(params.id)) {
+      return NextResponse.json({ error: 'Invalid term ID format' }, { status: 400 });
+    }
+
     const userId = (session.user as any).id;
-    const siteId = (session.user as any).currentSiteId || 1;
-    const termsTable = getSiteTable(siteId, 'terms');
-    const taxonomiesTable = getSiteTable(siteId, 'taxonomies');
+    const siteId = (session.user as any).currentSiteId;
 
     // Get term details for logging
-    const [termRows] = await db.query<RowDataPacket[]>(
-      `SELECT t.name, tax.name as taxonomy_name
-       FROM ${termsTable} t
-       INNER JOIN ${taxonomiesTable} tax ON t.taxonomy_id = tax.id
-       WHERE t.id = ?`,
-      [params.id]
-    );
+    const term = await Term.findOne({
+      _id: params.id,
+      site_id: siteId,
+    });
 
-    if (termRows.length === 0) {
+    if (!term) {
       return NextResponse.json({ error: 'Term not found' }, { status: 404 });
     }
 
-    const term = termRows[0];
-
     // Check if term has children
-    const [children] = await db.query<RowDataPacket[]>(
-      `SELECT COUNT(*) as count FROM ${termsTable} WHERE parent_id = ?`,
-      [params.id]
-    );
+    const childCount = await Term.countDocuments({
+      site_id: siteId,
+      parent_id: params.id,
+    });
 
-    if (children[0].count > 0) {
+    if (childCount > 0) {
       return NextResponse.json({ 
         error: 'Cannot delete term that has child terms. Delete children first.' 
       }, { status: 400 });
@@ -193,15 +218,16 @@ export async function DELETE(
       userId,
       action: 'term_deleted',
       entityType: 'term',
-      entityId: Number.parseInt(params.id),
+      entityId: params.id,
       entityName: term.name,
-      details: `Deleted term: ${term.name} from ${term.taxonomy_name}`,
+      details: `Deleted term: ${term.name} from ${term.taxonomy}`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
       siteId,
     });
 
-    await db.query<ResultSetHeader>(`DELETE FROM ${termsTable} WHERE id = ?`, [params.id]);
+    // Delete the term
+    await Term.findByIdAndDelete(params.id);
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -209,4 +235,3 @@ export async function DELETE(
     return NextResponse.json({ error: 'Failed to delete term' }, { status: 500 });
   }
 }
-

@@ -1,79 +1,70 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import db, { getSiteTable } from '@/lib/db';
-import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { connectDB } from '@/lib/db';
+import { Post, PostTerm, PostMeta, PostRevision } from '@/lib/models';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
-export async function DELETE(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const userId = (session.user as any).id;
     const permissions = (session.user as any).permissions || {};
-    const isSuperAdmin = (session.user as any)?.isSuperAdmin || false;
-    const siteId = (session.user as any).currentSiteId || 1;
+    const userId = (session.user as any).id;
+    const siteId = (session.user as any).currentSiteId;
     
-    // Get site-prefixed table names
-    const postsTable = getSiteTable(siteId, 'posts');
-    const postMetaTable = getSiteTable(siteId, 'post_meta');
-    const postRevisionsTable = getSiteTable(siteId, 'post_revisions');
-    const termRelationshipsTable = getSiteTable(siteId, 'term_relationships');
-
-    const canDelete = isSuperAdmin || permissions.can_delete === true;
-    const canDeleteOthers = isSuperAdmin || permissions.can_delete_others === true;
-
-    if (!canDelete) {
-      return NextResponse.json({ error: 'You do not have permission to empty trash' }, { status: 403 });
+    if (!permissions.can_delete) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    // First, get IDs of posts to be deleted (for cascading deletes)
-    let selectQuery = `SELECT id FROM ${postsTable} WHERE status = ?`;
-    let params: any[] = ['trash'];
+    const body = await request.json();
+    const { post_type } = body;
 
-    if (!canDeleteOthers) {
-      selectQuery += ' AND author_id = ?';
-      params.push(userId);
+    if (!post_type) {
+      return NextResponse.json({ error: 'post_type is required' }, { status: 400 });
     }
 
-    const [postsToDelete] = await db.query<RowDataPacket[]>(selectQuery, params);
-    const postIds = postsToDelete.map(p => p.id);
+    await connectDB();
 
-    if (postIds.length === 0) {
-      return NextResponse.json({ 
-        success: true, 
-        message: 'No posts in trash',
-        deleted_count: 0
-      });
+    // Find all posts in trash for this post type
+    const trashedPosts = await Post.find({
+      post_type,
+      status: 'trash',
+    }).lean();
+
+    if (trashedPosts.length === 0) {
+      return NextResponse.json({ success: true, deleted: 0 });
     }
 
-    // Delete all related data for these posts
-    const idPlaceholders = postIds.map(() => '?').join(',');
-    await db.query<ResultSetHeader>(`DELETE FROM ${postMetaTable} WHERE post_id IN (${idPlaceholders})`, postIds);
-    await db.query<ResultSetHeader>(`DELETE FROM ${postRevisionsTable} WHERE post_id IN (${idPlaceholders})`, postIds);
-    await db.query<ResultSetHeader>(`DELETE FROM ${termRelationshipsTable} WHERE post_id IN (${idPlaceholders})`, postIds);
+    const postIds = trashedPosts.map((p) => p._id);
 
-    // Now delete the posts themselves
-    let query = `DELETE FROM ${postsTable} WHERE status = ?`;
-    params = ['trash'];
+    // Delete related data
+    await PostTerm.deleteMany({ post_id: { $in: postIds } });
+    await PostMeta.deleteMany({ post_id: { $in: postIds } });
+    await PostRevision.deleteMany({ post_id: { $in: postIds } });
 
-    if (!canDeleteOthers) {
-      query += ' AND author_id = ?';
-      params.push(userId);
-    }
+    // Delete posts
+    const result = await Post.deleteMany({ _id: { $in: postIds } });
 
-    const [result] = await db.query<ResultSetHeader>(query, params);
-
-    return NextResponse.json({ 
-      success: true, 
-      message: 'Trash emptied successfully',
-      deleted_count: result.affectedRows
+    // Log activity
+    await logActivity({
+      userId,
+      action: 'posts_emptied_trash' as any,
+      entityType: 'post' as any,
+      entityId: 'multiple',
+      entityName: 'Multiple posts',
+      details: `Permanently deleted ${result.deletedCount} ${post_type}(s) from trash`,
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+      siteId,
     });
+
+    return NextResponse.json({ success: true, deleted: result.deletedCount });
   } catch (error) {
     console.error('Error emptying trash:', error);
     return NextResponse.json({ error: 'Failed to empty trash' }, { status: 500 });
   }
 }
-

@@ -1,101 +1,88 @@
 import Link from 'next/link';
-import db, { getSiteTable } from '@/lib/db';
-import { RowDataPacket } from 'mysql2';
+import { connectDB } from '@/lib/db';
+import { Post } from '@/lib/models';
+import { getDefaultSite } from '@/lib/url-utils';
 import { formatDate, truncate } from '@/lib/utils';
-import { getImageUrl } from '@/lib/image-utils';
-import { buildPostUrls } from '@/lib/post-url-builder';
+import { buildPostUrl } from '@/lib/post-url-builder';
+import mongoose from 'mongoose';
 
-// For public routes, default to site 1 (can be enhanced with domain-based routing later)
-const PUBLIC_SITE_ID = 1;
-
-async function getPosts(siteId: number = PUBLIC_SITE_ID) {
+async function getBlogPosts() {
   try {
-    const postsTable = getSiteTable(siteId, 'posts');
-    const mediaTable = getSiteTable(siteId, 'media');
-    const postTypesTable = getSiteTable(siteId, 'post_types');
+    const site = await getDefaultSite();
+    if (!site) return [];
+
+    await connectDB();
     
-    const [rows] = await db.query<RowDataPacket[]>(
-      `SELECT p.*, CONCAT(u.first_name, ' ', u.last_name) as author_name,
-              m.url as featured_image, m.sizes as featured_image_sizes,
-              pt.url_structure, pt.hierarchical, pt.slug as post_type_slug
-       FROM ${postsTable} p 
-       LEFT JOIN users u ON p.author_id = u.id
-       LEFT JOIN ${mediaTable} m ON p.featured_image_id = m.id
-       LEFT JOIN ${postTypesTable} pt ON p.post_type = pt.name
-       WHERE p.status = 'published'
-       ORDER BY p.published_at DESC`
-    );
-    return rows;
+    const posts = await Post.find({
+      site_id: new mongoose.Types.ObjectId(site.id),
+      post_type: 'post',
+      status: 'published',
+    })
+      .sort({ published_at: -1 })
+      .populate('author_id', 'username email')
+      .populate('featured_image_id')
+      .lean();
+
+    const postsWithUrls = await Promise.all(posts.map(async (post) => {
+      const url = await buildPostUrl(post._id.toString(), site.id);
+      const featuredImage = post.featured_image_id as any;
+      
+      return {
+        ...post,
+        id: post._id.toString(),
+        author_name: (post.author_id as any)?.username || 'Unknown',
+        featured_image: featuredImage?.filepath || null,
+        url,
+      };
+    }));
+
+    return postsWithUrls;
   } catch (error) {
-    console.error('Error fetching posts:', error);
+    console.error('Error fetching blog posts:', error);
     return [];
   }
 }
 
 export default async function BlogPage() {
-  const posts = await getPosts();
-  const postsWithUrls = await buildPostUrls(posts, PUBLIC_SITE_ID);
+  const posts = await getBlogPosts();
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      <div className="mb-12">
-        <h1 className="text-4xl font-bold text-gray-900 mb-4">Blog</h1>
-        <p className="text-xl text-gray-600">
-          Explore our latest articles and insights
-        </p>
-      </div>
-
-      {postsWithUrls.length > 0 ? (
-        <div className="space-y-8">
-          {postsWithUrls.map((post: any) => (
+      <h1 className="text-4xl font-bold text-gray-900 mb-8">Blog</h1>
+      
+      {posts.length === 0 ? (
+        <p className="text-gray-600">No blog posts yet.</p>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          {posts.map((post: any) => (
             <article key={post.id} className="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow">
-              <div className="md:flex">
-                {post.featured_image && (
-                  <div className="md:w-1/3">
-                    <div className="aspect-video md:aspect-square bg-gray-200">
-                      <img
-                        src={getImageUrl(post.featured_image, post.featured_image_sizes, 'medium')}
-                        alt={post.title}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                  </div>
-                )}
-                <div className={`p-6 ${post.featured_image ? 'md:w-2/3' : 'w-full'}`}>
-                  <div className="flex items-center text-sm text-gray-500 mb-3">
-                    <span>{formatDate(post.published_at)}</span>
-                    <span className="mx-2">•</span>
-                    <span>By {post.author_name}</span>
-                  </div>
-                  <h2 className="text-2xl font-bold text-gray-900 mb-3">
-                    <Link href={post.url} className="hover:text-primary-600">
-                      {post.title}
-                    </Link>
-                  </h2>
-                  {post.excerpt && (
-                    <p className="text-gray-600 mb-4">
-                      {truncate(post.excerpt, 200)}
-                    </p>
-                  )}
-                  <Link
-                    href={post.url}
-                    className="inline-flex items-center text-primary-600 hover:text-primary-700 font-semibold"
-                  >
-                    Read More →
+              {post.featured_image && (
+                <div className="aspect-video overflow-hidden">
+                  <img
+                    src={post.featured_image}
+                    alt={post.title}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              )}
+              <div className="p-6">
+                <h2 className="text-xl font-semibold mb-2">
+                  <Link href={post.url} className="hover:text-primary-600 transition-colors">
+                    {post.title}
                   </Link>
+                </h2>
+                <p className="text-gray-600 mb-4">
+                  {truncate(post.excerpt || '', 120)}
+                </p>
+                <div className="flex items-center justify-between text-sm text-gray-500">
+                  <span>{post.author_name}</span>
+                  <time>{formatDate(post.published_at)}</time>
                 </div>
               </div>
             </article>
           ))}
         </div>
-      ) : (
-        <div className="text-center py-12">
-          <div className="text-6xl mb-4">📝</div>
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">No posts yet</h3>
-          <p className="text-gray-600">Check back soon for new content!</p>
-        </div>
       )}
     </div>
   );
 }
-

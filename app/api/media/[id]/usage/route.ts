@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import db, { getSiteTable } from '@/lib/db';
-import { RowDataPacket } from 'mysql2';
+import { connectDB } from '@/lib/db';
+import { Post } from '@/lib/models';
+import mongoose from 'mongoose';
 
 export async function GET(
   request: NextRequest,
@@ -14,40 +15,27 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const siteId = (session.user as any).currentSiteId || 1;
-    const postsTable = getSiteTable(siteId, 'posts');
-    const termsTable = getSiteTable(siteId, 'terms');
-    const taxonomiesTable = getSiteTable(siteId, 'taxonomies');
+    if (!mongoose.Types.ObjectId.isValid(params.id)) {
+      return NextResponse.json({ error: 'Invalid media ID' }, { status: 400 });
+    }
 
-    const usage: any = {
-      posts: [],
-      terms: [],
-      total: 0,
-    };
+    await connectDB();
 
-    // Check posts (includes all post types: posts, pages, custom types)
-    const [posts] = await db.query<RowDataPacket[]>(
-      `SELECT id, title, post_type FROM ${postsTable} WHERE featured_image_id = ?`,
-      [params.id]
-    );
-    usage.posts = posts;
+    // Find posts using this media as featured image
+    const posts = await Post.find({
+      featured_image_id: new mongoose.Types.ObjectId(params.id),
+    })
+      .select('_id title post_type')
+      .lean();
 
-    // Check taxonomy terms
-    const [terms] = await db.query<RowDataPacket[]>(
-      `SELECT t.id, t.name, tax.label as taxonomy_label 
-       FROM ${termsTable} t 
-       LEFT JOIN ${taxonomiesTable} tax ON t.taxonomy_id = tax.id 
-       WHERE t.image_id = ?`,
-      [params.id]
-    );
-    usage.terms = terms;
+    const formattedPosts = posts.map((p) => ({
+      ...p,
+      id: p._id.toString(),
+    }));
 
-    usage.total = usage.posts.length + usage.terms.length;
-
-    return NextResponse.json({ usage });
+    return NextResponse.json({ usage: formattedPosts, count: formattedPosts.length });
   } catch (error) {
-    console.error('Error checking media usage:', error);
-    return NextResponse.json({ error: 'Failed to check usage' }, { status: 500 });
+    console.error('Error fetching media usage:', error);
+    return NextResponse.json({ error: 'Failed to fetch media usage' }, { status: 500 });
   }
 }
-

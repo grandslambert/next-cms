@@ -1,23 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import db, { getSiteTable } from '@/lib/db';
+import { connectDB } from '@/lib/db';
+import { Media, Setting, User } from '@/lib/models';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 import sharp from 'sharp';
-import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import mongoose from 'mongoose';
 
 // Get image sizes from settings
-async function getImageSizes(siteId: number = 1) {
+async function getImageSizes(siteId: string) {
   try {
-    const settingsTable = getSiteTable(siteId, 'settings');
-    const [rows] = await db.query<RowDataPacket[]>(
-      `SELECT setting_value FROM ${settingsTable} WHERE setting_key = 'image_sizes'`
-    );
+    await connectDB();
+    const setting = await Setting.findOne({
+      site_id: new mongoose.Types.ObjectId(siteId),
+      setting_key: 'image_sizes',
+    }).lean();
     
-    if (rows.length > 0 && rows[0].setting_value) {
-      const sizes = JSON.parse(rows[0].setting_value);
+    if (setting && setting.setting_value) {
+      const sizes = JSON.parse(setting.setting_value);
       return { ...sizes, full: null }; // Always include full (original)
     }
   } catch (error) {
@@ -36,71 +38,56 @@ async function getImageSizes(siteId: number = 1) {
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    const siteId = (session?.user as any)?.currentSiteId || 1;
-    const mediaTable = getSiteTable(siteId, 'media');
+    const siteId = (session?.user as any)?.currentSiteId;
     
+    if (!siteId || !mongoose.Types.ObjectId.isValid(siteId)) {
+      return NextResponse.json({ error: 'Invalid site ID' }, { status: 400 });
+    }
+
     const searchParams = request.nextUrl.searchParams;
     const limit = Number.parseInt(searchParams.get('limit') || '20');
     const offset = Number.parseInt(searchParams.get('offset') || '0');
     const folderId = searchParams.get('folder_id');
     const showTrash = searchParams.get('trash') === 'true';
 
-    let query = `SELECT m.*, CONCAT(u.first_name, ' ', u.last_name) as uploaded_by_name 
-                 FROM ${mediaTable} m 
-                 LEFT JOIN users u ON m.uploaded_by = u.id`;
-    let countQuery = `SELECT COUNT(*) as total FROM ${mediaTable}`;
-    const params: any[] = [];
-    const countParams: any[] = [];
-    const conditions: string[] = [];
+    await connectDB();
+
+    const query: any = { site_id: new mongoose.Types.ObjectId(siteId) };
 
     // Filter by trash status
     if (showTrash) {
-      conditions.push('m.deleted_at IS NOT NULL');
-      countParams.push('1=1'); // Placeholder for easier logic
+      query.status = 'trash';
     } else {
-      conditions.push('m.deleted_at IS NULL');
-      countParams.push('1=1');
+      query.status = 'active';
     }
 
     // Filter by folder
     if (folderId) {
-      conditions.push('m.folder_id = ?');
-      params.push(parseInt(folderId));
-      countParams.push(parseInt(folderId));
+      if (mongoose.Types.ObjectId.isValid(folderId)) {
+        query.folder_id = new mongoose.Types.ObjectId(folderId);
+      }
     } else if (searchParams.has('folder_id') && !folderId) {
-      // If folder_id param is explicitly provided as null/empty, show root level only
-      conditions.push('m.folder_id IS NULL');
-    }
-    // If no folder_id param at all, show all media regardless of folder
-
-    if (conditions.length > 0) {
-      query += ' WHERE ' + conditions.join(' AND ');
-      // Build count query conditions
-      const countConditions = [];
-      if (showTrash) {
-        countConditions.push('deleted_at IS NOT NULL');
-      } else {
-        countConditions.push('deleted_at IS NULL');
-      }
-      if (folderId) {
-        countConditions.push('folder_id = ?');
-      } else if (searchParams.has('folder_id') && !folderId) {
-        countConditions.push('folder_id IS NULL');
-      }
-      // If no folder_id param at all, count all media regardless of folder
-      if (countConditions.length > 0) {
-        countQuery += ' WHERE ' + countConditions.join(' AND ');
-      }
+      query.folder_id = null;
     }
 
-    query += ' ORDER BY m.created_at DESC LIMIT ? OFFSET ?';
-    params.push(limit, offset);
+    const [media, total] = await Promise.all([
+      Media.find(query)
+        .populate('uploaded_by', 'username email')
+        .sort({ created_at: -1 })
+        .limit(limit)
+        .skip(offset)
+        .lean(),
+      Media.countDocuments(query),
+    ]);
 
-    const [rows] = await db.query<RowDataPacket[]>(query, params);
-    const [countRows] = await db.query<RowDataPacket[]>(countQuery, countParams.filter((p: any) => typeof p === 'number'));
-    const total = countRows[0].total;
+    // Format for UI compatibility
+    const formattedMedia = media.map((m) => ({
+      ...m,
+      id: m._id.toString(),
+      uploaded_by_name: (m.uploaded_by as any)?.username || 'Unknown',
+    }));
 
-    return NextResponse.json({ media: rows, total });
+    return NextResponse.json({ media: formattedMedia, total });
   } catch (error) {
     console.error('Error fetching media:', error);
     return NextResponse.json({ error: 'Failed to fetch media' }, { status: 500 });
@@ -115,13 +102,16 @@ export async function POST(request: NextRequest) {
     }
 
     const userId = (session.user as any).id;
-    const siteId = (session.user as any).currentSiteId || 1;
-    const mediaTable = getSiteTable(siteId, 'media');
+    const siteId = (session.user as any).currentSiteId;
+
+    if (!siteId || !mongoose.Types.ObjectId.isValid(siteId)) {
+      return NextResponse.json({ error: 'Invalid site ID' }, { status: 400 });
+    }
 
     const formData = await request.formData();
     const file = formData.get('file') as File;
-    const title = formData.get('title') as string || '';
     const altText = formData.get('alt_text') as string || '';
+    const caption = formData.get('caption') as string || '';
     const folderId = formData.get('folder_id') as string || null;
 
     if (!file) {
@@ -135,7 +125,7 @@ export async function POST(request: NextRequest) {
     const now = new Date();
     const year = now.getFullYear().toString();
     const month = (now.getMonth() + 1).toString().padStart(2, '0');
-    const folderPath = `site_${siteId}/${year}/${month}`; // Always use forward slashes for URLs
+    const folderPath = `site_${siteId}/${year}/${month}`;
     
     const uploadDir = path.join(process.cwd(), 'public', 'uploads', `site_${siteId}`, year, month);
     await mkdir(uploadDir, { recursive: true });
@@ -145,125 +135,67 @@ export async function POST(request: NextRequest) {
     const nameWithoutExt = path.basename(file.name, ext).replace(/[^a-zA-Z0-9-]/g, '_');
     const timestamp = Date.now();
     const baseFilename = `${nameWithoutExt}-${timestamp}`;
-    
-    const sizes: any = {};
+    const filename = `${baseFilename}${ext}`;
+    const filepath = path.join(uploadDir, filename);
+
+    let width: number | null = null;
+    let height: number | null = null;
 
     // Check if it's an image
     if (file.type.startsWith('image/')) {
       const image = sharp(buffer);
       const metadata = await image.metadata();
+      width = metadata.width || null;
+      height = metadata.height || null;
 
-      // Get image sizes from settings
-      const IMAGE_SIZES = await getImageSizes(siteId);
-
-      // Generate different sizes
-      for (const [sizeName, dimensions] of Object.entries(IMAGE_SIZES)) {
-        if (sizeName === 'full') {
-          // Save original
-          const filename = `${baseFilename}${ext}`;
-          const filepath = path.join(uploadDir, filename);
-          await writeFile(filepath, buffer);
-          sizes.full = {
-            url: `/uploads/${folderPath}/${filename}`,
-            width: metadata.width,
-            height: metadata.height,
-          };
-        } else {
-          // Resize and save with specified crop style
-          const filename = `${baseFilename}-${sizeName}${ext}`;
-          const filepath = path.join(uploadDir, filename);
-          
-          // Get crop style from dimensions (default to 'inside')
-          const dims = dimensions as any;
-          const cropStyle = dims.crop || 'inside';
-          
-          const resized = await image
-            .resize(dims.width, dims.height, {
-              fit: cropStyle, // Use configured crop style
-              withoutEnlargement: cropStyle === 'inside', // Only for 'inside' fit
-              position: 'centre', // Center the crop
-            })
-            .toBuffer();
-          
-          const resizedImage = sharp(resized);
-          const resizedMeta = await resizedImage.metadata();
-          
-          await writeFile(filepath, resized);
-          
-          sizes[sizeName] = {
-            url: `/uploads/${folderPath}/${filename}`,
-            width: resizedMeta.width,
-            height: resizedMeta.height,
-          };
-        }
-      }
-
-      // Use full size as main URL
-      const url = sizes.full.url;
-      const filename = `${baseFilename}${ext}`;
-
-      const [result] = await db.query<ResultSetHeader>(
-        `INSERT INTO ${mediaTable} (filename, original_name, title, alt_text, mime_type, size, url, sizes, folder_id, uploaded_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [filename, file.name, title, altText, file.type, file.size, url, JSON.stringify(sizes), folderId ? Number.parseInt(folderId) : null, userId]
-      );
-
-      const [newMedia] = await db.query<RowDataPacket[]>(
-        `SELECT * FROM ${mediaTable} WHERE id = ?`,
-        [result.insertId]
-      );
-
-      // Log activity
-      await logActivity({
-        userId,
-        action: 'media_uploaded',
-        entityType: 'media',
-        entityId: result.insertId,
-        entityName: file.name,
-        details: `Uploaded image: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`,
-        ipAddress: getClientIp(request),
-        userAgent: getUserAgent(request),
-        siteId,
-      });
-
-      return NextResponse.json({ media: newMedia[0] }, { status: 201 });
-    } else {
-      // Non-image files - just save original
-      const filename = `${baseFilename}${ext}`;
-      const filepath = path.join(uploadDir, filename);
+      // Save original image
       await writeFile(filepath, buffer);
 
-      const url = `/uploads/${folderPath}/${filename}`;
-
-      const [result] = await db.query<ResultSetHeader>(
-        `INSERT INTO ${mediaTable} (filename, original_name, title, alt_text, mime_type, size, url, folder_id, uploaded_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [filename, file.name, title, altText, file.type, file.size, url, folderId ? Number.parseInt(folderId) : null, userId]
-      );
-
-      const [newMedia] = await db.query<RowDataPacket[]>(
-        `SELECT * FROM ${mediaTable} WHERE id = ?`,
-        [result.insertId]
-      );
-
-      // Log activity
-      await logActivity({
-        userId,
-        action: 'media_uploaded',
-        entityType: 'media',
-        entityId: result.insertId,
-        entityName: file.name,
-        details: `Uploaded file: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`,
-        ipAddress: getClientIp(request),
-        userAgent: getUserAgent(request),
-        siteId,
-      });
-
-      return NextResponse.json({ media: newMedia[0] }, { status: 201 });
+      // TODO: Generate image sizes (thumbnail, medium, large) if needed
+    } else {
+      // Non-image files - just save original
+      await writeFile(filepath, buffer);
     }
+
+    await connectDB();
+
+    const newMedia = await Media.create({
+      site_id: new mongoose.Types.ObjectId(siteId),
+      filename,
+      original_filename: file.name,
+      filepath: `/uploads/${folderPath}/${filename}`,
+      mimetype: file.type,
+      filesize: file.size,
+      width,
+      height,
+      alt_text: altText,
+      caption,
+      uploaded_by: new mongoose.Types.ObjectId(userId),
+      folder_id: folderId && mongoose.Types.ObjectId.isValid(folderId) ? new mongoose.Types.ObjectId(folderId) : null,
+      status: 'active',
+    });
+
+    // Log activity
+    await logActivity({
+      userId,
+      action: 'media_uploaded',
+      entityType: 'media',
+      entityId: newMedia._id.toString(),
+      entityName: file.name,
+      details: `Uploaded ${file.type.startsWith('image/') ? 'image' : 'file'}: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`,
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+      siteId,
+    });
+
+    return NextResponse.json({ 
+      media: {
+        ...newMedia.toObject(),
+        id: newMedia._id.toString(),
+      }
+    }, { status: 201 });
   } catch (error) {
     console.error('Error uploading media:', error);
     return NextResponse.json({ error: 'Failed to upload media' }, { status: 500 });
   }
 }
-

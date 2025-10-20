@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import db, { getSiteTable } from '@/lib/db';
+import connectDB from '@/lib/mongodb';
+import { Post, User } from '@/lib/models';
 import { slugify } from '@/lib/utils';
-import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function GET(request: NextRequest) {
   try {
+    await connectDB();
+    
     const session = await getServerSession(authOptions);
     const searchParams = request.nextUrl.searchParams;
     const status = searchParams.get('status');
@@ -21,89 +23,62 @@ export async function GET(request: NextRequest) {
     const canViewOthers = permissions.view_others_posts === true;
     
     // Get site context
-    const siteId = (session?.user as any)?.currentSiteId || 1;
-    const postsTable = getSiteTable(siteId, 'posts');
-    const mediaTable = getSiteTable(siteId, 'media');
+    const siteId = (session?.user as any)?.currentSiteId;
 
-    let query = `
-      SELECT p.*, CONCAT(u.first_name, ' ', u.last_name) as author_name,
-             m.url as featured_image_url, m.sizes as featured_image_sizes
-      FROM ${postsTable} p 
-      LEFT JOIN users u ON p.author_id = u.id
-      LEFT JOIN ${mediaTable} m ON p.featured_image_id = m.id
-      WHERE 1=1
-    `;
-    const params: any[] = [];
+    // Build query
+    const query: any = { site_id: siteId };
     
     // Only filter by post_type if it's not 'all'
     if (postType !== 'all') {
-      query += ' AND p.post_type = ?';
-      params.push(postType);
+      query.post_type = postType;
     }
 
     // Filter by author if user can't view others' posts
     if (userId && !canViewOthers) {
-      query += ' AND p.author_id = ?';
-      params.push(userId);
+      query.author_id = userId;
     }
 
+    // Filter by status
     if (status && status !== 'all') {
-      query += ' AND p.status = ?';
-      params.push(status);
+      query.status = status;
     } else if (!status || status === 'all') {
       // Exclude trash from default queries
-      query += ' AND p.status != ?';
-      params.push('trash');
+      query.status = { $ne: 'trash' };
     }
 
     // Add search filter
     if (search && search.trim() !== '') {
-      query += ' AND (p.title LIKE ? OR p.content LIKE ?)';
-      const searchTerm = `%${search.trim()}%`;
-      params.push(searchTerm, searchTerm);
+      const searchTerm = search.trim();
+      query.$or = [
+        { title: { $regex: searchTerm, $options: 'i' } },
+        { content: { $regex: searchTerm, $options: 'i' } }
+      ];
     }
 
-    query += ' ORDER BY p.created_at DESC LIMIT ? OFFSET ?';
-    params.push(limit, offset);
-
-    const [rows] = await db.query<RowDataPacket[]>(query, params);
+    // Get posts with pagination
+    const posts = await Post.find(query)
+      .sort({ created_at: -1 })
+      .skip(offset)
+      .limit(limit)
+      .lean();
 
     // Get total count
-    let countQuery = `SELECT COUNT(*) as total FROM ${postsTable} WHERE 1=1`;
-    const countParams: any[] = [];
-    
-    // Only filter by post_type if it's not 'all'
-    if (postType !== 'all') {
-      countQuery += ' AND post_type = ?';
-      countParams.push(postType);
-    }
-    
-    // Filter by author if user can't view others' posts
-    if (userId && !canViewOthers) {
-      countQuery += ' AND author_id = ?';
-      countParams.push(userId);
-    }
-    
-    if (status && status !== 'all') {
-      countQuery += ' AND status = ?';
-      countParams.push(status);
-    } else if (!status || status === 'all') {
-      // Exclude trash from default counts
-      countQuery += ' AND status != ?';
-      countParams.push('trash');
-    }
+    const total = await Post.countDocuments(query);
 
-    // Add search filter to count query
-    if (search && search.trim() !== '') {
-      countQuery += ' AND (title LIKE ? OR content LIKE ?)';
-      const searchTerm = `%${search.trim()}%`;
-      countParams.push(searchTerm, searchTerm);
-    }
+    // Get author names
+    const authorIds = [...new Set(posts.map((p: any) => p.author_id?.toString()).filter(Boolean))];
+    const authors = await User.find({ _id: { $in: authorIds } }).select('_id first_name last_name').lean();
+    const authorMap = new Map(authors.map((a: any) => [a._id.toString(), `${a.first_name} ${a.last_name}`]));
 
-    const [countRows] = await db.query<RowDataPacket[]>(countQuery, countParams);
-    const total = countRows[0].total;
+    // Format for UI
+    const formattedPosts = posts.map((post: any) => ({
+      ...post,
+      id: post._id.toString(),
+      author_name: authorMap.get(post.author_id?.toString()) || 'Unknown',
+      _id: undefined,
+    }));
 
-    return NextResponse.json({ posts: rows, total });
+    return NextResponse.json({ posts: formattedPosts, total });
   } catch (error) {
     console.error('Error fetching posts:', error);
     return NextResponse.json({ error: 'Failed to fetch posts' }, { status: 500 });
@@ -112,13 +87,30 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    await connectDB();
+    
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const body = await request.json();
-    const { title, slug: customSlug, content, excerpt, featured_image_id, status, post_type, parent_id, menu_order, scheduled_publish_at } = body;
+    const { 
+      title, 
+      slug: customSlug, 
+      content, 
+      excerpt, 
+      featured_image_id, 
+      status, 
+      post_type, 
+      parent_id, 
+      menu_order, 
+      scheduled_publish_at,
+      visibility,
+      password,
+      allow_comments,
+      custom_fields,
+    } = body;
 
     if (!title) {
       return NextResponse.json({ error: 'Title is required' }, { status: 400 });
@@ -126,7 +118,7 @@ export async function POST(request: NextRequest) {
 
     const permissions = (session.user as any).permissions || {};
     const userId = (session.user as any).id;
-    const siteId = (session.user as any).currentSiteId || 1;
+    const siteId = (session.user as any).currentSiteId;
     console.log('📝 [POST CREATE] Creating post in site:', siteId, 'by user:', (session.user as any).email);
 
     // Check if user can publish (required for both immediate and scheduled publishing)
@@ -136,7 +128,6 @@ export async function POST(request: NextRequest) {
 
     // Use custom slug if provided, otherwise generate from title
     const slug = customSlug || slugify(title);
-    const postsTable = getSiteTable(siteId, 'posts');
     
     // Handle published_at and scheduled_publish_at based on status
     let publishedAt = null;
@@ -151,23 +142,51 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const [result] = await db.query<ResultSetHeader>(
-      `INSERT INTO ${postsTable} (post_type, title, slug, content, excerpt, featured_image_id, parent_id, menu_order, status, author_id, published_at, scheduled_publish_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [post_type || 'post', title, slug, content || '', excerpt || '', featured_image_id || null, parent_id || null, menu_order || 0, status || 'draft', userId, publishedAt, scheduledPublishAt]
-    );
+    // Validate parent_id if provided
+    if (parent_id && /^[0-9a-fA-F]{24}$/.test(parent_id)) {
+      const parentExists = await Post.findById(parent_id);
+      if (!parentExists) {
+        return NextResponse.json({ error: 'Invalid parent post' }, { status: 400 });
+      }
+    }
 
-    const [newPost] = await db.query<RowDataPacket[]>(
-      `SELECT * FROM ${postsTable} WHERE id = ?`,
-      [result.insertId]
-    );
+    // Check for duplicate slug
+    const existingPost = await Post.findOne({
+      site_id: siteId,
+      slug,
+    });
+
+    if (existingPost) {
+      return NextResponse.json({ error: 'A post with this slug already exists' }, { status: 409 });
+    }
+
+    // Create post
+    const newPost = await Post.create({
+      site_id: siteId,
+      post_type: post_type || 'post',
+      title,
+      slug,
+      content: content || '',
+      excerpt: excerpt || '',
+      featured_image_id: featured_image_id || null,
+      parent_id: (parent_id && /^[0-9a-fA-F]{24}$/.test(parent_id)) ? parent_id : null,
+      menu_order: menu_order || 0,
+      status: status || 'draft',
+      visibility: visibility || 'public',
+      password: password || null,
+      author_id: userId,
+      published_at: publishedAt,
+      scheduled_publish_at: scheduledPublishAt,
+      allow_comments: allow_comments !== false,
+      custom_fields: custom_fields || {},
+    });
 
     // Log activity
     await logActivity({
       userId,
       action: status === 'published' ? 'post_published' : 'post_created',
       entityType: 'post',
-      entityId: result.insertId,
+      entityId: newPost._id.toString(),
       entityName: title,
       details: `Created ${post_type || 'post'}: "${title}" with status: ${status || 'draft'}`,
       ipAddress: getClientIp(request),
@@ -175,13 +194,18 @@ export async function POST(request: NextRequest) {
       siteId,
     });
 
-    return NextResponse.json({ post: newPost[0] }, { status: 201 });
+    return NextResponse.json({ 
+      post: {
+        id: newPost._id.toString(),
+        ...newPost.toObject(),
+        _id: undefined,
+      }
+    }, { status: 201 });
   } catch (error: any) {
     console.error('Error creating post:', error);
-    if (error.code === 'ER_DUP_ENTRY') {
+    if (error.code === 11000) {
       return NextResponse.json({ error: 'A post with this slug already exists' }, { status: 409 });
     }
     return NextResponse.json({ error: 'Failed to create post' }, { status: 500 });
   }
 }
-

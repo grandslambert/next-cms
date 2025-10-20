@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import db, { getSiteTable } from '@/lib/db';
-import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import connectDB from '@/lib/mongodb';
+import { Taxonomy, Term } from '@/lib/models';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function GET(
@@ -10,20 +10,36 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    const siteId = (session?.user as any)?.currentSiteId || 1;
-    const taxonomiesTable = getSiteTable(siteId, 'taxonomies');
+    await connectDB();
     
-    const [rows] = await db.query<RowDataPacket[]>(
-      `SELECT * FROM ${taxonomiesTable} WHERE id = ?`,
-      [params.id]
-    );
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
-    if (rows.length === 0) {
+    // Validate ID format
+    if (!/^[0-9a-fA-F]{24}$/.test(params.id)) {
+      return NextResponse.json({ error: 'Invalid taxonomy ID format' }, { status: 400 });
+    }
+
+    const siteId = (session.user as any).currentSiteId;
+    
+    const taxonomy = await Taxonomy.findOne({
+      _id: params.id,
+      site_id: siteId,
+    }).lean();
+
+    if (!taxonomy) {
       return NextResponse.json({ error: 'Taxonomy not found' }, { status: 404 });
     }
 
-    return NextResponse.json({ taxonomy: rows[0] });
+    return NextResponse.json({ 
+      taxonomy: {
+        id: taxonomy._id.toString(),
+        ...taxonomy,
+        _id: undefined,
+      }
+    });
   } catch (error) {
     console.error('Error fetching taxonomy:', error);
     return NextResponse.json({ error: 'Failed to fetch taxonomy' }, { status: 500 });
@@ -35,70 +51,71 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
+    await connectDB();
+    
     const session = await getServerSession(authOptions);
-    if (!session?.user || (session.user as any).role !== 'admin') {
-      return NextResponse.json({ error: 'Unauthorized - Admin only' }, { status: 401 });
+    const permissions = (session?.user as any)?.permissions || {};
+    const isSuperAdmin = (session?.user as any)?.isSuperAdmin || false;
+
+    if (!session?.user || (!isSuperAdmin && !permissions.manage_taxonomies)) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Validate ID format
+    if (!/^[0-9a-fA-F]{24}$/.test(params.id)) {
+      return NextResponse.json({ error: 'Invalid taxonomy ID format' }, { status: 400 });
     }
 
     const userId = (session.user as any).id;
-    const siteId = (session.user as any).currentSiteId || 1;
-    const taxonomiesTable = getSiteTable(siteId, 'taxonomies');
+    const siteId = (session.user as any).currentSiteId;
 
     const body = await request.json();
-    const { label, singular_label, description, hierarchical, show_in_menu, show_in_dashboard, menu_position } = body;
+    const { labels, description, is_hierarchical, show_in_dashboard, post_types } = body;
 
     // Get current taxonomy BEFORE updating (for activity log)
-    const [beforeUpdate] = await db.query<RowDataPacket[]>(
-      `SELECT * FROM ${taxonomiesTable} WHERE id = ?`,
-      [params.id]
-    );
+    const currentTaxonomy = await Taxonomy.findOne({
+      _id: params.id,
+      site_id: siteId,
+    });
 
-    if (beforeUpdate.length === 0) {
+    if (!currentTaxonomy) {
       return NextResponse.json({ error: 'Taxonomy not found' }, { status: 404 });
     }
 
-    const currentTaxonomy = beforeUpdate[0];
-
-    await db.query<ResultSetHeader>(
-      `UPDATE ${taxonomiesTable} 
-       SET label = ?, singular_label = ?, description = ?, hierarchical = ?, show_in_menu = ?, show_in_dashboard = ?, menu_position = ?
-       WHERE id = ?`,
-      [
-        label,
-        singular_label,
-        description || '',
-        hierarchical || false,
-        show_in_menu !== false,
-        show_in_dashboard || false,
-        menu_position || 20,
-        params.id
-      ]
-    );
-
-    const [updated] = await db.query<RowDataPacket[]>(
-      `SELECT * FROM ${taxonomiesTable} WHERE id = ?`,
-      [params.id]
-    );
-
     // Prepare before/after changes
     const changesBefore = {
-      label: currentTaxonomy.label,
-      singular_label: currentTaxonomy.singular_label,
+      labels: currentTaxonomy.labels,
       description: currentTaxonomy.description,
-      hierarchical: currentTaxonomy.hierarchical,
-      show_in_menu: currentTaxonomy.show_in_menu,
+      is_hierarchical: currentTaxonomy.is_hierarchical,
       show_in_dashboard: currentTaxonomy.show_in_dashboard,
-      menu_position: currentTaxonomy.menu_position,
+      post_types: currentTaxonomy.post_types?.join(', ') || 'None',
     };
 
+    // Update taxonomy
+    const updatedTaxonomy = await Taxonomy.findOneAndUpdate(
+      { _id: params.id, site_id: siteId },
+      { 
+        $set: { 
+          labels,
+          description: description || '',
+          is_hierarchical: is_hierarchical || false,
+          show_in_dashboard: show_in_dashboard !== false,
+          post_types: post_types || [],
+        }
+      },
+      { new: true }
+    );
+
+    if (!updatedTaxonomy) {
+      return NextResponse.json({ error: 'Failed to update taxonomy' }, { status: 500 });
+    }
+
     const changesAfter = {
-      label: updated[0].label,
-      singular_label: updated[0].singular_label,
-      description: updated[0].description,
-      hierarchical: updated[0].hierarchical,
-      show_in_menu: updated[0].show_in_menu,
-      show_in_dashboard: updated[0].show_in_dashboard,
-      menu_position: updated[0].menu_position,
+      labels: updatedTaxonomy.labels,
+      description: updatedTaxonomy.description,
+      is_hierarchical: updatedTaxonomy.is_hierarchical,
+      show_in_dashboard: updatedTaxonomy.show_in_dashboard,
+      post_types: updatedTaxonomy.post_types?.join(', ') || 'None',
     };
 
     // Log activity
@@ -106,9 +123,9 @@ export async function PUT(
       userId,
       action: 'taxonomy_updated',
       entityType: 'taxonomy',
-      entityId: Number.parseInt(params.id),
-      entityName: label,
-      details: `Updated taxonomy: ${label}`,
+      entityId: params.id,
+      entityName: updatedTaxonomy.labels.singular_name || updatedTaxonomy.name,
+      details: `Updated taxonomy: ${updatedTaxonomy.labels.singular_name || updatedTaxonomy.name}`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
       changesBefore,
@@ -116,7 +133,13 @@ export async function PUT(
       siteId,
     });
 
-    return NextResponse.json({ taxonomy: updated[0] });
+    return NextResponse.json({ 
+      taxonomy: {
+        id: updatedTaxonomy._id.toString(),
+        ...updatedTaxonomy.toObject(),
+        _id: undefined,
+      }
+    });
   } catch (error) {
     console.error('Error updating taxonomy:', error);
     return NextResponse.json({ error: 'Failed to update taxonomy' }, { status: 500 });
@@ -128,41 +151,50 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    await connectDB();
+    
     const session = await getServerSession(authOptions);
-    if (!session?.user || (session.user as any).role !== 'admin') {
-      return NextResponse.json({ error: 'Unauthorized - Admin only' }, { status: 401 });
+    const permissions = (session?.user as any)?.permissions || {};
+    const isSuperAdmin = (session?.user as any)?.isSuperAdmin || false;
+
+    if (!session?.user || (!isSuperAdmin && !permissions.manage_taxonomies)) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Validate ID format
+    if (!/^[0-9a-fA-F]{24}$/.test(params.id)) {
+      return NextResponse.json({ error: 'Invalid taxonomy ID format' }, { status: 400 });
     }
 
     const userId = (session.user as any).id;
-    const siteId = (session.user as any).currentSiteId || 1;
-    const taxonomiesTable = getSiteTable(siteId, 'taxonomies');
-    const termsTable = getSiteTable(siteId, 'terms');
+    const siteId = (session.user as any).currentSiteId;
 
-    // Check if it's a built-in taxonomy
-    const [taxonomy] = await db.query<RowDataPacket[]>(
-      `SELECT name FROM ${taxonomiesTable} WHERE id = ?`,
-      [params.id]
-    );
+    // Get taxonomy
+    const taxonomy = await Taxonomy.findOne({
+      _id: params.id,
+      site_id: siteId,
+    });
 
-    if (taxonomy.length === 0) {
+    if (!taxonomy) {
       return NextResponse.json({ error: 'Taxonomy not found' }, { status: 404 });
     }
 
-    if (taxonomy[0].name === 'category' || taxonomy[0].name === 'tag') {
+    // Check if it's a built-in taxonomy
+    if (taxonomy.name === 'category' || taxonomy.name === 'tag') {
       return NextResponse.json({ 
-        error: `Cannot delete the built-in "${taxonomy[0].name}" taxonomy` 
+        error: `Cannot delete the built-in "${taxonomy.name}" taxonomy` 
       }, { status: 400 });
     }
 
     // Check if any terms use this taxonomy
-    const [termCount] = await db.query<RowDataPacket[]>(
-      `SELECT COUNT(*) as count FROM ${termsTable} WHERE taxonomy_id = ?`,
-      [params.id]
-    );
+    const termCount = await Term.countDocuments({
+      site_id: siteId,
+      taxonomy: taxonomy.name,
+    });
 
-    if (termCount[0].count > 0) {
+    if (termCount > 0) {
       return NextResponse.json({ 
-        error: `Cannot delete taxonomy "${taxonomy[0].name}" because it has ${termCount[0].count} associated terms.` 
+        error: `Cannot delete taxonomy "${taxonomy.name}" because it has ${termCount} associated terms.` 
       }, { status: 400 });
     }
 
@@ -171,15 +203,16 @@ export async function DELETE(
       userId,
       action: 'taxonomy_deleted',
       entityType: 'taxonomy',
-      entityId: Number.parseInt(params.id),
-      entityName: taxonomy[0].name,
-      details: `Deleted taxonomy: ${taxonomy[0].name}`,
+      entityId: params.id,
+      entityName: taxonomy.labels.singular_name || taxonomy.name,
+      details: `Deleted taxonomy: ${taxonomy.labels.singular_name || taxonomy.name} (${taxonomy.name})`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
       siteId,
     });
 
-    await db.query<ResultSetHeader>(`DELETE FROM ${taxonomiesTable} WHERE id = ?`, [params.id]);
+    // Delete the taxonomy
+    await Taxonomy.findByIdAndDelete(params.id);
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -187,4 +220,3 @@ export async function DELETE(
     return NextResponse.json({ error: 'Failed to delete taxonomy' }, { status: 500 });
   }
 }
-

@@ -1,21 +1,39 @@
-import db from '@/lib/db';
-import { RowDataPacket } from 'mysql2';
+import { connectDB } from '@/lib/db';
+import { Setting } from '@/lib/models';
+import { getDefaultSite } from '@/lib/url-utils';
 import Menu from './Menu';
+import mongoose from 'mongoose';
 
 async function getSettings() {
   try {
-    const [rows] = await db.query<RowDataPacket[]>(
-      "SELECT setting_key, setting_value FROM settings WHERE setting_key IN ('site_name', 'site_description')"
-    );
-    const settings: any = {};
-    rows.forEach((row: any) => {
-      settings[row.setting_key] = row.setting_value;
+    const site = await getDefaultSite();
+    if (!site) {
+      return {
+        site_name: 'Next CMS',
+        site_description: 'A complete content management system built with Next.js',
+      };
+    }
+
+    await connectDB();
+    
+    const settings = await Setting.find({
+      site_id: new mongoose.Types.ObjectId(site.id),
+      setting_key: { $in: ['site_name', 'site_description'] },
+    }).lean();
+
+    const result: any = {};
+    settings.forEach((setting) => {
+      result[setting.setting_key] = setting.setting_value;
     });
-    return settings;
+
+    return {
+      site_name: result.site_name || site.name || 'Next CMS',
+      site_description: result.site_description || 'A complete content management system',
+    };
   } catch {
     return {
       site_name: 'Next CMS',
-      site_description: 'A complete content management system built with Next.js, Tailwind CSS, and MySQL',
+      site_description: 'A complete content management system built with Next.js',
     };
   }
 }
@@ -40,4 +58,3 @@ export default async function Footer() {
     </footer>
   );
 }
-

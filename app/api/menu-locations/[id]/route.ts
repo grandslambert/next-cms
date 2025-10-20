@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import db, { getSiteTable } from '@/lib/db';
-import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { connectDB } from '@/lib/db';
+import { MenuLocation, Menu } from '@/lib/models';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import mongoose from 'mongoose';
 
 export async function DELETE(
   request: NextRequest,
@@ -21,24 +22,24 @@ export async function DELETE(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const siteId = (session.user as any).currentSiteId || 1;
-    const menuLocationsTable = getSiteTable(siteId, 'menu_locations');
-    const menusTable = getSiteTable(siteId, 'menus');
-
+    const siteId = (session.user as any).currentSiteId;
     const locationId = params.id;
 
-    // Get location info
-    const [location] = await db.query<RowDataPacket[]>(
-      `SELECT name, is_builtin FROM ${menuLocationsTable} WHERE id = ?`,
-      [locationId]
-    );
+    if (!mongoose.Types.ObjectId.isValid(locationId)) {
+      return NextResponse.json({ error: 'Invalid location ID' }, { status: 400 });
+    }
 
-    if (!location.length) {
+    await connectDB();
+
+    // Get location info
+    const location = await MenuLocation.findById(locationId).lean();
+
+    if (!location) {
       return NextResponse.json({ error: 'Location not found' }, { status: 404 });
     }
 
     // Check if this is a built-in location
-    if (location[0].is_builtin) {
+    if (location.is_builtin) {
       return NextResponse.json(
         { error: 'Cannot delete built-in location' },
         { status: 400 }
@@ -46,22 +47,16 @@ export async function DELETE(
     }
 
     // Check if any menus are using this location
-    const [menus] = await db.query<RowDataPacket[]>(
-      `SELECT COUNT(*) as count FROM ${menusTable} WHERE location = ?`,
-      [location[0].name]
-    );
+    const menuCount = await Menu.countDocuments({ location: location.name });
 
-    if (menus[0].count > 0) {
+    if (menuCount > 0) {
       return NextResponse.json(
         { error: 'Cannot delete location that is in use by menus' },
         { status: 400 }
       );
     }
 
-    await db.query<ResultSetHeader>(
-      `DELETE FROM ${menuLocationsTable} WHERE id = ?`,
-      [locationId]
-    );
+    await MenuLocation.findByIdAndDelete(locationId);
 
     // Log activity
     const userId = (session.user as any).id;
@@ -69,9 +64,9 @@ export async function DELETE(
       userId,
       action: 'deleted' as any,
       entityType: 'menu_location' as any,
-      entityId: Number.parseInt(locationId),
-      entityName: location[0]?.name || 'Unknown',
-      details: `Deleted menu location: ${location[0]?.name}`,
+      entityId: locationId,
+      entityName: location.name || 'Unknown',
+      details: `Deleted menu location: ${location.name}`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
       siteId,
@@ -83,4 +78,3 @@ export async function DELETE(
     return NextResponse.json({ error: 'Failed to delete menu location' }, { status: 500 });
   }
 }
-

@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import db, { getSiteTable } from '@/lib/db';
-import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { connectDB } from '@/lib/db';
+import { Post, PostRevision } from '@/lib/models';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import mongoose from 'mongoose';
 
 export async function POST(
   request: NextRequest,
@@ -15,110 +17,57 @@ export async function POST(
     }
 
     const userId = (session.user as any).id;
-    const isSuperAdmin = (session.user as any)?.isSuperAdmin || false;
-    const permissions = (session.user as any).permissions || {};
-    
-    // Get site ID for multi-site support
-    const siteId = (session.user as any).currentSiteId || 1;
-    const postsTable = getSiteTable(siteId, 'posts');
-    const postRevisionsTable = getSiteTable(siteId, 'post_revisions');
-    const postMetaTable = getSiteTable(siteId, 'post_meta');
-    const settingsTable = getSiteTable(siteId, 'settings');
+    const siteId = (session.user as any).currentSiteId;
 
-    // Check if post exists
-    const [existingPost] = await db.query<RowDataPacket[]>(
-      `SELECT * FROM ${postsTable} WHERE id = ?`,
-      [params.id]
-    );
-
-    if (existingPost.length === 0) {
-      return NextResponse.json({ error: 'Post not found' }, { status: 404 });
+    if (!mongoose.Types.ObjectId.isValid(params.id) || !mongoose.Types.ObjectId.isValid(params.revisionId)) {
+      return NextResponse.json({ error: 'Invalid post or revision ID' }, { status: 400 });
     }
 
-    const post = existingPost[0];
-    const isOwner = post.author_id === Number.parseInt(userId);
-    const canManageOthers = isSuperAdmin || permissions.manage_others_posts === true;
+    await connectDB();
 
-    // Check if user can edit this post
-    if (!isOwner && !canManageOthers) {
-      return NextResponse.json({ error: 'You can only restore revisions of your own posts' }, { status: 403 });
-    }
+    const revision = await PostRevision.findById(params.revisionId).lean();
 
-    // Get the revision
-    const [revisionResult] = await db.query<RowDataPacket[]>(
-      `SELECT * FROM ${postRevisionsTable} WHERE id = ? AND post_id = ?`,
-      [params.revisionId, params.id]
-    );
-
-    if (revisionResult.length === 0) {
+    if (!revision) {
       return NextResponse.json({ error: 'Revision not found' }, { status: 404 });
     }
 
-    const revision = revisionResult[0];
-
-    // Save current state as a revision before restoring
-    const [settingsResult] = await db.query<RowDataPacket[]>(
-      `SELECT setting_value FROM ${settingsTable} WHERE setting_key = ?`,
-      ['max_revisions']
+    // Update post with revision data
+    const updatedPost = await Post.findByIdAndUpdate(
+      params.id,
+      {
+        title: revision.title,
+        content: revision.content,
+        excerpt: revision.excerpt,
+      },
+      { new: true }
     );
-    const maxRevisions = settingsResult.length > 0 ? parseInt(settingsResult[0].setting_value) : 10;
 
-    if (maxRevisions > 0) {
-      // Get current custom fields for the revision
-      const [currentMeta] = await db.query<RowDataPacket[]>(
-        `SELECT meta_key, meta_value FROM ${postMetaTable} WHERE post_id = ?`,
-        [params.id]
-      );
-      
-      const customFieldsObj: Record<string, string> = {};
-      currentMeta.forEach((meta: any) => {
-        customFieldsObj[meta.meta_key] = meta.meta_value;
-      });
-
-      await db.query<ResultSetHeader>(
-        `INSERT INTO ${postRevisionsTable} (post_id, title, content, excerpt, custom_fields, author_id) VALUES (?, ?, ?, ?, ?, ?)`,
-        [params.id, post.title, post.content, post.excerpt, JSON.stringify(customFieldsObj), userId]
-      );
+    if (!updatedPost) {
+      return NextResponse.json({ error: 'Post not found' }, { status: 404 });
     }
 
-    // Restore the revision
-    await db.query<ResultSetHeader>(
-      `UPDATE ${postsTable} SET title = ?, content = ?, excerpt = ? WHERE id = ?`,
-      [revision.title, revision.content, revision.excerpt, params.id]
-    );
+    // Log activity
+    await logActivity({
+      userId,
+      action: 'post_revision_restored' as any,
+      entityType: 'post' as any,
+      entityId: params.id,
+      entityName: updatedPost.title,
+      details: `Restored post from revision ${params.revisionId}`,
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+      siteId,
+    });
 
-    // Restore custom fields from revision
-    if (revision.custom_fields) {
-      // Delete existing custom fields
-      await db.query<ResultSetHeader>(
-        `DELETE FROM ${postMetaTable} WHERE post_id = ?`,
-        [params.id]
-      );
-
-      // Parse and restore custom fields
-      const customFields = typeof revision.custom_fields === 'string' 
-        ? JSON.parse(revision.custom_fields) 
-        : revision.custom_fields;
-
-      if (customFields && Object.keys(customFields).length > 0) {
-        const values = Object.entries(customFields).map(([key, value]) => [params.id, key, value]);
-        await db.query<ResultSetHeader>(
-          `INSERT INTO ${postMetaTable} (post_id, meta_key, meta_value) VALUES ?`,
-          [values]
-        );
+    return NextResponse.json({ 
+      success: true,
+      post: {
+        ...updatedPost.toObject(),
+        id: updatedPost._id.toString(),
       }
-    }
-
-    // Get updated post
-    const [updatedPost] = await db.query<RowDataPacket[]>(
-      `SELECT * FROM ${postsTable} WHERE id = ?`,
-      [params.id]
-    );
-
-    return NextResponse.json({ post: updatedPost[0], message: 'Revision restored successfully' });
+    });
   } catch (error) {
     console.error('Error restoring revision:', error);
     return NextResponse.json({ error: 'Failed to restore revision' }, { status: 500 });
   }
 }
-

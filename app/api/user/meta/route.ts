@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import db from '@/lib/db';
-import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { connectDB } from '@/lib/db';
+import { UserMeta } from '@/lib/models';
+import mongoose from 'mongoose';
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,20 +12,31 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    await connectDB();
+
     const userId = (session.user as any).id;
-    const siteId = (session.user as any).currentSiteId || 1;
+    const siteId = (session.user as any).currentSiteId;
     const searchParams = request.nextUrl.searchParams;
     const metaKey = searchParams.get('key');
 
-    let query = 'SELECT * FROM user_meta WHERE user_id = ? AND site_id = ?';
-    const params: any[] = [userId, siteId];
-
-    if (metaKey) {
-      query += ' AND meta_key = ?';
-      params.push(metaKey);
+    // Validate ObjectIds
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return NextResponse.json({ error: 'Invalid user ID' }, { status: 400 });
     }
 
-    const [meta] = await db.query<RowDataPacket[]>(query, params);
+    const query: any = { user_id: new mongoose.Types.ObjectId(userId) };
+
+    // Add site_id to query if available
+    if (siteId && mongoose.Types.ObjectId.isValid(siteId)) {
+      query.site_id = new mongoose.Types.ObjectId(siteId);
+    }
+
+    // Add meta_key to query if provided
+    if (metaKey) {
+      query.meta_key = metaKey;
+    }
+
+    const meta = await UserMeta.find(query).lean();
 
     // If requesting a specific key, return just that value
     if (metaKey && meta.length > 0) {
@@ -45,8 +57,10 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    await connectDB();
+
     const userId = (session.user as any).id;
-    const siteId = (session.user as any).currentSiteId || 1;
+    const siteId = (session.user as any).currentSiteId;
     const body = await request.json();
     const { meta_key, meta_value } = body;
 
@@ -54,25 +68,30 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'meta_key is required' }, { status: 400 });
     }
 
-    // Check if meta already exists for this user AND site
-    const [existing] = await db.query<RowDataPacket[]>(
-      'SELECT id FROM user_meta WHERE user_id = ? AND site_id = ? AND meta_key = ?',
-      [userId, siteId, meta_key]
-    );
-
-    if (existing.length > 0) {
-      // Update existing
-      await db.query<ResultSetHeader>(
-        'UPDATE user_meta SET meta_value = ? WHERE user_id = ? AND site_id = ? AND meta_key = ?',
-        [meta_value, userId, siteId, meta_key]
-      );
-    } else {
-      // Insert new
-      await db.query<ResultSetHeader>(
-        'INSERT INTO user_meta (user_id, site_id, meta_key, meta_value) VALUES (?, ?, ?, ?)',
-        [userId, siteId, meta_key, meta_value]
-      );
+    // Validate ObjectIds
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return NextResponse.json({ error: 'Invalid user ID' }, { status: 400 });
     }
+
+    if (!siteId || !mongoose.Types.ObjectId.isValid(siteId)) {
+      return NextResponse.json({ error: 'Invalid or missing site ID' }, { status: 400 });
+    }
+
+    // Use findOneAndUpdate with upsert to either update or insert
+    const updatedMeta = await UserMeta.findOneAndUpdate(
+      {
+        user_id: new mongoose.Types.ObjectId(userId),
+        site_id: new mongoose.Types.ObjectId(siteId),
+        meta_key,
+      },
+      {
+        meta_value,
+      },
+      {
+        upsert: true,
+        new: true,
+      }
+    );
 
     return NextResponse.json({ success: true, meta_key, meta_value });
   } catch (error) {

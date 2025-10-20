@@ -1,169 +1,97 @@
-import db, { getSiteTable } from '@/lib/db';
-import { RowDataPacket } from 'mysql2';
+import { connectDB } from '@/lib/db';
+import { Menu, MenuItem, PostType, Taxonomy, Post, Term } from '@/lib/models';
+import mongoose from 'mongoose';
 
-// Helper function to build hierarchical slug path
-async function buildHierarchicalSlugPath(postId: number, siteId: number = 1): Promise<string> {
-  const slugs: string[] = [];
-  let currentId: number | null = postId;
-  const postsTable = getSiteTable(siteId, 'posts');
-
-  while (currentId) {
-    const [rows] = await db.query<RowDataPacket[]>(
-      `SELECT slug, parent_id FROM ${postsTable} WHERE id = ?`,
-      [currentId]
-    );
-
-    if (!rows.length) break;
-
-    const post = rows[0] as any;
-    slugs.unshift(post.slug);
-    currentId = post.parent_id;
-  }
-
-  return slugs.join('/');
-}
-
-export interface MenuItem {
-  id: number;
-  parent_id: number | null;
-  label: string;
-  url: string;
-  target: string;
-  title_attr?: string;
-  css_classes?: string;
-  xfn?: string;
-  description?: string;
-}
-
-export async function getMenuByLocation(location: string, siteId: number = 1): Promise<MenuItem[]> {
+export async function getMenuByLocation(location: string, siteId: string) {
   try {
-    // Check if MySQL is configured - return empty array if not
-    if (!process.env.DB_HOST || !process.env.DB_USER || !process.env.DB_NAME) {
-      return [];
-    }
-    
-    // Get site-prefixed table names
-    const menusTable = getSiteTable(siteId, 'menus');
-    const menuItemsTable = getSiteTable(siteId, 'menu_items');
-    const menuItemMetaTable = getSiteTable(siteId, 'menu_item_meta');
-    const postTypesTable = getSiteTable(siteId, 'post_types');
-    const taxonomiesTable = getSiteTable(siteId, 'taxonomies');
-    const postsTable = getSiteTable(siteId, 'posts');
-    const termsTable = getSiteTable(siteId, 'terms');
-    
-    // Get the menu for this location
-    const [menuRows] = await db.query<RowDataPacket[]>(
-      `SELECT id, name FROM ${menusTable} WHERE location = ?`,
-      [location]
-    );
-
-    if (!menuRows.length) {
+    if (!siteId || !mongoose.Types.ObjectId.isValid(siteId)) {
       return [];
     }
 
-    const menu = menuRows[0];
+    await connectDB();
 
-    // Get menu items with their metadata
-    const [itemRows] = await db.query<RowDataPacket[]>(
-      `SELECT mi.*,
-              pt.name as post_type_slug,
-              pt.label as post_type_label,
-              pt.url_structure as post_type_url,
-              pt.hierarchical as post_type_hierarchical,
-              tax.name as taxonomy_slug,
-              tax.label as taxonomy_label,
-              p.id as post_id,
-              p.slug as post_slug,
-              p.title as post_title,
-              p.parent_id as post_parent_id,
-              p.post_type as post_post_type,
-              pt2.hierarchical as post_hierarchical,
-              pt2.url_structure as post_url_structure,
-              t.name as term_name,
-              t.slug as term_slug,
-              tax2.name as term_taxonomy_slug
-       FROM ${menuItemsTable} mi
-       LEFT JOIN ${postTypesTable} pt ON mi.type = 'post_type' AND mi.object_id = pt.id
-       LEFT JOIN ${taxonomiesTable} tax ON mi.type = 'taxonomy' AND mi.object_id = tax.id
-       LEFT JOIN ${postsTable} p ON mi.type = 'post' AND mi.object_id = p.id
-       LEFT JOIN ${postTypesTable} pt2 ON p.post_type = pt2.name
-       LEFT JOIN ${termsTable} t ON mi.type = 'term' AND mi.object_id = t.id
-       LEFT JOIN ${taxonomiesTable} tax2 ON mi.type = 'term' AND t.taxonomy_id = tax2.id
-       WHERE mi.menu_id = ? 
-       ORDER BY mi.menu_order ASC, mi.id ASC`,
-      [(menu as any).id]
-    );
+    // Find menu by location
+    const menu = await Menu.findOne({
+      site_id: new mongoose.Types.ObjectId(siteId),
+      location,
+    }).lean();
 
-    // Fetch meta data for each item
-    if (itemRows.length > 0) {
-      const [metaRows] = await db.query<RowDataPacket[]>(
-        `SELECT menu_item_id, meta_key, meta_value 
-         FROM ${menuItemMetaTable} 
-         WHERE menu_item_id IN (?)`,
-        [itemRows.map((r: any) => r.id)]
-      );
+    if (!menu) {
+      return [];
+    }
 
-      // Attach meta to items and generate URLs
-      for (const item of itemRows) {
-        const itemAny = item as any;
-        const itemMeta = (metaRows as any[]).filter((m: any) => m.menu_item_id === itemAny.id);
-        
-        for (const m of itemMeta) {
-          itemAny[m.meta_key] = m.meta_value;
+    // Get menu items
+    const items = await MenuItem.find({ menu_id: menu._id })
+      .sort({ menu_order: 1 })
+      .lean();
+
+    // Build menu tree
+    const enrichedItems = await Promise.all(items.map(async (item) => {
+      let url = item.custom_url || '#';
+      let label = item.custom_label || '';
+
+      if (item.type === 'post_type' && item.object_id) {
+        const postType = await PostType.findById(item.object_id).lean();
+        if (postType) {
+          url = `/${postType.slug}`;
+          label = label || postType.label;
         }
-
-        // Generate URL for the item
-        if (itemAny.type === 'custom') {
-          itemAny.url = itemAny.custom_url;
-        } else if (itemAny.type === 'post_type') {
-          itemAny.url = `/${itemAny.post_type_slug}`;
-        } else if (itemAny.type === 'taxonomy') {
-          itemAny.url = `/${itemAny.taxonomy_slug}`;
-        } else if (itemAny.type === 'term') {
-          itemAny.url = `/${itemAny.term_taxonomy_slug}/${itemAny.term_slug}`;
-        } else if (itemAny.type === 'post' && itemAny.post_id) {
-          // Check if this post's type is hierarchical (using pt2.hierarchical from the join)
-          const isHierarchical = itemAny.post_hierarchical === 1 || itemAny.post_hierarchical === true;
-          
-          console.log(`Post ${itemAny.post_id} (${itemAny.post_title}): hierarchical=${itemAny.post_hierarchical}, isHierarchical=${isHierarchical}`);
-          
-          if (isHierarchical) {
-            // For hierarchical post types, always build the full path
-            const slugPath = await buildHierarchicalSlugPath(itemAny.post_id, siteId);
-            itemAny.url = `/${slugPath}`;
-            console.log(`Built hierarchical URL for post ${itemAny.post_id}: /${slugPath}`);
-          } else {
-            // Non-hierarchical: use URL structure
-            const urlStructure = itemAny.post_url_structure || '/:slug';
-            itemAny.url = urlStructure.replace(':slug', itemAny.post_slug);
-            console.log(`Built non-hierarchical URL: ${itemAny.url}`);
-          }
+      } else if (item.type === 'taxonomy' && item.object_id) {
+        const taxonomy = await Taxonomy.findById(item.object_id).lean();
+        if (taxonomy) {
+          url = `/${taxonomy.slug}`;
+          label = label || taxonomy.label;
         }
-
-        // Determine the display label
-        if (itemAny.custom_label) {
-          itemAny.label = itemAny.custom_label;
-        } else if (itemAny.type === 'post') {
-          itemAny.label = itemAny.post_title;
-        } else if (itemAny.type === 'post_type') {
-          itemAny.label = itemAny.post_type_label;
-        } else if (itemAny.type === 'taxonomy') {
-          itemAny.label = itemAny.taxonomy_label;
-        } else if (itemAny.type === 'term') {
-          itemAny.label = itemAny.term_name;
-        } else {
-          itemAny.label = itemAny.custom_url;
+      } else if (item.type === 'post' && item.object_id) {
+        const post = await Post.findById(item.object_id).lean();
+        if (post) {
+          url = post.post_type === 'page' ? `/${post.slug}` : `/${post.post_type}/${post.slug}`;
+          label = label || post.title;
+        }
+      } else if (item.type === 'term' && item.object_id) {
+        const term = await Term.findById(item.object_id).populate('taxonomy_id').lean();
+        if (term && term.taxonomy_id) {
+          const taxonomy = term.taxonomy_id as any;
+          url = `/${taxonomy.slug}/${term.slug}`;
+          label = label || term.name;
         }
       }
-    }
 
-    return itemRows as unknown as MenuItem[];
+      return {
+        id: item._id.toString(),
+        label,
+        url,
+        target: item.target || '_self',
+        parent_id: item.parent_id?.toString() || null,
+        menu_order: item.menu_order,
+      };
+    }));
+
+    // Build hierarchical structure
+    const menuTree: any[] = [];
+    const itemMap = new Map();
+
+    enrichedItems.forEach((item) => {
+      itemMap.set(item.id, { ...item, children: [] });
+    });
+
+    enrichedItems.forEach((item) => {
+      const menuItem = itemMap.get(item.id);
+      if (item.parent_id) {
+        const parent = itemMap.get(item.parent_id);
+        if (parent) {
+          parent.children.push(menuItem);
+        } else {
+          menuTree.push(menuItem);
+        }
+      } else {
+        menuTree.push(menuItem);
+      }
+    });
+
+    return menuTree;
   } catch (error) {
-    // Only log error if MySQL is actually configured (not just missing)
-    if (process.env.DB_HOST && process.env.DB_USER && process.env.DB_NAME) {
-      console.error('Error fetching menu:', error);
-    }
+    console.error('Error fetching menu:', error);
     return [];
   }
 }
-

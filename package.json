@@ -1,6 +1,6 @@
 {
   "name": "next-cms",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "A complete WordPress-like CMS built with Next.js, Tailwind CSS, and MongoDB",
   "private": true,
   "scripts": {
@@ -25,7 +25,6 @@
     "jszip": "^3.10.1",
     "mongoose": "^8.0.3",
     "multer": "^1.4.5-lts.1",
-    "mysql2": "^3.6.5",
     "next": "^14.0.4",
     "next-auth": "^4.24.5",
     "react": "^18.2.0",

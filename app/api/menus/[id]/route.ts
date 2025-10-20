@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import db, { getSiteTable } from '@/lib/db';
-import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { connectDB } from '@/lib/db';
+import { Menu, MenuItem } from '@/lib/models';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import mongoose from 'mongoose';
 
 export async function GET(
   request: NextRequest,
@@ -16,23 +17,29 @@ export async function GET(
     }
 
     const permissions = (session.user as any).permissions || {};
-    const siteId = (session.user as any).currentSiteId || 1;
-    const menusTable = getSiteTable(siteId, 'menus');
     
     if (!permissions.manage_menus) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const [rows] = await db.query<RowDataPacket[]>(
-      `SELECT * FROM ${menusTable} WHERE id = ?`,
-      [params.id]
-    );
+    if (!mongoose.Types.ObjectId.isValid(params.id)) {
+      return NextResponse.json({ error: 'Invalid menu ID' }, { status: 400 });
+    }
 
-    if (rows.length === 0) {
+    await connectDB();
+
+    const menu = await Menu.findById(params.id).lean();
+
+    if (!menu) {
       return NextResponse.json({ error: 'Menu not found' }, { status: 404 });
     }
 
-    return NextResponse.json({ menu: rows[0] });
+    return NextResponse.json({ 
+      menu: {
+        ...menu,
+        id: menu._id.toString(),
+      }
+    });
   } catch (error) {
     console.error('Error fetching menu:', error);
     return NextResponse.json({ error: 'Failed to fetch menu' }, { status: 500 });
@@ -51,40 +58,41 @@ export async function PUT(
 
     const permissions = (session.user as any).permissions || {};
     const userId = (session.user as any).id;
-    const siteId = (session.user as any).currentSiteId || 1;
-    const menusTable = getSiteTable(siteId, 'menus');
+    const siteId = (session.user as any).currentSiteId;
     
     if (!permissions.manage_menus) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const body = await request.json();
-    const { name, location, description } = body;
-
-    if (!name || !location) {
-      return NextResponse.json({ error: 'Name and location are required' }, { status: 400 });
+    if (!mongoose.Types.ObjectId.isValid(params.id)) {
+      return NextResponse.json({ error: 'Invalid menu ID' }, { status: 400 });
     }
 
-    // Get current menu BEFORE updating
-    const [beforeUpdate] = await db.query<RowDataPacket[]>(
-      `SELECT * FROM ${menusTable} WHERE id = ?`,
-      [params.id]
-    );
+    const body = await request.json();
+    const { name, display_name, location, description } = body;
 
-    if (beforeUpdate.length === 0) {
+    if (!name) {
+      return NextResponse.json({ error: 'Name is required' }, { status: 400 });
+    }
+
+    await connectDB();
+
+    // Get current menu BEFORE updating
+    const currentMenu = await Menu.findById(params.id).lean();
+
+    if (!currentMenu) {
       return NextResponse.json({ error: 'Menu not found' }, { status: 404 });
     }
 
-    const currentMenu = beforeUpdate[0];
-
-    await db.query<ResultSetHeader>(
-      `UPDATE ${menusTable} SET name = ?, location = ?, description = ? WHERE id = ?`,
-      [name, location, description || '', params.id]
-    );
-
-    const [updated] = await db.query<RowDataPacket[]>(
-      `SELECT * FROM ${menusTable} WHERE id = ?`,
-      [params.id]
+    const updatedMenu = await Menu.findByIdAndUpdate(
+      params.id,
+      {
+        name,
+        display_name: display_name || name,
+        location: location || '',
+        description: description || '',
+      },
+      { new: true }
     );
 
     // Log activity
@@ -92,28 +100,35 @@ export async function PUT(
       userId,
       action: 'menu_updated' as any,
       entityType: 'menu' as any,
-      entityId: Number.parseInt(params.id),
+      entityId: params.id,
       entityName: name,
       details: `Updated menu: ${name}`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
       changesBefore: {
         name: currentMenu.name,
+        display_name: currentMenu.display_name,
         location: currentMenu.location,
         description: currentMenu.description,
       },
       changesAfter: {
-        name: updated[0].name,
-        location: updated[0].location,
-        description: updated[0].description,
+        name: updatedMenu?.name,
+        display_name: updatedMenu?.display_name,
+        location: updatedMenu?.location,
+        description: updatedMenu?.description,
       },
       siteId,
     });
 
-    return NextResponse.json({ menu: updated[0] });
+    return NextResponse.json({ 
+      menu: {
+        ...updatedMenu?.toObject(),
+        id: updatedMenu?._id.toString(),
+      }
+    });
   } catch (error: any) {
     console.error('Error updating menu:', error);
-    if (error.code === 'ER_DUP_ENTRY') {
+    if (error.code === 11000) {
       return NextResponse.json({ error: 'A menu with this name already exists' }, { status: 409 });
     }
     return NextResponse.json({ error: 'Failed to update menu' }, { status: 500 });
@@ -132,40 +147,43 @@ export async function DELETE(
 
     const permissions = (session.user as any).permissions || {};
     const userId = (session.user as any).id;
-    const siteId = (session.user as any).currentSiteId || 1;
-    const menusTable = getSiteTable(siteId, 'menus');
+    const siteId = (session.user as any).currentSiteId;
     
     if (!permissions.manage_menus) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    // Get menu details for logging
-    const [menuRows] = await db.query<RowDataPacket[]>(
-      `SELECT * FROM ${menusTable} WHERE id = ?`,
-      [params.id]
-    );
-
-    if (menuRows.length === 0) {
-      return NextResponse.json({ error: 'Menu not found' }, { status: 404 });
+    if (!mongoose.Types.ObjectId.isValid(params.id)) {
+      return NextResponse.json({ error: 'Invalid menu ID' }, { status: 400 });
     }
 
-    const menu = menuRows[0];
+    await connectDB();
+
+    // Get menu details for logging
+    const menu = await Menu.findById(params.id).lean();
+
+    if (!menu) {
+      return NextResponse.json({ error: 'Menu not found' }, { status: 404 });
+    }
 
     // Log activity before deleting
     await logActivity({
       userId,
       action: 'menu_deleted' as any,
       entityType: 'menu' as any,
-      entityId: Number.parseInt(params.id),
+      entityId: params.id,
       entityName: menu.name,
-      details: `Deleted menu: ${menu.name} (${menu.location})`,
+      details: `Deleted menu: ${menu.name}${menu.location ? ` (${menu.location})` : ''}`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
       siteId,
     });
 
-    // Delete menu (CASCADE will delete menu items)
-    await db.query<ResultSetHeader>(`DELETE FROM ${menusTable} WHERE id = ?`, [params.id]);
+    // Delete menu items associated with this menu
+    await MenuItem.deleteMany({ menu_id: new mongoose.Types.ObjectId(params.id) });
+
+    // Delete menu
+    await Menu.findByIdAndDelete(params.id);
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -173,5 +191,4 @@ export async function DELETE(
     return NextResponse.json({ error: 'Failed to delete menu' }, { status: 500 });
   }
 }
-
 

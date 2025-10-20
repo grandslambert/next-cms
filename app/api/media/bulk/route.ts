@@ -1,83 +1,64 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import db, { getSiteTable } from '@/lib/db';
-import { ResultSetHeader } from 'mysql2';
+import { connectDB } from '@/lib/db';
+import { Media } from '@/lib/models';
+import mongoose from 'mongoose';
 
-export async function POST(request: NextRequest) {
+export async function PUT(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const permissions = (session.user as any).permissions || {};
-    if (!permissions.manage_media) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-
-    const siteId = (session.user as any).currentSiteId || 1;
-    const mediaTable = getSiteTable(siteId, 'media');
-
     const body = await request.json();
-    const { action, media_ids, folder_id } = body;
+    const { ids, action, folder_id } = body;
 
-    if (!media_ids || !Array.isArray(media_ids) || media_ids.length === 0) {
-      return NextResponse.json({ error: 'No media items selected' }, { status: 400 });
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return NextResponse.json({ error: 'ids array is required' }, { status: 400 });
     }
 
-    const placeholders = media_ids.map(() => '?').join(',');
+    if (!action) {
+      return NextResponse.json({ error: 'action is required' }, { status: 400 });
+    }
 
+    // Validate all IDs
+    const invalidIds = ids.filter((id) => !mongoose.Types.ObjectId.isValid(id));
+    if (invalidIds.length > 0) {
+      return NextResponse.json({ error: 'Invalid media IDs found' }, { status: 400 });
+    }
+
+    await connectDB();
+
+    const objectIds = ids.map((id) => new mongoose.Types.ObjectId(id));
+
+    let result;
     switch (action) {
-      case 'trash':
-        // Move to trash
-        await db.execute<ResultSetHeader>(
-          `UPDATE ${mediaTable} SET deleted_at = NOW() WHERE id IN (${placeholders})`,
-          media_ids
+      case 'delete':
+        result = await Media.updateMany(
+          { _id: { $in: objectIds } },
+          { status: 'trash', deleted_at: new Date() }
         );
-        return NextResponse.json({ 
-          message: `${media_ids.length} item${media_ids.length !== 1 ? 's' : ''} moved to trash` 
-        });
-
-      case 'restore':
-        // Restore from trash
-        await db.execute<ResultSetHeader>(
-          `UPDATE ${mediaTable} SET deleted_at = NULL WHERE id IN (${placeholders})`,
-          media_ids
-        );
-        return NextResponse.json({ 
-          message: `${media_ids.length} item${media_ids.length !== 1 ? 's' : ''} restored` 
-        });
+        break;
 
       case 'move':
-        // Move to folder
-        if (folder_id === undefined) {
-          return NextResponse.json({ error: 'Folder ID required for move action' }, { status: 400 });
+        if (folder_id !== null && folder_id !== undefined && !mongoose.Types.ObjectId.isValid(folder_id)) {
+          return NextResponse.json({ error: 'Invalid folder ID' }, { status: 400 });
         }
-        await db.execute<ResultSetHeader>(
-          `UPDATE ${mediaTable} SET folder_id = ? WHERE id IN (${placeholders})`,
-          [folder_id, ...media_ids]
+        result = await Media.updateMany(
+          { _id: { $in: objectIds } },
+          { folder_id: folder_id ? new mongoose.Types.ObjectId(folder_id) : null }
         );
-        return NextResponse.json({ 
-          message: `${media_ids.length} item${media_ids.length !== 1 ? 's' : ''} moved` 
-        });
-
-      case 'permanent-delete':
-        // Permanently delete (only from trash)
-        await db.execute<ResultSetHeader>(
-          `DELETE FROM ${mediaTable} WHERE id IN (${placeholders}) AND deleted_at IS NOT NULL`,
-          media_ids
-        );
-        return NextResponse.json({ 
-          message: `${media_ids.length} item${media_ids.length !== 1 ? 's' : ''} permanently deleted` 
-        });
+        break;
 
       default:
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
+
+    return NextResponse.json({ success: true, modified: result.modifiedCount });
   } catch (error) {
     console.error('Error performing bulk action:', error);
     return NextResponse.json({ error: 'Failed to perform bulk action' }, { status: 500 });
   }
 }
-

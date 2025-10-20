@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import db, { getSiteTable } from '@/lib/db';
-import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { connectDB } from '@/lib/db';
+import { MenuItemMeta } from '@/lib/models';
+import mongoose from 'mongoose';
 
 export async function GET(
   request: NextRequest,
@@ -14,27 +15,27 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const isSuperAdmin = (session.user as any)?.isSuperAdmin || false;
     const permissions = (session.user as any).permissions || {};
-    if (!permissions.manage_menus) {
+    if (!isSuperAdmin && !permissions.manage_menus) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const siteId = (session.user as any).currentSiteId || 1;
-    const menuItemMetaTable = getSiteTable(siteId, 'menu_item_meta');
-    const menuItemId = params.id;
+    if (!mongoose.Types.ObjectId.isValid(params.id)) {
+      return NextResponse.json({ error: 'Invalid menu item ID' }, { status: 400 });
+    }
 
-    const [rows] = await db.query<RowDataPacket[]>(
-      `SELECT meta_key, meta_value FROM ${menuItemMetaTable} WHERE menu_item_id = ?`,
-      [menuItemId]
-    );
+    await connectDB();
 
-    // Convert to key-value object
-    const meta: { [key: string]: string } = {};
-    rows.forEach((row: any) => {
-      meta[row.meta_key] = row.meta_value;
-    });
+    const meta = await MenuItemMeta.find({ menu_item_id: new mongoose.Types.ObjectId(params.id) }).lean();
 
-    return NextResponse.json({ meta });
+    // Format for UI compatibility
+    const formattedMeta = meta.map((m) => ({
+      ...m,
+      id: m._id.toString(),
+    }));
+
+    return NextResponse.json({ meta: formattedMeta });
   } catch (error) {
     console.error('Error fetching menu item meta:', error);
     return NextResponse.json({ error: 'Failed to fetch menu item meta' }, { status: 500 });
@@ -51,39 +52,49 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const isSuperAdmin = (session.user as any)?.isSuperAdmin || false;
     const permissions = (session.user as any).permissions || {};
-    if (!permissions.manage_menus) {
+    if (!isSuperAdmin && !permissions.manage_menus) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const siteId = (session.user as any).currentSiteId || 1;
-    const menuItemMetaTable = getSiteTable(siteId, 'menu_item_meta');
-    const menuItemId = params.id;
+    if (!mongoose.Types.ObjectId.isValid(params.id)) {
+      return NextResponse.json({ error: 'Invalid menu item ID' }, { status: 400 });
+    }
+
     const body = await request.json();
-    const { meta } = body; // Object with key-value pairs
+    const { meta_key, meta_value } = body;
 
-    if (!meta || typeof meta !== 'object') {
-      return NextResponse.json({ error: 'meta object is required' }, { status: 400 });
+    if (!meta_key) {
+      return NextResponse.json({ error: 'meta_key is required' }, { status: 400 });
     }
 
-    // Delete existing meta
-    await db.query(`DELETE FROM ${menuItemMetaTable} WHERE menu_item_id = ?`, [menuItemId]);
+    await connectDB();
 
-    // Insert new meta
-    for (const [key, value] of Object.entries(meta)) {
-      if (value) { // Only save non-empty values
-        await db.query<ResultSetHeader>(
-          `INSERT INTO ${menuItemMetaTable} (menu_item_id, meta_key, meta_value) VALUES (?, ?, ?)`,
-          [menuItemId, key, value]
-        );
+    // Upsert meta value
+    const updatedMeta = await MenuItemMeta.findOneAndUpdate(
+      {
+        menu_item_id: new mongoose.Types.ObjectId(params.id),
+        meta_key,
+      },
+      {
+        meta_value: meta_value || '',
+      },
+      {
+        upsert: true,
+        new: true,
       }
-    }
+    );
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ 
+      success: true,
+      meta: {
+        ...updatedMeta.toObject(),
+        id: updatedMeta._id.toString(),
+      }
+    });
   } catch (error) {
     console.error('Error updating menu item meta:', error);
     return NextResponse.json({ error: 'Failed to update menu item meta' }, { status: 500 });
   }
 }
-
-

@@ -68,7 +68,7 @@ export default function LoginPage() {
               value={emailOrUsername}
               onChange={(e) => setEmailOrUsername(e.target.value)}
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-              placeholder="superadmin@example.com or superadmin"
+              placeholder="admin or superadmin"
               required
             />
           </div>
@@ -99,16 +99,18 @@ export default function LoginPage() {
         {!hideDefaultUser && (
           <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
             <p className="text-sm font-semibold text-gray-700 mb-2">Default Accounts:</p>
-            <div className="space-y-2 text-sm">
+            <div className="space-y-3 text-sm">
               <div className="font-mono text-gray-900">
-                <p className="font-semibold text-blue-700">Super Admin:</p>
-                <p>superadmin (or superadmin@example.com)</p>
-                <p className="text-gray-600">Password: SuperAdmin123!</p>
+                <p className="font-semibold text-blue-700">👑 Super Admin (Site Management):</p>
+                <p>Username: <span className="font-bold">superadmin</span></p>
+                <p>Email: admin@example.com</p>
+                <p className="text-gray-600">Password: <span className="font-bold">SuperAdmin123!</span></p>
               </div>
               <div className="font-mono text-gray-900">
-                <p className="font-semibold text-green-700">Site Admin:</p>
-                <p>siteadmin (or admin@site1.com)</p>
-                <p className="text-gray-600">Password: SiteAdmin123!</p>
+                <p className="font-semibold text-green-700">👤 Site Admin (Content Management):</p>
+                <p>Username: <span className="font-bold">admin</span></p>
+                <p>Email: siteadmin@example.com</p>
+                <p className="text-gray-600">Password: <span className="font-bold">Admin123!</span></p>
               </div>
             </div>
             <p className="text-xs text-gray-500 mt-3">⚠️ Change these passwords after first login</p>
