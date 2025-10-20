@@ -22,13 +22,7 @@ export default function GlobalSettingsPage() {
 
   const isSuperAdmin = (session?.user as any)?.isSuperAdmin || false;
 
-  // Redirect non-super-admins
-  if (status === 'authenticated' && !isSuperAdmin) {
-    router.push('/admin');
-    return null;
-  }
-
-  // Fetch current settings
+  // Fetch current settings - must call hook before any early returns
   const { isLoading, data: globalData } = useQuery({
     queryKey: ['global-settings'],
     queryFn: async () => {
@@ -67,6 +61,12 @@ export default function GlobalSettingsPage() {
   const handleSave = () => {
     saveMutation.mutate(settings);
   };
+
+  // Redirect non-super-admins after hooks are called
+  if (status === 'authenticated' && !isSuperAdmin) {
+    router.push('/admin');
+    return null;
+  }
 
   if (status === 'loading' || isLoading) {
     return (

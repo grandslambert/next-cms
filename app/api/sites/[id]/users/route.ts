@@ -15,7 +15,7 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const isSuperAdmin = (session.user as any).isSuperAdmin;
+    const isSuperAdmin = (session.user as any)?.isSuperAdmin;
     if (!isSuperAdmin) {
       return NextResponse.json({ error: 'Forbidden - Super Admin only' }, { status: 403 });
     }
@@ -58,7 +58,7 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const isSuperAdmin = (session.user as any).isSuperAdmin;
+    const isSuperAdmin = (session.user as any)?.isSuperAdmin;
     if (!isSuperAdmin) {
       return NextResponse.json({ error: 'Forbidden - Super Admin only' }, { status: 403 });
     }

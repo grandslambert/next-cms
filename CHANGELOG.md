@@ -5,40 +5,43 @@ All notable changes to Next CMS will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.3.3] - 2025-10-17
+## [Unreleased]
 
 ### Added
-- **Users API** - Complete user management system
-  - List users with pagination, search, and filtering
-  - Get single user with role and site information
-  - Create users with password hashing and site assignments
-  - Update users (PUT/PATCH) with self-profile support
-  - Delete users with protection against self-deletion
-  - Search across username, email, first name, and last name
-  - Filter by role ID and site assignment
-  - Multi-site user assignments with per-site roles
-  - Permission checking (`manage_users`)
-  - Self-profile access (users can view/edit own profile with restrictions)
-  - Duplicate username/email validation
-  - Password hashing with bcrypt
-  - Activity logging for all user operations
-- **Users API Test Suite** - 17 comprehensive tests
-  - User CRUD operations testing
-  - Search and filtering validation
-  - Permission and self-access testing
-  - Error handling and validation
 
 ### Changed
-- **Test Suite** - Removed duplicate test scripts from root directory
-  - All test scripts now properly organized in `tests/api/`
-  - Cleaned up leftover test files from migration
 
-### Documentation
-- Complete API documentation for Users (`/api/v1/users/README.md`)
-- Self-access and permission rules
-- Multi-site assignment examples
-- Security notes and best practices
-- Updated test suite README with Users API coverage (88 total tests)
+### Fixed
+
+## [2.3.4] - 2025-10-20
+
+### Fixed
+- **Build System**
+  - Fixed deprecated Next.js API route config export in media upload handler
+  - Fixed React Hooks rules violations (hooks called conditionally after early returns)
+  - Added proper optional chaining for session null checks across API routes
+  - Fixed TypeScript type inference issues for database query results
+  - Fixed Set/Map iteration compatibility with ES5 target using `Array.from()`
+  - Fixed image dimension type assertions in media processing
+- **API Routes**
+  - Session handling with consistent optional chaining across all routes
+  - Media regeneration Set iteration and session type checks
+  - Sites management session null checks in CRUD operations
+  - Post types mutation response handling in empty trash operation
+- **Admin UI**
+  - React Hooks order violations in Global Settings and Sites pages
+  - TypeScript errors in dashboard post type mapping
+  - Type casting for post type labels
+- **Database**
+  - Type annotations in post-utils slug path builder
+
+### Changed
+- Updated API implementation documentation with Sites and Settings endpoints
+- Added comprehensive test coverage for multi-site management (118 total API tests)
+
+## [2.3.3] - 2025-10-17
+
+See [changelog/v2.3.3.md](changelog/v2.3.3.md) for details.
 
 ## [2.3.2] - 2025-10-17
 

@@ -17,8 +17,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Valid site ID is required' }, { status: 400 });
     }
 
-    const userId = (session.user as any).id;
-    const isSuperAdmin = (session.user as any).isSuperAdmin;
+    const userId = (session.user as any)?.id;
+    const isSuperAdmin = (session.user as any)?.isSuperAdmin;
 
     // Check if site exists
     const [sites] = await db.query<RowDataPacket[]>(

@@ -224,9 +224,38 @@ Pages are handled by the Posts API with `post_type=page`. No separate endpoint n
 - [x] Activity logging
 - [x] Site assignments management
 
-### Phase 6: Settings & Sites API
-- [ ] Settings endpoints
-- [ ] Sites endpoints (multi-site)
+## ✅ Phase 6: Settings & Sites API (COMPLETED)
+
+### Sites API - Implemented
+- [x] List sites (`GET /api/v1/sites`)
+- [x] Get single site (`GET /api/v1/sites/:id`)
+- [x] Create site (`POST /api/v1/sites`)
+- [x] Update site (`PUT /api/v1/sites/:id`)
+- [x] Partial update site (`PATCH /api/v1/sites/:id`)
+- [x] Delete site (`DELETE /api/v1/sites/:id`)
+- [x] Search sites by name, display_name, or domain
+- [x] Filter by active status
+- [x] Site statistics (user count)
+- [x] Name validation (URL-safe format)
+- [x] Duplicate name/domain prevention
+- [x] Protection for default site (cannot delete site 1)
+- [x] Permission checking (`manage_sites`)
+- [x] Activity logging
+- [x] Cascade deletion of site-specific data
+
+### Site Settings API - Implemented
+- [x] List site settings (`GET /api/v1/settings/site`)
+- [x] Get single setting (`GET /api/v1/settings/site/:key`)
+- [x] Update or create setting (`PUT/PATCH /api/v1/settings/site/:key`)
+- [x] Search settings by key
+- [x] Setting types (string, number, boolean, json)
+- [x] Automatic value parsing based on type
+- [x] Create new settings on-the-fly
+- [x] Permission checking (`manage_settings`)
+- [x] Activity logging
+- [x] Site-scoped settings (each site has own settings table)
+
+**Note:** Global Settings do not have an API - they are managed through the admin UI only.
 
 ### Phase 7: Documentation & Tools
 - [ ] OpenAPI/Swagger documentation

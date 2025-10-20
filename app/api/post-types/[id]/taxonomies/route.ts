@@ -39,7 +39,7 @@ export async function PUT(
   try {
     const session = await getServerSession(authOptions);
     const isSuperAdmin = (session?.user as any)?.isSuperAdmin || false;
-    const userRole = (session.user as any).role;
+    const userRole = (session?.user as any)?.role;
     
     if (!session?.user || (!isSuperAdmin && userRole !== 'admin')) {
       return NextResponse.json({ error: 'Unauthorized - Admin only' }, { status: 401 });

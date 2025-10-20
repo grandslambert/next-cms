@@ -14,8 +14,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const isSuperAdmin = (session.user as any).isSuperAdmin;
-    const userId = (session.user as any).id;
+    const isSuperAdmin = (session.user as any)?.isSuperAdmin;
+    const userId = (session.user as any)?.id;
 
     let query: string;
     let params: any[];
@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    const isSuperAdmin = (session.user as any)?.isSuperAdmin;
+    const isSuperAdmin = (session?.user as any)?.isSuperAdmin;
 
     // Only super admins can create sites
     if (!isSuperAdmin) {
@@ -154,7 +154,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Log activity
-    const userId = (session.user as any).id;
+    const userId = (session?.user as any)?.id;
     await logActivity({
       userId,
       action: 'site_created',

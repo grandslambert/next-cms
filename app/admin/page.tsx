@@ -263,7 +263,7 @@ export default function AdminDashboard() {
               return sortedPosts.length > 0 ? (
                 <ul className="space-y-2">
                   {sortedPosts.slice(0, 8).map((post: any) => {
-                    const postType = postTypeMap.get(post.post_type);
+                    const postType = postTypeMap.get(post.post_type) as any;
                     const postTypeLabel = (postType?.labels?.singular_name || post.post_type).toUpperCase();
                     return (
                       <li key={post.id} className="p-3 rounded-lg hover:bg-gray-50 transition-colors duration-150">

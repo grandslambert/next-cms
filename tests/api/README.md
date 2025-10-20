@@ -11,8 +11,10 @@ This directory contains PowerShell test scripts that verify all REST API endpoin
 - **Media API** - 18 tests
 - **Menus API** - 22 tests
 - **Users API** - 17 tests
+- **Sites API** - 15 tests
+- **Site Settings API** - 15 tests
 
-**Total: 88 comprehensive tests**
+**Total: 118 comprehensive tests**
 
 ## Prerequisites
 

@@ -11,8 +11,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const userId = (session.user as any).id;
-    const isSuperAdmin = (session.user as any).isSuperAdmin;
+    const userId = (session.user as any)?.id;
+    const isSuperAdmin = (session.user as any)?.isSuperAdmin;
 
     let sites: RowDataPacket[] = [];
 
