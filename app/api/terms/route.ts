@@ -39,12 +39,26 @@ export async function GET(request: NextRequest) {
     
     const total = await Term.countDocuments(query);
 
+    // Get image URLs for terms that have images
+    const Media = await SiteModels.Media(siteId);
+    const imageIds = terms
+      .map((t: any) => t.meta?.image_id)
+      .filter((id: any) => id && /^[0-9a-fA-F]{24}$/.test(id));
+    
+    let imageMap = new Map();
+    if (imageIds.length > 0) {
+      const images = await Media.find({ _id: { $in: imageIds } }).select('_id filepath').lean() as any[];
+      imageMap = new Map(images.map((img: any) => [img._id.toString(), img.filepath]));
+    }
+
     // Format for UI
     const formattedTerms = terms.map((term: any) => ({
       ...term,
       id: term._id.toString(),
       taxonomy_name: term.taxonomy,
       hierarchical: term.parent_id ? true : false,
+      image_id: term.meta?.image_id || null,
+      image_url: term.meta?.image_id ? imageMap.get(term.meta.image_id) || '' : '',
     }));
 
     return NextResponse.json({ terms: formattedTerms, total });
@@ -72,7 +86,7 @@ export async function POST(request: NextRequest) {
     const Taxonomy = await SiteModels.Taxonomy(siteId);
 
     const body = await request.json();
-    const { taxonomy, taxonomy_id, name, description, parent_id } = body;
+    const { taxonomy, taxonomy_id, name, description, parent_id, meta, image_id } = body;
 
     if ((!taxonomy && !taxonomy_id) || !name) {
       return NextResponse.json({ error: 'Taxonomy and name are required' }, { status: 400 });
@@ -113,6 +127,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Build meta object
+    const termMeta: any = {};
+    if (meta && typeof meta === 'object') {
+      Object.assign(termMeta, meta);
+    }
+    if (image_id) {
+      termMeta.image_id = image_id;
+    }
+
     // Create term
     const newTerm = await Term.create({
       taxonomy: taxonomyName,
@@ -121,6 +144,7 @@ export async function POST(request: NextRequest) {
       description: description || '',
       parent_id: (parent_id && /^[0-9a-fA-F]{24}$/.test(parent_id)) ? parent_id : null,
       count: 0,
+      meta: termMeta,
     });
 
     // Log activity

@@ -1,31 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
+import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth-mongo';
-import connectDB from '@/lib/mongodb';
-import { Post, User, Setting } from '@/lib/models';
+import { SiteModels, GlobalModels } from '@/lib/model-factory';
 import { slugify } from '@/lib/utils';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import mongoose from 'mongoose';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    await connectDB();
-    
     const session = await getServerSession(authOptions);
     
     // Validate ID format
-    if (!/^[0-9a-fA-F]{24}$/.test(params.id)) {
+    if (!mongoose.Types.ObjectId.isValid(params.id)) {
       return NextResponse.json({ error: 'Invalid post ID format' }, { status: 400 });
     }
 
     const siteId = (session?.user as any)?.currentSiteId;
+
+    if (!siteId) {
+      return NextResponse.json({ error: 'No site context' }, { status: 400 });
+    }
+
+    const Post = await SiteModels.Post(siteId);
+    const User = await GlobalModels.User();
+    const Media = await SiteModels.Media(siteId);
     
-    const post = await Post.findOne({
-      _id: params.id,
-      site_id: siteId,
-    }).lean();
+    const post = await Post.findById(params.id).lean();
 
     if (!post) {
       return NextResponse.json({ error: 'Post not found' }, { status: 404 });
@@ -33,18 +36,28 @@ export async function GET(
 
     // Get author name
     let authorName = 'Unknown';
-    if (post.author_id) {
-      const author = await User.findById(post.author_id).select('first_name last_name').lean();
+    if ((post as any).author_id) {
+      const author = await User.findById((post as any).author_id).select('first_name last_name').lean();
       if (author) {
-        authorName = `${author.first_name} ${author.last_name}`;
+        authorName = `${(author as any).first_name} ${(author as any).last_name}`;
+      }
+    }
+
+    // Get featured image URL
+    let featuredImageUrl = '';
+    if ((post as any).featured_image_id) {
+      const media = await Media.findById((post as any).featured_image_id).select('filepath').lean();
+      if (media) {
+        featuredImageUrl = (media as any).filepath || '';
       }
     }
 
     return NextResponse.json({ 
       post: {
-        id: post._id.toString(),
+        id: (post as any)._id.toString(),
         ...post,
         author_name: authorName,
+        featured_image_url: featuredImageUrl,
         _id: undefined,
       }
     });
@@ -59,15 +72,13 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    await connectDB();
-    
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Validate ID format
-    if (!/^[0-9a-fA-F]{24}$/.test(params.id)) {
+    if (!mongoose.Types.ObjectId.isValid(params.id)) {
       return NextResponse.json({ error: 'Invalid post ID format' }, { status: 400 });
     }
 
@@ -75,17 +86,20 @@ export async function PUT(
     const permissions = (session.user as any).permissions || {};
     const siteId = (session.user as any).currentSiteId;
 
+    if (!siteId) {
+      return NextResponse.json({ error: 'No site context' }, { status: 400 });
+    }
+
+    const Post = await SiteModels.Post(siteId);
+
     // Check if post exists and get current content
-    const existingPost = await Post.findOne({
-      _id: params.id,
-      site_id: siteId,
-    });
+    const existingPost = await Post.findById(params.id);
 
     if (!existingPost) {
       return NextResponse.json({ error: 'Post not found' }, { status: 404 });
     }
 
-    const isOwner = existingPost.author_id?.toString() === userId;
+    const isOwner = (existingPost as any).author_id?.toString() === userId;
     const canManageOthers = permissions.manage_others_posts === true;
 
     // Check if user can edit this post
@@ -121,7 +135,7 @@ export async function PUT(
     }
 
     // Check if user can reassign author
-    if (author_id && author_id !== existingPost.author_id?.toString()) {
+    if (author_id && author_id !== (existingPost as any).author_id?.toString()) {
       if (!permissions.can_reassign) {
         return NextResponse.json({ error: 'You do not have permission to reassign posts' }, { status: 403 });
       }
@@ -132,7 +146,6 @@ export async function PUT(
     
     // Check for duplicate slug (excluding current post)
     const duplicatePost = await Post.findOne({
-      site_id: siteId,
       slug,
       _id: { $ne: params.id },
     });
@@ -142,10 +155,10 @@ export async function PUT(
     }
 
     // Handle published_at and scheduled_publish_at based on status
-    let publishedAt = existingPost.published_at;
-    let scheduledPublishAt = existingPost.scheduled_publish_at;
+    let publishedAt = (existingPost as any).published_at;
+    let scheduledPublishAt = (existingPost as any).scheduled_publish_at;
     
-    if (status === 'published' && existingPost.status !== 'published') {
+    if (status === 'published' && (existingPost as any).status !== 'published') {
       publishedAt = new Date();
     } else if (status === 'scheduled') {
       scheduledPublishAt = scheduled_publish_at ? new Date(scheduled_publish_at) : null;
@@ -162,25 +175,22 @@ export async function PUT(
       }
     }
 
-    // TODO: Add revision support in future update
-    // For now, we'll skip revisions to keep the conversion simpler
-
     // Prepare update data
     const updateData: any = {
       title,
       slug,
-      content: content !== undefined ? content : existingPost.content,
-      excerpt: excerpt !== undefined ? excerpt : existingPost.excerpt,
-      featured_image_id: featured_image_id !== undefined ? featured_image_id : existingPost.featured_image_id,
-      parent_id: (parent_id && /^[0-9a-fA-F]{24}$/.test(parent_id)) ? parent_id : (parent_id === null ? null : existingPost.parent_id),
-      menu_order: menu_order !== undefined ? menu_order : existingPost.menu_order,
-      status: status || existingPost.status,
+      content: content !== undefined ? content : (existingPost as any).content,
+      excerpt: excerpt !== undefined ? excerpt : (existingPost as any).excerpt,
+      featured_image_id: featured_image_id !== undefined ? featured_image_id : (existingPost as any).featured_image_id,
+      parent_id: (parent_id && /^[0-9a-fA-F]{24}$/.test(parent_id)) ? parent_id : (parent_id === null ? null : (existingPost as any).parent_id),
+      menu_order: menu_order !== undefined ? menu_order : (existingPost as any).menu_order,
+      status: status || (existingPost as any).status,
       published_at: publishedAt,
       scheduled_publish_at: scheduledPublishAt,
-      visibility: visibility !== undefined ? visibility : existingPost.visibility,
-      password: password !== undefined ? password : existingPost.password,
-      allow_comments: allow_comments !== undefined ? allow_comments : existingPost.allow_comments,
-      custom_fields: custom_fields !== undefined ? custom_fields : existingPost.custom_fields,
+      visibility: visibility !== undefined ? visibility : (existingPost as any).visibility,
+      password: password !== undefined ? password : (existingPost as any).password,
+      allow_comments: allow_comments !== undefined ? allow_comments : (existingPost as any).allow_comments,
+      custom_fields: custom_fields !== undefined ? custom_fields : (existingPost as any).custom_fields,
     };
 
     // Add author_id to update if provided and user has permission
@@ -189,8 +199,8 @@ export async function PUT(
     }
 
     // Update post
-    const updatedPost = await Post.findOneAndUpdate(
-      { _id: params.id, site_id: siteId },
+    const updatedPost = await Post.findByIdAndUpdate(
+      params.id,
       { $set: updateData },
       { new: true }
     );
@@ -200,7 +210,7 @@ export async function PUT(
     }
 
     // Log activity
-    const action = status === 'published' && existingPost.status !== 'published' 
+    const action = status === 'published' && (existingPost as any).status !== 'published' 
       ? 'post_published' 
       : status === 'scheduled' 
       ? 'post_scheduled' 
@@ -211,16 +221,16 @@ export async function PUT(
       action,
       entityType: 'post',
       entityId: params.id,
-      entityName: title || existingPost.title,
-      details: `Updated ${existingPost.post_type}: "${title || existingPost.title}"`,
+      entityName: title || (existingPost as any).title,
+      details: `Updated ${(existingPost as any).post_type}: "${title || (existingPost as any).title}"`,
       changesBefore: {
-        title: existingPost.title,
-        content: existingPost.content,
-        excerpt: existingPost.excerpt,
-        status: existingPost.status,
-        featured_image_id: existingPost.featured_image_id,
-        parent_id: existingPost.parent_id?.toString() || null,
-        menu_order: existingPost.menu_order,
+        title: (existingPost as any).title,
+        content: (existingPost as any).content,
+        excerpt: (existingPost as any).excerpt,
+        status: (existingPost as any).status,
+        featured_image_id: (existingPost as any).featured_image_id,
+        parent_id: (existingPost as any).parent_id?.toString() || null,
+        menu_order: (existingPost as any).menu_order,
       },
       changesAfter: {
         title: updateData.title,
@@ -238,8 +248,8 @@ export async function PUT(
 
     return NextResponse.json({ 
       post: {
-        id: updatedPost._id.toString(),
-        ...updatedPost.toObject(),
+        id: (updatedPost as any)._id.toString(),
+        ...(updatedPost as any).toObject(),
         _id: undefined,
       }
     });
@@ -257,15 +267,13 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    await connectDB();
-    
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Validate ID format
-    if (!/^[0-9a-fA-F]{24}$/.test(params.id)) {
+    if (!mongoose.Types.ObjectId.isValid(params.id)) {
       return NextResponse.json({ error: 'Invalid post ID format' }, { status: 400 });
     }
 
@@ -273,17 +281,20 @@ export async function DELETE(
     const permissions = (session.user as any).permissions || {};
     const siteId = (session.user as any).currentSiteId;
 
+    if (!siteId) {
+      return NextResponse.json({ error: 'No site context' }, { status: 400 });
+    }
+
+    const Post = await SiteModels.Post(siteId);
+
     // Check if post exists and get author
-    const existingPost = await Post.findOne({
-      _id: params.id,
-      site_id: siteId,
-    });
+    const existingPost = await Post.findById(params.id);
 
     if (!existingPost) {
       return NextResponse.json({ error: 'Post not found' }, { status: 404 });
     }
 
-    const isOwner = existingPost.author_id?.toString() === userId;
+    const isOwner = (existingPost as any).author_id?.toString() === userId;
     const canDelete = permissions.can_delete === true;
     const canDeleteOthers = permissions.can_delete_others === true;
 
@@ -297,8 +308,8 @@ export async function DELETE(
     }
 
     // Move post to trash instead of permanently deleting
-    await Post.findOneAndUpdate(
-      { _id: params.id, site_id: siteId },
+    await Post.findByIdAndUpdate(
+      params.id,
       { $set: { status: 'trash' } }
     );
 
@@ -308,8 +319,8 @@ export async function DELETE(
       action: 'post_trashed',
       entityType: 'post',
       entityId: params.id,
-      entityName: existingPost.title,
-      details: `Moved ${existingPost.post_type} to trash: "${existingPost.title}"`,
+      entityName: (existingPost as any).title,
+      details: `Moved ${(existingPost as any).post_type} to trash: "${(existingPost as any).title}"`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
       siteId,

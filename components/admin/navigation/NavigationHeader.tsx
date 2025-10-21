@@ -1,7 +1,7 @@
 'use client';
 
 interface NavigationHeaderProps {
-  selectedMenuId: number | null;
+  selectedMenuId: string | null;
   menuName: string;
   hasAnyChanges: boolean;
   onSave: () => void;

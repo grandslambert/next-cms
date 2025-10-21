@@ -11,7 +11,7 @@ interface AddMenuItemFormProps {
   onCancel: () => void;
   onPostTypeFilterChange: (postType: string) => void;
   onPostSearchChange: (search: string) => void;
-  onTaxonomyFilterChange: (taxonomyId: number | null) => void;
+  onTaxonomyFilterChange: (taxonomyId: string | null) => void;
   onTermSearchChange: (search: string) => void;
 }
 
@@ -106,7 +106,7 @@ export default function AddMenuItemForm({
     onPostSearchChange(search);
   };
 
-  const handleTaxonomyFilterChange = (taxonomyId: number) => {
+  const handleTaxonomyFilterChange = (taxonomyId: string) => {
     setFormData({ 
       ...formData, 
       taxonomy_filter: taxonomyId,

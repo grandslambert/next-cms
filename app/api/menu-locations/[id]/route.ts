@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import { connectDB } from '@/lib/db';
-import { MenuLocation, Menu } from '@/lib/models';
+import { SiteModels } from '@/lib/model-factory';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 import mongoose from 'mongoose';
 
@@ -25,11 +24,16 @@ export async function DELETE(
     const siteId = (session.user as any).currentSiteId;
     const locationId = params.id;
 
+    if (!siteId) {
+      return NextResponse.json({ error: 'No site context' }, { status: 400 });
+    }
+
     if (!mongoose.Types.ObjectId.isValid(locationId)) {
       return NextResponse.json({ error: 'Invalid location ID' }, { status: 400 });
     }
 
-    await connectDB();
+    const MenuLocation = await SiteModels.MenuLocation(siteId);
+    const Menu = await SiteModels.Menu(siteId);
 
     // Get location info
     const location = await MenuLocation.findById(locationId).lean();
@@ -39,7 +43,7 @@ export async function DELETE(
     }
 
     // Check if this is a built-in location
-    if (location.is_builtin) {
+    if ((location as any).is_builtin) {
       return NextResponse.json(
         { error: 'Cannot delete built-in location' },
         { status: 400 }
@@ -47,7 +51,7 @@ export async function DELETE(
     }
 
     // Check if any menus are using this location
-    const menuCount = await Menu.countDocuments({ location: location.name });
+    const menuCount = await Menu.countDocuments({ location: (location as any).name });
 
     if (menuCount > 0) {
       return NextResponse.json(
@@ -65,8 +69,8 @@ export async function DELETE(
       action: 'deleted' as any,
       entityType: 'menu_location' as any,
       entityId: locationId,
-      entityName: location.name || 'Unknown',
-      details: `Deleted menu location: ${location.name}`,
+      entityName: (location as any).name || 'Unknown',
+      details: `Deleted menu location: ${(location as any).name}`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
       siteId,

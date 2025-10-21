@@ -63,7 +63,7 @@ export async function logActivity({
     // If siteId is provided, log to site database; otherwise log to global database
     let ActivityLog;
     if (siteId) {
-      ActivityLog = await SiteModels(siteId).ActivityLog();
+      ActivityLog = await SiteModels.ActivityLog(siteId);
     } else {
       ActivityLog = await GlobalModels.ActivityLog();
     }

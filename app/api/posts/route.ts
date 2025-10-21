@@ -1,15 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import connectDB from '@/lib/mongodb';
-import { Post, User } from '@/lib/models';
+import { SiteModels, GlobalModels } from '@/lib/model-factory';
 import { slugify } from '@/lib/utils';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function GET(request: NextRequest) {
   try {
-    await connectDB();
-    
     const session = await getServerSession(authOptions);
     const searchParams = request.nextUrl.searchParams;
     const status = searchParams.get('status');
@@ -24,9 +21,17 @@ export async function GET(request: NextRequest) {
     
     // Get site context
     const siteId = (session?.user as any)?.currentSiteId;
+    
+    if (!siteId) {
+      return NextResponse.json({ error: 'No site context' }, { status: 400 });
+    }
+    
+    const Post = await SiteModels.Post(siteId);
+    const User = await GlobalModels.User();
+    const Media = await SiteModels.Media(siteId);
 
-    // Build query
-    const query: any = { site_id: siteId };
+    // Build query (no site_id needed - we're in the site database)
+    const query: any = {};
     
     // Only filter by post_type if it's not 'all'
     if (postType !== 'all') {
@@ -66,15 +71,21 @@ export async function GET(request: NextRequest) {
     const total = await Post.countDocuments(query);
 
     // Get author names
-    const authorIds = [...new Set(posts.map((p: any) => p.author_id?.toString()).filter(Boolean))];
-    const authors = await User.find({ _id: { $in: authorIds } }).select('_id first_name last_name').lean();
+    const authorIds = Array.from(new Set(posts.map((p: any) => p.author_id?.toString()).filter(Boolean)));
+    const authors = await User.find({ _id: { $in: authorIds } }).select('_id first_name last_name').lean() as any[];
     const authorMap = new Map(authors.map((a: any) => [a._id.toString(), `${a.first_name} ${a.last_name}`]));
+
+    // Get featured image URLs
+    const mediaIds = Array.from(new Set(posts.map((p: any) => p.featured_image_id?.toString()).filter(Boolean)));
+    const mediaItems = await Media.find({ _id: { $in: mediaIds } }).select('_id filepath').lean() as any[];
+    const mediaMap = new Map(mediaItems.map((m: any) => [m._id.toString(), m.filepath]));
 
     // Format for UI
     const formattedPosts = posts.map((post: any) => ({
       ...post,
       id: post._id.toString(),
       author_name: authorMap.get(post.author_id?.toString()) || 'Unknown',
+      featured_image_url: post.featured_image_id ? mediaMap.get(post.featured_image_id.toString()) || '' : '',
       _id: undefined,
     }));
 
@@ -87,8 +98,6 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    await connectDB();
-    
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -119,7 +128,12 @@ export async function POST(request: NextRequest) {
     const permissions = (session.user as any).permissions || {};
     const userId = (session.user as any).id;
     const siteId = (session.user as any).currentSiteId;
-    console.log('📝 [POST CREATE] Creating post in site:', siteId, 'by user:', (session.user as any).email);
+    
+    if (!siteId) {
+      return NextResponse.json({ error: 'No site context' }, { status: 400 });
+    }
+    
+    const Post = await SiteModels.Post(siteId);
 
     // Check if user can publish (required for both immediate and scheduled publishing)
     if ((status === 'published' || status === 'scheduled') && !permissions.can_publish) {
@@ -152,7 +166,6 @@ export async function POST(request: NextRequest) {
 
     // Check for duplicate slug
     const existingPost = await Post.findOne({
-      site_id: siteId,
       slug,
     });
 
@@ -162,7 +175,6 @@ export async function POST(request: NextRequest) {
 
     // Create post
     const newPost = await Post.create({
-      site_id: siteId,
       post_type: post_type || 'post',
       title,
       slug,

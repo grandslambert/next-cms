@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import { connectDB } from '@/lib/db';
-import { Media, Setting } from '@/lib/models';
+import { SiteModels } from '@/lib/model-factory';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 import mongoose from 'mongoose';
 import sharp from 'sharp';
@@ -10,10 +9,10 @@ import { readFile, unlink } from 'fs/promises';
 import path from 'path';
 
 // Get image sizes from settings
-async function getImageSizes(siteId: string) {
+async function getImageSizes(siteId: number) {
   try {
+    const Setting = await SiteModels.Setting(siteId);
     const setting = await Setting.findOne({
-      site_id: new mongoose.Types.ObjectId(siteId),
       key: 'image_sizes',
     }).lean();
     
@@ -47,21 +46,19 @@ export async function POST(request: NextRequest) {
     const userId = (session.user as any).id;
     const siteId = (session.user as any).currentSiteId;
 
-    if (!siteId || !mongoose.Types.ObjectId.isValid(siteId)) {
-      return NextResponse.json({ error: 'Invalid site ID' }, { status: 400 });
+    if (!siteId) {
+      return NextResponse.json({ error: 'No site context' }, { status: 400 });
     }
 
+    const Media = await SiteModels.Media(siteId);
     const body = await request.json();
     const { mediaId } = body;
-
-    await connectDB();
 
     let mediaItems: any[];
 
     if (mediaId === null || mediaId === 'all') {
       // Regenerate all images for this site
       mediaItems = await Media.find({ 
-        site_id: new mongoose.Types.ObjectId(siteId),
         mimetype: { $regex: /^image\// },
         status: 'active',
       }).lean();
@@ -73,7 +70,6 @@ export async function POST(request: NextRequest) {
 
       const media = await Media.findOne({
         _id: new mongoose.Types.ObjectId(mediaId),
-        site_id: new mongoose.Types.ObjectId(siteId),
         mimetype: { $regex: /^image\// },
       }).lean();
 

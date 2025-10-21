@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import { connectDB } from '@/lib/db';
-import { Post } from '@/lib/models';
+import { SiteModels } from '@/lib/model-factory';
 import mongoose from 'mongoose';
 
 export async function GET(
@@ -15,23 +14,26 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const siteId = (session.user as any).currentSiteId;
+
+    if (!siteId) {
+      return NextResponse.json({ error: 'No site context' }, { status: 400 });
+    }
+
     if (!mongoose.Types.ObjectId.isValid(params.id)) {
       return NextResponse.json({ error: 'Invalid media ID' }, { status: 400 });
     }
 
-    const siteId = (session.user as any).currentSiteId;
-
-    await connectDB();
+    const Post = await SiteModels.Post(siteId);
 
     // Find posts using this media as featured image
     const posts = await Post.find({
-      site_id: new mongoose.Types.ObjectId(siteId),
       featured_image_id: new mongoose.Types.ObjectId(params.id),
     })
       .select('_id title post_type')
       .lean();
 
-    const formattedPosts = posts.map((p) => ({
+    const formattedPosts = (posts as any[]).map((p: any) => ({
       ...p,
       id: p._id.toString(),
     }));

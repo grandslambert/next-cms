@@ -1,36 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import { connectDB } from '@/lib/db';
-import { Media, Setting } from '@/lib/models';
+import { SiteModels } from '@/lib/model-factory';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 import sharp from 'sharp';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
-import mongoose from 'mongoose';
 
 // Get image sizes from settings
-async function getImageSizes(siteId: string) {
+async function getImageSizes(siteId: number) {
   try {
-    await connectDB();
+    const Setting = await SiteModels.Setting(siteId);
     const setting = await Setting.findOne({
-      site_id: new mongoose.Types.ObjectId(siteId),
       key: 'image_sizes',
     }).lean();
     
-    console.log('📐 Loading image sizes for site:', siteId);
-    console.log('📐 Setting found:', setting);
-    
     if (setting && (setting as any).value) {
       const sizes = (setting as any).value;
-      console.log('📐 Using custom image sizes:', sizes);
       return { ...sizes, full: null }; // Always include full (original)
     }
   } catch (error) {
     console.error('Error loading image sizes from settings:', error);
   }
   
-  console.log('📐 Using default image sizes (no custom settings found)');
   // Fallback to defaults (matching media settings page defaults)
   return {
     thumbnail: { width: 150, height: 150, crop: 'cover' },
@@ -45,19 +37,19 @@ export async function GET(request: NextRequest) {
     const session = await getServerSession(authOptions);
     const siteId = (session?.user as any)?.currentSiteId;
     
-    if (!siteId || !mongoose.Types.ObjectId.isValid(siteId)) {
-      return NextResponse.json({ error: 'Invalid site ID' }, { status: 400 });
+    if (!siteId) {
+      return NextResponse.json({ error: 'No site context' }, { status: 400 });
     }
 
+    const Media = await SiteModels.Media(siteId);
+    
     const searchParams = request.nextUrl.searchParams;
     const limit = Number.parseInt(searchParams.get('limit') || '20');
     const offset = Number.parseInt(searchParams.get('offset') || '0');
     const folderId = searchParams.get('folder_id');
     const showTrash = searchParams.get('trash') === 'true';
 
-    await connectDB();
-
-    const query: any = { site_id: new mongoose.Types.ObjectId(siteId) };
+    const query: any = {};
 
     // Filter by trash status
     if (showTrash) {
@@ -68,16 +60,13 @@ export async function GET(request: NextRequest) {
 
     // Filter by folder
     if (folderId) {
-      if (mongoose.Types.ObjectId.isValid(folderId)) {
-        query.folder_id = new mongoose.Types.ObjectId(folderId);
-      }
+      query.folder_id = folderId;
     } else if (searchParams.has('folder_id') && !folderId) {
       query.folder_id = null;
     }
 
     const [media, total] = await Promise.all([
       Media.find(query)
-        .populate('uploaded_by', 'username email')
         .sort({ created_at: -1 })
         .limit(limit)
         .skip(offset)
@@ -89,10 +78,11 @@ export async function GET(request: NextRequest) {
     const formattedMedia = media.map((m: any) => ({
       ...m,
       id: m._id.toString(),
+      title: m.caption || '', // Map caption to title for frontend
       mime_type: m.mimetype, // Map mimetype to mime_type for frontend
       original_name: m.original_filename, // Map original_filename to original_name for frontend
       url: m.filepath, // Map filepath to url for frontend
-      uploaded_by_name: (m.uploaded_by as any)?.username || 'Unknown',
+      uploaded_by_name: 'Unknown', // TODO: Manually fetch from GlobalModels.User()
     }));
 
     return NextResponse.json({ media: formattedMedia, total });
@@ -112,9 +102,11 @@ export async function POST(request: NextRequest) {
     const userId = (session.user as any).id;
     const siteId = (session.user as any).currentSiteId;
 
-    if (!siteId || !mongoose.Types.ObjectId.isValid(siteId)) {
-      return NextResponse.json({ error: 'Invalid site ID' }, { status: 400 });
+    if (!siteId) {
+      return NextResponse.json({ error: 'No site context' }, { status: 400 });
     }
+
+    const Media = await SiteModels.Media(siteId);
 
     const formData = await request.formData();
     const file = formData.get('file') as File;
@@ -236,10 +228,8 @@ export async function POST(request: NextRequest) {
       await writeFile(filepath, buffer);
     }
 
-    await connectDB();
-
+    // Create media record (no site_id needed - we're in the site database)
     const newMedia = await Media.create({
-      site_id: new mongoose.Types.ObjectId(siteId),
       filename,
       original_filename: file.name,
       filepath: `/uploads/${folderPath}/${filename}`,
@@ -250,8 +240,8 @@ export async function POST(request: NextRequest) {
       sizes: sizes ? JSON.stringify(sizes) : null,
       alt_text: altText,
       caption,
-      uploaded_by: new mongoose.Types.ObjectId(userId),
-      folder_id: folderId && mongoose.Types.ObjectId.isValid(folderId) ? new mongoose.Types.ObjectId(folderId) : null,
+      uploaded_by: userId, // userId is already a MongoDB ObjectId string
+      folder_id: folderId || null,
       status: 'active',
     });
 

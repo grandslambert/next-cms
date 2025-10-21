@@ -22,8 +22,8 @@ export async function GET() {
     const formattedTaxonomies = taxonomies.map((tax: any) => ({
       ...tax,
       id: tax._id?.toString(),
-      label: tax.labels?.plural_name,
-      singular_label: tax.labels?.singular_name,
+      label: tax.labels?.plural_name || tax.name || 'Taxonomy',
+      singular_label: tax.labels?.singular_name || tax.name || 'Taxonomy',
       hierarchical: tax.is_hierarchical,
       show_in_dashboard: tax.show_in_dashboard !== false,
       show_in_menu: tax.show_in_menu !== false,

@@ -116,7 +116,6 @@ export async function POST(request: NextRequest) {
       is_active: is_active !== false,
     });
 
-    console.log(`✓ Created site: ${display_name} (ID: ${newSite.id}, Database: nextcms_site${newSite.id})`);
     
     // Get user ID for default content
     const userId = (session?.user as any)?.id;

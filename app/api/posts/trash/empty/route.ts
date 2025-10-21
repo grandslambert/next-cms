@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import { connectDB } from '@/lib/db';
-import { Post, PostTerm, PostMeta, PostRevision } from '@/lib/models';
+import { SiteModels } from '@/lib/model-factory';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function POST(request: NextRequest) {
@@ -20,6 +19,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    if (!siteId) {
+      return NextResponse.json({ error: 'No site context' }, { status: 400 });
+    }
+
     const body = await request.json();
     const { post_type } = body;
 
@@ -27,7 +30,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'post_type is required' }, { status: 400 });
     }
 
-    await connectDB();
+    const Post = await SiteModels.Post(siteId);
+    const PostTerm = await SiteModels.PostTerm(siteId);
+    const PostMeta = await SiteModels.PostMeta(siteId);
+    const PostRevision = await SiteModels.PostRevision(siteId);
 
     // Find all posts in trash for this post type
     const trashedPosts = await Post.find({
@@ -39,7 +45,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, deleted: 0 });
     }
 
-    const postIds = trashedPosts.map((p) => p._id);
+    const postIds = (trashedPosts as any[]).map((p) => p._id);
 
     // Delete related data
     await PostTerm.deleteMany({ post_id: { $in: postIds } });

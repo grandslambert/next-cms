@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import { connectDB } from '@/lib/db';
-import { Menu, MenuItem } from '@/lib/models';
+import { SiteModels } from '@/lib/model-factory';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 import mongoose from 'mongoose';
 
@@ -17,17 +16,21 @@ export async function GET(
     }
 
     const permissions = (session.user as any).permissions || {};
+    const siteId = (session.user as any).currentSiteId;
     
     if (!permissions.manage_menus) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    if (!siteId) {
+      return NextResponse.json({ error: 'No site context' }, { status: 400 });
     }
 
     if (!mongoose.Types.ObjectId.isValid(params.id)) {
       return NextResponse.json({ error: 'Invalid menu ID' }, { status: 400 });
     }
 
-    await connectDB();
-
+    const Menu = await SiteModels.Menu(siteId);
     const menu = await Menu.findById(params.id).lean();
 
     if (!menu) {
@@ -36,8 +39,8 @@ export async function GET(
 
     return NextResponse.json({ 
       menu: {
-        ...menu,
-        id: menu._id.toString(),
+        ...(menu as any),
+        id: (menu as any)._id.toString(),
       }
     });
   } catch (error) {
@@ -64,6 +67,10 @@ export async function PUT(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    if (!siteId) {
+      return NextResponse.json({ error: 'No site context' }, { status: 400 });
+    }
+
     if (!mongoose.Types.ObjectId.isValid(params.id)) {
       return NextResponse.json({ error: 'Invalid menu ID' }, { status: 400 });
     }
@@ -75,7 +82,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Name is required' }, { status: 400 });
     }
 
-    await connectDB();
+    const Menu = await SiteModels.Menu(siteId);
 
     // Get current menu BEFORE updating
     const currentMenu = await Menu.findById(params.id).lean();
@@ -106,10 +113,10 @@ export async function PUT(
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
       changesBefore: {
-        name: currentMenu.name,
-        display_name: currentMenu.display_name,
-        location: currentMenu.location,
-        description: currentMenu.description,
+        name: (currentMenu as any).name,
+        display_name: (currentMenu as any).display_name,
+        location: (currentMenu as any).location,
+        description: (currentMenu as any).description,
       },
       changesAfter: {
         name: updatedMenu?.name,
@@ -153,11 +160,16 @@ export async function DELETE(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    if (!siteId) {
+      return NextResponse.json({ error: 'No site context' }, { status: 400 });
+    }
+
     if (!mongoose.Types.ObjectId.isValid(params.id)) {
       return NextResponse.json({ error: 'Invalid menu ID' }, { status: 400 });
     }
 
-    await connectDB();
+    const Menu = await SiteModels.Menu(siteId);
+    const MenuItem = await SiteModels.MenuItem(siteId);
 
     // Get menu details for logging
     const menu = await Menu.findById(params.id).lean();
@@ -172,8 +184,8 @@ export async function DELETE(
       action: 'menu_deleted' as any,
       entityType: 'menu' as any,
       entityId: params.id,
-      entityName: menu.name,
-      details: `Deleted menu: ${menu.name}${menu.location ? ` (${menu.location})` : ''}`,
+      entityName: (menu as any).name,
+      details: `Deleted menu: ${(menu as any).name}${(menu as any).location ? ` (${(menu as any).location})` : ''}`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
       siteId,
@@ -191,4 +203,3 @@ export async function DELETE(
     return NextResponse.json({ error: 'Failed to delete menu' }, { status: 500 });
   }
 }
-

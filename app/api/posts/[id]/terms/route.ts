@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
+import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth-mongo';
-import connectDB from '@/lib/mongodb';
-import { Term, PostTerm, Taxonomy } from '@/lib/models';
+import { SiteModels } from '@/lib/model-factory';
 
 // Get terms for a specific post
 export async function GET(
@@ -10,8 +9,6 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    await connectDB();
-    
     const session = await getServerSession(authOptions);
     
     // Validate ID format
@@ -20,9 +17,25 @@ export async function GET(
     }
 
     const siteId = (session?.user as any)?.currentSiteId;
+    if (!siteId) {
+      return NextResponse.json({ error: 'No site context' }, { status: 400 });
+    }
+
+    const Term = await SiteModels.Term(siteId);
+    const PostTerm = await SiteModels.PostTerm(siteId);
+    const Taxonomy = await SiteModels.Taxonomy(siteId);
     
     const searchParams = request.nextUrl.searchParams;
-    const taxonomyName = searchParams.get('taxonomy');
+    let taxonomyName = searchParams.get('taxonomy');
+    const taxonomyId = searchParams.get('taxonomy_id');
+
+    // If taxonomy_id is provided, look up the taxonomy name
+    if (!taxonomyName && taxonomyId && /^[0-9a-fA-F]{24}$/.test(taxonomyId)) {
+      const taxonomy = await Taxonomy.findById(taxonomyId).select('name').lean();
+      if (taxonomy) {
+        taxonomyName = (taxonomy as any).name;
+      }
+    }
 
     // Get post-term relationships
     const postTermQuery: any = { post_id: params.id };
@@ -31,22 +44,19 @@ export async function GET(
     }
 
     const postTerms = await PostTerm.find(postTermQuery).lean();
-    const termIds = postTerms.map(pt => pt.term_id);
+    const termIds = (postTerms as any[]).map(pt => pt.term_id);
 
     if (termIds.length === 0) {
       return NextResponse.json({ terms: [] });
     }
 
     // Get full term details
-    const terms = await Term.find({
-      _id: { $in: termIds },
-      site_id: siteId,
-    })
-    .sort({ name: 1 })
-    .lean();
+    const terms = await Term.find({ _id: { $in: termIds } })
+      .sort({ name: 1 })
+      .lean();
 
     // Format for UI
-    const formattedTerms = terms.map((term: any) => ({
+    const formattedTerms = (terms as any[]).map((term: any) => ({
       ...term,
       id: term._id.toString(),
       taxonomy_name: term.taxonomy,
@@ -66,8 +76,6 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    await connectDB();
-    
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -79,6 +87,13 @@ export async function PUT(
     }
 
     const siteId = (session.user as any).currentSiteId;
+    if (!siteId) {
+      return NextResponse.json({ error: 'No site context' }, { status: 400 });
+    }
+
+    const Term = await SiteModels.Term(siteId);
+    const PostTerm = await SiteModels.PostTerm(siteId);
+    const Taxonomy = await SiteModels.Taxonomy(siteId);
 
     const body = await request.json();
     const { term_ids, taxonomy, taxonomy_id } = body;
@@ -88,7 +103,7 @@ export async function PUT(
     if (!taxonomyName && taxonomy_id && /^[0-9a-fA-F]{24}$/.test(taxonomy_id)) {
       const taxonomyDoc = await Taxonomy.findById(taxonomy_id).lean();
       if (taxonomyDoc) {
-        taxonomyName = taxonomyDoc.name;
+        taxonomyName = (taxonomyDoc as any).name;
       }
     }
 
@@ -111,14 +126,12 @@ export async function PUT(
         // Verify terms exist and belong to this taxonomy
         const terms = await Term.find({
           _id: { $in: validTermIds },
-          site_id: siteId,
           taxonomy: taxonomyName,
         }).lean();
 
         if (terms.length > 0) {
           // Create post-term relationships
-          const postTermDocs = terms.map((term: any, index) => ({
-            site_id: siteId,
+          const postTermDocs = (terms as any[]).map((term: any, index) => ({
             post_id: params.id,
             term_id: term._id.toString(),
             taxonomy: taxonomyName,
@@ -140,9 +153,9 @@ export async function PUT(
 
           // Reset count for terms not in the list
           const countsMap = new Map(termCounts.map(tc => [tc._id, tc.count]));
-          const allTerms = await Term.find({ site_id: siteId, taxonomy: taxonomyName }).select('_id').lean();
+          const allTerms = await Term.find({ taxonomy: taxonomyName }).select('_id').lean();
           for (const term of allTerms) {
-            const termId = term._id.toString();
+            const termId = (term as any)._id.toString();
             if (!countsMap.has(termId)) {
               await Term.findByIdAndUpdate(termId, { $set: { count: 0 } });
             }
@@ -152,7 +165,7 @@ export async function PUT(
     } else {
       // If no terms provided, reset counts for all terms in this taxonomy
       await Term.updateMany(
-        { site_id: siteId, taxonomy: taxonomyName },
+        { taxonomy: taxonomyName },
         { $set: { count: 0 } }
       );
     }
@@ -163,3 +176,4 @@ export async function PUT(
     return NextResponse.json({ error: 'Failed to update post terms' }, { status: 500 });
   }
 }
+

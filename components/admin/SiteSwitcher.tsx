@@ -53,8 +53,6 @@ export default function SiteSwitcher() {
 
     setSwitching(true);
     try {
-      console.log('🔄 Switching from site', currentSiteId, 'to site', siteId);
-      
       const response = await fetch('/api/auth/switch-site', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -71,7 +69,6 @@ export default function SiteSwitcher() {
       // Update session with new site ID
       await update({ currentSiteId: siteId });
       
-      console.log('✅ Session updated with site', siteId);
       setCurrentSiteId(siteId);
       toast.success(data.message || `Switched to ${data.site_name}`);
       

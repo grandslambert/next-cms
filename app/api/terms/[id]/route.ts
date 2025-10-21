@@ -32,11 +32,24 @@ export async function GET(
       return NextResponse.json({ error: 'Term not found' }, { status: 404 });
     }
 
+    // Get image URL if term has an image
+    let imageUrl = '';
+    const imageId = (term as any).meta?.image_id;
+    if (imageId && /^[0-9a-fA-F]{24}$/.test(imageId)) {
+      const Media = await SiteModels.Media(siteId);
+      const image = await Media.findById(imageId).select('filepath').lean();
+      if (image) {
+        imageUrl = (image as any).filepath || '';
+      }
+    }
+
     return NextResponse.json({ 
       term: {
         id: (term as any)._id.toString(),
         ...(term as any),
         taxonomy_name: (term as any).taxonomy,
+        image_id: imageId || null,
+        image_url: imageUrl,
         _id: undefined,
       }
     });
@@ -68,7 +81,7 @@ export async function PUT(
     const Term = await SiteModels.Term(siteId);
 
     const body = await request.json();
-    const { name, description, parent_id } = body;
+    const { name, description, parent_id, meta, image_id } = body;
 
     if (!name) {
       return NextResponse.json({ error: 'Name is required' }, { status: 400 });
@@ -110,7 +123,21 @@ export async function PUT(
       slug: currentTerm.slug,
       description: currentTerm.description,
       parent_id: currentTerm.parent_id?.toString() || null,
+      meta: currentTerm.meta,
     };
+
+    // Build meta object
+    const termMeta: any = currentTerm.meta ? JSON.parse(JSON.stringify(currentTerm.meta)) : {};
+    if (meta && typeof meta === 'object') {
+      Object.assign(termMeta, meta);
+    }
+    if (image_id !== undefined) {
+      if (image_id) {
+        termMeta.image_id = image_id;
+      } else {
+        delete termMeta.image_id;
+      }
+    }
 
     // Update term
     const updatedTerm = await Term.findByIdAndUpdate(
@@ -121,6 +148,7 @@ export async function PUT(
           slug,
           description: description || '',
           parent_id: (parent_id && /^[0-9a-fA-F]{24}$/.test(parent_id)) ? parent_id : null,
+          meta: termMeta,
         }
       },
       { new: true }

@@ -9,8 +9,8 @@ interface Menu {
 
 interface MenuListProps {
   menus: Menu[];
-  selectedMenuId: number | null;
-  onMenuSelect: (menuId: number) => void;
+  selectedMenuId: string | null;
+  onMenuSelect: (menuId: string) => void;
   onCreateNew: () => void;
 }
 

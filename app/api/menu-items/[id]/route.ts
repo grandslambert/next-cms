@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import { connectDB } from '@/lib/db';
-import { MenuItem } from '@/lib/models';
+import { SiteModels } from '@/lib/model-factory';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 import mongoose from 'mongoose';
 
@@ -24,6 +23,10 @@ export async function PUT(
 
     const siteId = (session.user as any).currentSiteId;
 
+    if (!siteId) {
+      return NextResponse.json({ error: 'No site context' }, { status: 400 });
+    }
+
     if (!mongoose.Types.ObjectId.isValid(params.id)) {
       return NextResponse.json({ error: 'Invalid menu item ID' }, { status: 400 });
     }
@@ -36,7 +39,8 @@ export async function PUT(
       return NextResponse.json({ error: 'Invalid parent ID' }, { status: 400 });
     }
 
-    await connectDB();
+    const MenuItem = await SiteModels.MenuItem(siteId);
+    const Menu = await SiteModels.Menu(siteId);
 
     // Get current item BEFORE updating
     const currentItem = await MenuItem.findById(params.id).lean();
@@ -45,12 +49,8 @@ export async function PUT(
       return NextResponse.json({ error: 'Menu item not found' }, { status: 404 });
     }
 
-    // Verify menu belongs to current site
-    const Menu = (await import('@/lib/models')).Menu;
-    const menu = await Menu.findOne({
-      _id: currentItem.menu_id,
-      site_id: new mongoose.Types.ObjectId(siteId),
-    }).lean();
+    // Verify menu exists in this site
+    const menu = await Menu.findById((currentItem as any).menu_id).lean();
 
     if (!menu) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
@@ -76,18 +76,18 @@ export async function PUT(
       action: 'menu_item_updated' as any,
       entityType: 'menu_item' as any,
       entityId: params.id,
-      entityName: custom_label || currentItem.custom_label || `${currentItem.type} item`,
+      entityName: custom_label || (currentItem as any).custom_label || `${(currentItem as any).type} item`,
       details: `Updated menu item`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
       siteId,
       changesBefore: {
-        parent_id: currentItem.parent_id?.toString() || null,
-        post_type: currentItem.post_type,
-        custom_url: currentItem.custom_url,
-        custom_label: currentItem.custom_label,
-        menu_order: currentItem.menu_order,
-        target: currentItem.target,
+        parent_id: (currentItem as any).parent_id?.toString() || null,
+        post_type: (currentItem as any).post_type,
+        custom_url: (currentItem as any).custom_url,
+        custom_label: (currentItem as any).custom_label,
+        menu_order: (currentItem as any).menu_order,
+        target: (currentItem as any).target,
       },
       changesAfter: {
         parent_id: updatedItem?.parent_id?.toString() || null,
@@ -129,11 +129,16 @@ export async function DELETE(
 
     const siteId = (session.user as any).currentSiteId;
 
+    if (!siteId) {
+      return NextResponse.json({ error: 'No site context' }, { status: 400 });
+    }
+
     if (!mongoose.Types.ObjectId.isValid(params.id)) {
       return NextResponse.json({ error: 'Invalid menu item ID' }, { status: 400 });
     }
 
-    await connectDB();
+    const MenuItem = await SiteModels.MenuItem(siteId);
+    const Menu = await SiteModels.Menu(siteId);
 
     // Get item details for logging
     const item = await MenuItem.findById(params.id).lean();
@@ -142,12 +147,8 @@ export async function DELETE(
       return NextResponse.json({ error: 'Menu item not found' }, { status: 404 });
     }
 
-    // Verify menu belongs to current site
-    const Menu = (await import('@/lib/models')).Menu;
-    const menu = await Menu.findOne({
-      _id: item.menu_id,
-      site_id: new mongoose.Types.ObjectId(siteId),
-    }).lean();
+    // Verify menu exists in this site
+    const menu = await Menu.findById((item as any).menu_id).lean();
 
     if (!menu) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
@@ -160,8 +161,8 @@ export async function DELETE(
       action: 'menu_item_deleted' as any,
       entityType: 'menu_item' as any,
       entityId: params.id,
-      entityName: item.custom_label || `${item.type} item`,
-      details: `Deleted menu item from menu ID ${item.menu_id.toString()}`,
+      entityName: (item as any).custom_label || `${(item as any).type} item`,
+      details: `Deleted menu item from menu ID ${(item as any).menu_id.toString()}`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
       siteId,

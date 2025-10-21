@@ -156,11 +156,6 @@ export async function DELETE(
     // Delete the site
     await Site.deleteOne({ id: siteId });
 
-    // Note: In MongoDB, database nextcms_site<id> will remain
-    // It needs to be manually dropped if desired
-    console.log(`✓ Deleted site: ${site.display_name} (ID: ${site.id})`);
-    console.log(`   Note: Database nextcms_site${site.id} still exists and must be manually dropped`);
-
     // Log activity
     const userId = (session?.user as any)?.id;
     await logActivity({

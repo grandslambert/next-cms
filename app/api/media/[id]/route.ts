@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import { connectDB } from '@/lib/db';
-import { Media } from '@/lib/models';
+import { SiteModels } from '@/lib/model-factory';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 import mongoose from 'mongoose';
 
@@ -18,29 +17,30 @@ export async function GET(
 
     const siteId = (session.user as any).currentSiteId;
 
+    if (!siteId) {
+      return NextResponse.json({ error: 'No site context' }, { status: 400 });
+    }
+
     if (!mongoose.Types.ObjectId.isValid(params.id)) {
       return NextResponse.json({ error: 'Invalid media ID' }, { status: 400 });
     }
 
-    await connectDB();
-
-    const media = await Media.findOne({
-      _id: new mongoose.Types.ObjectId(params.id),
-      site_id: new mongoose.Types.ObjectId(siteId),
-    }).populate('uploaded_by', 'username email').lean();
+    const Media = await SiteModels.Media(siteId);
+    const media = await Media.findById(params.id).lean();
 
     if (!media) {
-      return NextResponse.json({ error: 'Media not found or access denied' }, { status: 404 });
+      return NextResponse.json({ error: 'Media not found' }, { status: 404 });
     }
 
     return NextResponse.json({ 
       media: {
-        ...media,
-        id: media._id.toString(),
-        mime_type: (media as any).mimetype, // Map mimetype to mime_type for frontend
-        original_name: (media as any).original_filename, // Map original_filename to original_name for frontend
-        url: (media as any).filepath, // Map filepath to url for frontend
-        uploaded_by_name: (media.uploaded_by as any)?.username || 'Unknown',
+        ...(media as any),
+        id: (media as any)._id.toString(),
+        title: (media as any).caption || '', // Map caption to title for frontend
+        mime_type: (media as any).mimetype,
+        original_name: (media as any).original_filename,
+        url: (media as any).filepath,
+        uploaded_by_name: 'Unknown', // TODO: Fetch from GlobalModels.User()
       }
     });
   } catch (error) {
@@ -62,30 +62,38 @@ export async function PUT(
     const userId = (session.user as any).id;
     const siteId = (session.user as any).currentSiteId;
 
+    if (!siteId) {
+      return NextResponse.json({ error: 'No site context' }, { status: 400 });
+    }
+
     if (!mongoose.Types.ObjectId.isValid(params.id)) {
       return NextResponse.json({ error: 'Invalid media ID' }, { status: 400 });
     }
 
     const body = await request.json();
-    const { alt_text, caption, folder_id } = body;
+    const { title, alt_text, caption, folder_id } = body;
 
-    await connectDB();
+    const Media = await SiteModels.Media(siteId);
+    
+    // Build update object - only include folder_id if explicitly provided
+    const updateData: any = {
+      alt_text: alt_text || '',
+      caption: title || caption || '', // Accept title from frontend, map to caption
+    };
 
-    const updatedMedia = await Media.findOneAndUpdate(
-      {
-        _id: new mongoose.Types.ObjectId(params.id),
-        site_id: new mongoose.Types.ObjectId(siteId),
-      },
-      {
-        alt_text: alt_text || '',
-        caption: caption || '',
-        folder_id: folder_id && mongoose.Types.ObjectId.isValid(folder_id) ? new mongoose.Types.ObjectId(folder_id) : null,
-      },
+    // Only update folder_id if it's explicitly provided in the request
+    if (folder_id !== undefined) {
+      updateData.folder_id = folder_id && mongoose.Types.ObjectId.isValid(folder_id) ? new mongoose.Types.ObjectId(folder_id) : null;
+    }
+
+    const updatedMedia = await Media.findByIdAndUpdate(
+      params.id,
+      updateData,
       { new: true }
     );
 
     if (!updatedMedia) {
-      return NextResponse.json({ error: 'Media not found or access denied' }, { status: 404 });
+      return NextResponse.json({ error: 'Media not found' }, { status: 404 });
     }
 
     // Log activity
@@ -106,9 +114,10 @@ export async function PUT(
       media: {
         ...mediaObj,
         id: updatedMedia._id.toString(),
-        mime_type: mediaObj.mimetype, // Map mimetype to mime_type for frontend
-        original_name: mediaObj.original_filename, // Map original_filename to original_name for frontend
-        url: mediaObj.filepath, // Map filepath to url for frontend
+        title: mediaObj.caption || '', // Map caption to title for frontend
+        mime_type: mediaObj.mimetype,
+        original_name: mediaObj.original_filename,
+        url: mediaObj.filepath,
       }
     });
   } catch (error) {
@@ -130,32 +139,26 @@ export async function DELETE(
     const userId = (session.user as any).id;
     const siteId = (session.user as any).currentSiteId;
 
+    if (!siteId) {
+      return NextResponse.json({ error: 'No site context' }, { status: 400 });
+    }
+
     if (!mongoose.Types.ObjectId.isValid(params.id)) {
       return NextResponse.json({ error: 'Invalid media ID' }, { status: 400 });
     }
 
-    await connectDB();
-
-    const media = await Media.findOne({
-      _id: new mongoose.Types.ObjectId(params.id),
-      site_id: new mongoose.Types.ObjectId(siteId),
-    }).lean();
+    const Media = await SiteModels.Media(siteId);
+    const media = await Media.findById(params.id).lean();
 
     if (!media) {
-      return NextResponse.json({ error: 'Media not found or access denied' }, { status: 404 });
+      return NextResponse.json({ error: 'Media not found' }, { status: 404 });
     }
 
     // Move to trash (soft delete)
-    await Media.findOneAndUpdate(
-      {
-        _id: new mongoose.Types.ObjectId(params.id),
-        site_id: new mongoose.Types.ObjectId(siteId),
-      },
-      {
-        status: 'trash',
-        deleted_at: new Date(),
-      }
-    );
+    await Media.findByIdAndUpdate(params.id, {
+      status: 'trash',
+      deleted_at: new Date(),
+    });
 
     // Log activity
     await logActivity({
@@ -163,8 +166,8 @@ export async function DELETE(
       action: 'media_deleted' as any,
       entityType: 'media' as any,
       entityId: params.id,
-      entityName: media.original_filename,
-      details: `Moved media to trash: ${media.original_filename}`,
+      entityName: (media as any).original_filename,
+      details: `Moved media to trash: ${(media as any).original_filename}`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
       siteId,

@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import { connectDB } from '@/lib/db';
-import { MediaFolder } from '@/lib/models';
-import mongoose from 'mongoose';
+import { SiteModels } from '@/lib/model-factory';
 
 export async function GET(request: NextRequest) {
   try {
@@ -14,17 +12,16 @@ export async function GET(request: NextRequest) {
 
     const siteId = (session.user as any).currentSiteId;
 
-    if (!siteId || !mongoose.Types.ObjectId.isValid(siteId)) {
-      return NextResponse.json({ error: 'Invalid site ID' }, { status: 400 });
+    if (!siteId) {
+      return NextResponse.json({ error: 'No site context' }, { status: 400 });
     }
 
-    await connectDB();
-
-    const folders = await MediaFolder.find({ site_id: new mongoose.Types.ObjectId(siteId) })
+    const MediaFolder = await SiteModels.MediaFolder(siteId);
+    const folders = await MediaFolder.find({})
       .sort({ name: 1 })
       .lean();
 
-    const formattedFolders = folders.map((f) => ({
+    const formattedFolders = (folders as any[]).map((f: any) => ({
       ...f,
       id: f._id.toString(),
     }));

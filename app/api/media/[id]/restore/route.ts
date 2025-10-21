@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import { connectDB } from '@/lib/db';
-import { Media } from '@/lib/models';
+import { SiteModels } from '@/lib/model-factory';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 import mongoose from 'mongoose';
 
@@ -19,17 +18,17 @@ export async function POST(
     const userId = (session.user as any).id;
     const siteId = (session.user as any).currentSiteId;
 
+    if (!siteId) {
+      return NextResponse.json({ error: 'No site context' }, { status: 400 });
+    }
+
     if (!mongoose.Types.ObjectId.isValid(params.id)) {
       return NextResponse.json({ error: 'Invalid media ID' }, { status: 400 });
     }
 
-    await connectDB();
-
-    const media = await Media.findOneAndUpdate(
-      {
-        _id: new mongoose.Types.ObjectId(params.id),
-        site_id: new mongoose.Types.ObjectId(siteId),
-      },
+    const Media = await SiteModels.Media(siteId);
+    const media = await Media.findByIdAndUpdate(
+      params.id,
       {
         status: 'active',
         deleted_at: null,
@@ -38,7 +37,7 @@ export async function POST(
     );
 
     if (!media) {
-      return NextResponse.json({ error: 'Media not found or access denied' }, { status: 404 });
+      return NextResponse.json({ error: 'Media not found' }, { status: 404 });
     }
 
     // Log activity

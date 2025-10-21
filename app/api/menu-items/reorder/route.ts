@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import { connectDB } from '@/lib/db';
-import { MenuItem } from '@/lib/models';
+import { SiteModels } from '@/lib/model-factory';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 import mongoose from 'mongoose';
 
@@ -20,6 +19,11 @@ export async function PUT(request: NextRequest) {
     }
 
     const siteId = (session.user as any).currentSiteId;
+
+    if (!siteId) {
+      return NextResponse.json({ error: 'No site context' }, { status: 400 });
+    }
+
     const body = await request.json();
     const { items } = body; // Array of { id, menu_order, parent_id }
 
@@ -27,7 +31,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'items must be an array' }, { status: 400 });
     }
 
-    await connectDB();
+    const MenuItem = await SiteModels.MenuItem(siteId);
 
     // Update each item's order and parent
     const updatePromises = items.map((item: any) => {

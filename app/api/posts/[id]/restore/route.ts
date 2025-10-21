@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import connectDB from '@/lib/mongodb';
-import { Post } from '@/lib/models';
+import { SiteModels } from '@/lib/model-factory';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function POST(
@@ -10,8 +9,6 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
-    await connectDB();
-    
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -27,21 +24,24 @@ export async function POST(
     const isSuperAdmin = (session.user as any)?.isSuperAdmin || false;
     const siteId = (session.user as any).currentSiteId;
 
+    if (!siteId) {
+      return NextResponse.json({ error: 'No site context' }, { status: 400 });
+    }
+
+    const Post = await SiteModels.Post(siteId);
+
     // Check if post exists and get author
-    const existingPost = await Post.findOne({
-      _id: params.id,
-      site_id: siteId,
-    });
+    const existingPost = await Post.findById(params.id);
 
     if (!existingPost) {
       return NextResponse.json({ error: 'Post not found' }, { status: 404 });
     }
 
-    if (existingPost.status !== 'trash') {
+    if ((existingPost as any).status !== 'trash') {
       return NextResponse.json({ error: 'Post is not in trash' }, { status: 400 });
     }
 
-    const isOwner = existingPost.author_id?.toString() === userId;
+    const isOwner = (existingPost as any).author_id?.toString() === userId;
     const canDelete = isSuperAdmin || permissions.can_delete === true;
     const canDeleteOthers = isSuperAdmin || permissions.can_delete_others === true;
 
@@ -55,8 +55,8 @@ export async function POST(
     }
 
     // Restore post to draft status
-    await Post.findOneAndUpdate(
-      { _id: params.id, site_id: siteId },
+    await Post.findByIdAndUpdate(
+      params.id,
       { $set: { status: 'draft' } }
     );
 
@@ -67,8 +67,8 @@ export async function POST(
       entityType: 'post',
       siteId,
       entityId: params.id,
-      entityName: existingPost.title,
-      details: `Restored ${existingPost.post_type} from trash: "${existingPost.title}"`,
+      entityName: (existingPost as any).title,
+      details: `Restored ${(existingPost as any).post_type} from trash: "${(existingPost as any).title}"`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
     });

@@ -6,6 +6,7 @@ export interface IMenuItem extends Document {
   parent_id?: mongoose.Types.ObjectId;
   type: 'custom' | 'post_type' | 'taxonomy' | 'post' | 'term';
   object_id?: mongoose.Types.ObjectId; // Reference to PostType, Taxonomy, Post, or Term
+  post_type?: string; // The post_type name when type='post' (e.g., 'post', 'page')
   custom_url?: string;
   custom_label?: string;
   menu_order: number;
@@ -39,6 +40,10 @@ export const MenuItemSchema: Schema = new Schema(
     object_id: {
       type: Schema.Types.ObjectId,
       default: null,
+    },
+    post_type: {
+      type: String,
+      default: '',
     },
     custom_url: {
       type: String,

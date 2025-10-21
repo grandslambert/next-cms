@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import { connectDB } from '@/lib/db';
-import { Menu } from '@/lib/models';
+import { SiteModels } from '@/lib/model-factory';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
-import mongoose from 'mongoose';
 
 export async function GET() {
   try {
@@ -20,18 +18,17 @@ export async function GET() {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    if (!siteId || !mongoose.Types.ObjectId.isValid(siteId)) {
-      return NextResponse.json({ error: 'Invalid site ID' }, { status: 400 });
+    if (!siteId) {
+      return NextResponse.json({ error: 'No site context' }, { status: 400 });
     }
 
-    await connectDB();
-
-    const menus = await Menu.find({ site_id: new mongoose.Types.ObjectId(siteId) })
+    const Menu = await SiteModels.Menu(siteId);
+    const menus = await Menu.find({})
       .sort({ name: 1 })
       .lean();
 
     // Format for UI compatibility
-    const formattedMenus = menus.map((menu) => ({
+    const formattedMenus = (menus as any[]).map((menu: any) => ({
       ...menu,
       id: menu._id.toString(),
     }));
@@ -58,8 +55,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    if (!siteId || !mongoose.Types.ObjectId.isValid(siteId)) {
-      return NextResponse.json({ error: 'Invalid site ID' }, { status: 400 });
+    if (!siteId) {
+      return NextResponse.json({ error: 'No site context' }, { status: 400 });
     }
 
     const body = await request.json();
@@ -69,10 +66,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Name is required' }, { status: 400 });
     }
 
-    await connectDB();
-
+    const Menu = await SiteModels.Menu(siteId);
     const newMenu = await Menu.create({
-      site_id: new mongoose.Types.ObjectId(siteId),
       name,
       display_name: display_name || name,
       location: location || '',
@@ -106,5 +101,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to create menu' }, { status: 500 });
   }
 }
-
-

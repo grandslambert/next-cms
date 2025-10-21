@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import { connectDB } from '@/lib/db';
-import { Media } from '@/lib/models';
+import { SiteModels } from '@/lib/model-factory';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 import mongoose from 'mongoose';
 import { unlink } from 'fs/promises';
@@ -21,19 +20,19 @@ export async function DELETE(
     const userId = (session.user as any).id;
     const siteId = (session.user as any).currentSiteId;
 
+    if (!siteId) {
+      return NextResponse.json({ error: 'No site context' }, { status: 400 });
+    }
+
     if (!mongoose.Types.ObjectId.isValid(params.id)) {
       return NextResponse.json({ error: 'Invalid media ID' }, { status: 400 });
     }
 
-    await connectDB();
-
-    const media = await Media.findOne({
-      _id: new mongoose.Types.ObjectId(params.id),
-      site_id: new mongoose.Types.ObjectId(siteId),
-    }).lean();
+    const Media = await SiteModels.Media(siteId);
+    const media = await Media.findById(params.id).lean();
 
     if (!media) {
-      return NextResponse.json({ error: 'Media not found or access denied' }, { status: 404 });
+      return NextResponse.json({ error: 'Media not found' }, { status: 404 });
     }
 
     if ((media as any).status !== 'trash') {
@@ -44,7 +43,6 @@ export async function DELETE(
     try {
       const filepath = path.join(process.cwd(), 'public', (media as any).filepath);
       await unlink(filepath);
-      console.log(`✓ Deleted original file: ${filepath}`);
     } catch (fileError) {
       console.error('Error deleting original file:', fileError);
       // Continue with size deletion even if original fails
@@ -62,7 +60,6 @@ export async function DELETE(
             try {
               const sizePath = path.join(process.cwd(), 'public', sizeUrl);
               await unlink(sizePath);
-              console.log(`✓ Deleted ${sizeName} size: ${sizePath}`);
             } catch (sizeError) {
               console.error(`Error deleting ${sizeName} size:`, sizeError);
               // Continue with other sizes
@@ -76,10 +73,7 @@ export async function DELETE(
     }
 
     // Delete from database
-    await Media.findOneAndDelete({
-      _id: new mongoose.Types.ObjectId(params.id),
-      site_id: new mongoose.Types.ObjectId(siteId),
-    });
+    await Media.findByIdAndDelete(params.id);
 
     // Log activity
     await logActivity({
@@ -87,8 +81,8 @@ export async function DELETE(
       action: 'media_permanently_deleted' as any,
       entityType: 'media' as any,
       entityId: params.id,
-      entityName: media.original_filename,
-      details: `Permanently deleted media: ${media.original_filename}`,
+      entityName: (media as any).original_filename,
+      details: `Permanently deleted media: ${(media as any).original_filename}`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
       siteId,

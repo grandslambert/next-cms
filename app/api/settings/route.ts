@@ -37,9 +37,6 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
     const { settings } = body;
 
-    console.log('[Settings API] PUT request received. Site ID:', siteId);
-    console.log('[Settings API] Settings to update:', JSON.stringify(settings, null, 2));
-
     if (!settings) {
       return NextResponse.json({ error: 'Settings object is required' }, { status: 400 });
     }
@@ -71,7 +68,6 @@ export async function PUT(request: NextRequest) {
         group = 'authentication';
       }
 
-      console.log(`[Settings API] Saving setting: ${key}, type: ${settingType}, group: ${group}`);
       
       // Upsert setting
       const result = await Setting.findOneAndUpdate(
@@ -85,7 +81,6 @@ export async function PUT(request: NextRequest) {
         { upsert: true, new: true }
       );
       
-      console.log(`[Settings API] Saved setting ${key}:`, result ? 'Success' : 'Failed');
     }
 
     // Log activity with before/after changes

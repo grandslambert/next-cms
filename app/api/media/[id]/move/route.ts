@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import { connectDB } from '@/lib/db';
-import { Media } from '@/lib/models';
+import { SiteModels } from '@/lib/model-factory';
 import mongoose from 'mongoose';
 
 export async function PUT(
@@ -15,25 +14,26 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const siteId = (session.user as any).currentSiteId;
+
+    if (!siteId) {
+      return NextResponse.json({ error: 'No site context' }, { status: 400 });
+    }
+
     if (!mongoose.Types.ObjectId.isValid(params.id)) {
       return NextResponse.json({ error: 'Invalid media ID' }, { status: 400 });
     }
 
     const body = await request.json();
     const { folder_id } = body;
-    const siteId = (session.user as any).currentSiteId;
 
     if (folder_id && !mongoose.Types.ObjectId.isValid(folder_id)) {
       return NextResponse.json({ error: 'Invalid folder ID' }, { status: 400 });
     }
 
-    await connectDB();
-
-    const media = await Media.findOneAndUpdate(
-      {
-        _id: new mongoose.Types.ObjectId(params.id),
-        site_id: new mongoose.Types.ObjectId(siteId),
-      },
+    const Media = await SiteModels.Media(siteId);
+    const media = await Media.findByIdAndUpdate(
+      params.id,
       {
         folder_id: folder_id ? new mongoose.Types.ObjectId(folder_id) : null,
       },
@@ -41,7 +41,7 @@ export async function PUT(
     );
 
     if (!media) {
-      return NextResponse.json({ error: 'Media not found or access denied' }, { status: 404 });
+      return NextResponse.json({ error: 'Media not found' }, { status: 404 });
     }
 
     return NextResponse.json({ 

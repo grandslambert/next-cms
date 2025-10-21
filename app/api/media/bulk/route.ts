@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import { connectDB } from '@/lib/db';
-import { Media } from '@/lib/models';
+import { SiteModels } from '@/lib/model-factory';
 import mongoose from 'mongoose';
 
 export async function POST(request: NextRequest) {
@@ -31,8 +30,11 @@ export async function POST(request: NextRequest) {
 
     const siteId = (session.user as any).currentSiteId;
 
-    await connectDB();
+    if (!siteId) {
+      return NextResponse.json({ error: 'No site context' }, { status: 400 });
+    }
 
+    const Media = await SiteModels.Media(siteId);
     const objectIds = media_ids.map((id: string) => new mongoose.Types.ObjectId(id));
 
     let result;
@@ -42,10 +44,7 @@ export async function POST(request: NextRequest) {
       case 'trash':
       case 'delete':
         result = await Media.updateMany(
-          { 
-            _id: { $in: objectIds },
-            site_id: new mongoose.Types.ObjectId(siteId)
-          },
+          { _id: { $in: objectIds } },
           { status: 'trash', deleted_at: new Date() }
         );
         message = `Moved ${result.modifiedCount} item${result.modifiedCount !== 1 ? 's' : ''} to trash`;
@@ -56,10 +55,7 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: 'Invalid folder ID' }, { status: 400 });
         }
         result = await Media.updateMany(
-          { 
-            _id: { $in: objectIds },
-            site_id: new mongoose.Types.ObjectId(siteId)
-          },
+          { _id: { $in: objectIds } },
           { folder_id: (folder_id && folder_id !== 'null') ? new mongoose.Types.ObjectId(folder_id) : null }
         );
         message = `Moved ${result.modifiedCount} item${result.modifiedCount !== 1 ? 's' : ''}`;

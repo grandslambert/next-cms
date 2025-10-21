@@ -27,15 +27,15 @@ interface MenuItemsListProps {
   draggedItem: MenuItem | null;
   dropTarget: number | null;
   dragIndent: number;
-  editingItemId: number | null;
+  editingItemId: string | number | null;
   onDragStart: (e: React.DragEvent, item: MenuItem) => void;
   onDragOver: (e: React.DragEvent, index: number) => void;
   onDrop: (e: React.DragEvent, dropIndex: number) => void;
   onDragEnd: () => void;
-  onEdit: (itemId: number) => void;
-  onDelete: (id: number) => void;
+  onEdit: (itemId: string | number) => void;
+  onDelete: (id: string | number) => void;
   onAddNew: () => void;
-  onUpdateItem: (itemId: number, field: string, value: any) => void;
+  onUpdateItem: (itemId: string | number, field: string, value: any) => void;
   postTypesData?: any;
 }
 
@@ -83,23 +83,32 @@ export default function MenuItemsList({
               let displayLabel = item.custom_label;
               let displayType = item.type;
               
-              if (!displayLabel) {
-                if (item.type === 'post') {
+              // Set displayType based on item type (regardless of custom_label)
+              if (item.type === 'post') {
+                const ptLabel = postTypesData?.postTypes?.find((pt: any) => pt.name === item.post_type)?.singular_label;
+                displayType = ptLabel || 'Post';
+                if (!displayLabel) {
                   displayLabel = item.post_title || `Post #${item.object_id}`;
-                  const ptLabel = postTypesData?.postTypes?.find((pt: any) => pt.name === item.post_type)?.singular_label;
-                  displayType = ptLabel || 'Post';
-                } else if (item.type === 'post_type') {
+                }
+              } else if (item.type === 'post_type') {
+                displayType = 'Archive Page';
+                if (!displayLabel) {
                   displayLabel = item.post_type_label || `Post Type #${item.object_id}`;
-                  displayType = 'Archive Page';
-                } else if (item.type === 'taxonomy') {
+                }
+              } else if (item.type === 'taxonomy') {
+                displayType = 'Taxonomy Archive';
+                if (!displayLabel) {
                   displayLabel = item.taxonomy_label || `Taxonomy #${item.object_id}`;
-                  displayType = 'Taxonomy Archive';
-                } else if (item.type === 'term') {
+                }
+              } else if (item.type === 'term') {
+                displayType = item.term_taxonomy_label || 'Term';
+                if (!displayLabel) {
                   displayLabel = item.term_name || `Term #${item.object_id}`;
-                  displayType = item.term_taxonomy_label || 'Term';
-                } else if (item.type === 'custom') {
+                }
+              } else if (item.type === 'custom') {
+                displayType = 'Custom Link';
+                if (!displayLabel) {
                   displayLabel = item.custom_url;
-                  displayType = 'Custom Link';
                 }
               }
 

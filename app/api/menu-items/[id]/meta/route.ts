@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import { connectDB } from '@/lib/db';
-import { MenuItemMeta } from '@/lib/models';
+import { SiteModels } from '@/lib/model-factory';
 import mongoose from 'mongoose';
 
 export async function GET(
@@ -21,16 +20,21 @@ export async function GET(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    const siteId = (session.user as any).currentSiteId;
+
+    if (!siteId) {
+      return NextResponse.json({ error: 'No site context' }, { status: 400 });
+    }
+
     if (!mongoose.Types.ObjectId.isValid(params.id)) {
       return NextResponse.json({ error: 'Invalid menu item ID' }, { status: 400 });
     }
 
-    await connectDB();
-
+    const MenuItemMeta = await SiteModels.MenuItemMeta(siteId);
     const meta = await MenuItemMeta.find({ menu_item_id: new mongoose.Types.ObjectId(params.id) }).lean();
 
     // Format for UI compatibility
-    const formattedMeta = meta.map((m) => ({
+    const formattedMeta = (meta as any[]).map((m: any) => ({
       ...m,
       id: m._id.toString(),
     }));
@@ -58,20 +62,59 @@ export async function PUT(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    const siteId = (session.user as any).currentSiteId;
+
+    if (!siteId) {
+      return NextResponse.json({ error: 'No site context' }, { status: 400 });
+    }
+
     if (!mongoose.Types.ObjectId.isValid(params.id)) {
       return NextResponse.json({ error: 'Invalid menu item ID' }, { status: 400 });
     }
 
     const body = await request.json();
-    const { meta_key, meta_value } = body;
+    const { meta, meta_key, meta_value } = body;
 
-    if (!meta_key) {
-      return NextResponse.json({ error: 'meta_key is required' }, { status: 400 });
+    const MenuItemMeta = await SiteModels.MenuItemMeta(siteId);
+
+    // Handle batch meta update (meta object with multiple keys)
+    if (meta && typeof meta === 'object') {
+      const metaKeys = ['title_attr', 'css_classes', 'xfn', 'description'];
+      const results = [];
+
+      for (const key of metaKeys) {
+        if (meta.hasOwnProperty(key)) {
+          const updated = await MenuItemMeta.findOneAndUpdate(
+            {
+              menu_item_id: new mongoose.Types.ObjectId(params.id),
+              meta_key: key,
+            },
+            {
+              meta_value: meta[key] || '',
+            },
+            {
+              upsert: true,
+              new: true,
+            }
+          );
+          results.push(updated);
+        }
+      }
+
+      return NextResponse.json({ 
+        success: true,
+        meta: results.map(m => ({
+          ...m.toObject(),
+          id: m._id.toString(),
+        }))
+      });
     }
 
-    await connectDB();
+    // Handle single meta key/value update (legacy support)
+    if (!meta_key) {
+      return NextResponse.json({ error: 'meta_key or meta object is required' }, { status: 400 });
+    }
 
-    // Upsert meta value
     const updatedMeta = await MenuItemMeta.findOneAndUpdate(
       {
         menu_item_id: new mongoose.Types.ObjectId(params.id),

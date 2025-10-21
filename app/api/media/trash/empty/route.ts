@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import { connectDB } from '@/lib/db';
-import { Media } from '@/lib/models';
+import { SiteModels } from '@/lib/model-factory';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 import { unlink } from 'fs/promises';
 import path from 'path';
-import mongoose from 'mongoose';
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,15 +16,14 @@ export async function POST(request: NextRequest) {
     const userId = (session.user as any).id;
     const siteId = (session.user as any).currentSiteId;
 
-    if (!siteId || !mongoose.Types.ObjectId.isValid(siteId)) {
-      return NextResponse.json({ error: 'Invalid site ID' }, { status: 400 });
+    if (!siteId) {
+      return NextResponse.json({ error: 'No site context' }, { status: 400 });
     }
 
-    await connectDB();
+    const Media = await SiteModels.Media(siteId);
 
     // Find all media in trash for this site
     const trashedMedia = await Media.find({ 
-      site_id: new mongoose.Types.ObjectId(siteId),
       status: 'trash' 
     }).lean();
 
@@ -40,7 +37,6 @@ export async function POST(request: NextRequest) {
       try {
         const filepath = path.join(process.cwd(), 'public', (media as any).filepath);
         await unlink(filepath);
-        console.log(`✓ Deleted original file: ${filepath}`);
       } catch (fileError) {
         console.error(`Error deleting file ${(media as any).filepath}:`, fileError);
         // Continue with size deletion
@@ -58,7 +54,6 @@ export async function POST(request: NextRequest) {
               try {
                 const sizePath = path.join(process.cwd(), 'public', sizeUrl);
                 await unlink(sizePath);
-                console.log(`✓ Deleted ${sizeName} size: ${sizePath}`);
               } catch (sizeError) {
                 console.error(`Error deleting ${sizeName} size:`, sizeError);
                 // Continue with other sizes
@@ -72,9 +67,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Delete from database (only for this site)
+    // Delete from database
     const result = await Media.deleteMany({ 
-      site_id: new mongoose.Types.ObjectId(siteId),
       status: 'trash' 
     });
 

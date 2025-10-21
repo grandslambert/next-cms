@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import connectDB from '@/lib/mongodb';
-import { Post, PostTerm } from '@/lib/models';
+import { SiteModels } from '@/lib/model-factory';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function DELETE(
@@ -10,8 +9,6 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    await connectDB();
-    
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -27,21 +24,25 @@ export async function DELETE(
     const isSuperAdmin = (session.user as any)?.isSuperAdmin || false;
     const siteId = (session.user as any).currentSiteId;
 
+    if (!siteId) {
+      return NextResponse.json({ error: 'No site context' }, { status: 400 });
+    }
+
+    const Post = await SiteModels.Post(siteId);
+    const PostTerm = await SiteModels.PostTerm(siteId);
+
     // Check if post exists and get author
-    const existingPost = await Post.findOne({
-      _id: params.id,
-      site_id: siteId,
-    });
+    const existingPost = await Post.findById(params.id);
 
     if (!existingPost) {
       return NextResponse.json({ error: 'Post not found' }, { status: 404 });
     }
 
-    if (existingPost.status !== 'trash') {
+    if ((existingPost as any).status !== 'trash') {
       return NextResponse.json({ error: 'Post must be in trash before permanent deletion' }, { status: 400 });
     }
 
-    const isOwner = existingPost.author_id?.toString() === userId;
+    const isOwner = (existingPost as any).author_id?.toString() === userId;
     const canDelete = isSuperAdmin || permissions.can_delete === true;
     const canDeleteOthers = isSuperAdmin || permissions.can_delete_others === true;
 
@@ -60,15 +61,14 @@ export async function DELETE(
       action: 'post_deleted',
       entityType: 'post',
       entityId: params.id,
-      entityName: existingPost.title,
-      details: `Permanently deleted ${existingPost.post_type}: "${existingPost.title}"`,
+      entityName: (existingPost as any).title,
+      details: `Permanently deleted ${(existingPost as any).post_type}: "${(existingPost as any).title}"`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
       siteId,
     });
 
     // Delete all related data first (cascading delete)
-    // Note: post_meta and post_revisions will be added in future updates
     await PostTerm.deleteMany({ post_id: params.id });
     
     // Permanently delete the post from database

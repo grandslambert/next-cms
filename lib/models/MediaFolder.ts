@@ -18,7 +18,6 @@ export const MediaFolderSchema: Schema = new Schema(
       type: Schema.Types.ObjectId,
       ref: 'MediaFolder',
       default: null,
-      index: true,
     },
   },
   {
@@ -26,8 +25,9 @@ export const MediaFolderSchema: Schema = new Schema(
   }
 );
 
-// Indexes
-MediaFolderSchema.index({ site_id: 1, name: 1 });
+// Index for efficient queries
+MediaFolderSchema.index({ name: 1 });
+MediaFolderSchema.index({ parent_id: 1 });
 
 const MediaFolder = mongoose.models.MediaFolder || mongoose.model<IMediaFolder>('MediaFolder', MediaFolderSchema);
 

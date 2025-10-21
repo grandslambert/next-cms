@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import { connectDB } from '@/lib/db';
-import { MenuLocation } from '@/lib/models';
+import { SiteModels } from '@/lib/model-factory';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
-import mongoose from 'mongoose';
 
 export async function GET() {
   try {
@@ -15,18 +13,17 @@ export async function GET() {
 
     const siteId = (session.user as any).currentSiteId;
 
-    if (!siteId || !mongoose.Types.ObjectId.isValid(siteId)) {
-      return NextResponse.json({ error: 'Invalid site ID' }, { status: 400 });
+    if (!siteId) {
+      return NextResponse.json({ error: 'No site context' }, { status: 400 });
     }
 
-    await connectDB();
-
-    const locations = await MenuLocation.find({ site_id: new mongoose.Types.ObjectId(siteId) })
+    const MenuLocation = await SiteModels.MenuLocation(siteId);
+    const locations = await MenuLocation.find({})
       .sort({ name: 1 })
       .lean();
 
     // Format for UI compatibility
-    const formattedLocations = locations.map((location) => ({
+    const formattedLocations = (locations as any[]).map((location: any) => ({
       ...location,
       id: location._id.toString(),
     }));
@@ -58,14 +55,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'name is required' }, { status: 400 });
     }
 
-    if (!siteId || !mongoose.Types.ObjectId.isValid(siteId)) {
-      return NextResponse.json({ error: 'Invalid site ID' }, { status: 400 });
+    if (!siteId) {
+      return NextResponse.json({ error: 'No site context' }, { status: 400 });
     }
 
-    await connectDB();
-
+    const MenuLocation = await SiteModels.MenuLocation(siteId);
     const newLocation = await MenuLocation.create({
-      site_id: new mongoose.Types.ObjectId(siteId),
       name: name.toLowerCase().replaceAll(/[^a-z0-9_]/g, '_'),
       display_name: display_name || name,
       description: description || '',
@@ -96,4 +91,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to create menu location' }, { status: 500 });
   }
 }
-

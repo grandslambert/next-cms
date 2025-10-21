@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import toast from 'react-hot-toast';
@@ -16,8 +16,8 @@ export default function NavigationPage() {
   const { data: session } = useSession();
   const isSuperAdmin = (session?.user as any)?.isSuperAdmin || false;
   const { isLoading: permissionLoading } = usePermission('manage_menus');
-  const [selectedMenuId, setSelectedMenuId] = useState<number | null>(null);
-  const [menuPreferenceLoaded, setMenuPreferenceLoaded] = useState(false);
+  const [selectedMenuId, setSelectedMenuId] = useState<string | null>(null);
+  const menuPreferenceLoadedRef = useRef(false);
   const [isCreatingMenu, setIsCreatingMenu] = useState(false);
   const [menuFormData, setMenuFormData] = useState({
     name: '',
@@ -25,17 +25,17 @@ export default function NavigationPage() {
     description: '',
   });
   const [hasMenuChanges, setHasMenuChanges] = useState(false);
-  const [editingItemId, setEditingItemId] = useState<number | null>(null);
+  const [editingItemId, setEditingItemId] = useState<string | number | null>(null);
   const [isAddingItem, setIsAddingItem] = useState(false);
   const [postTypeFilter, setPostTypeFilter] = useState('');
   const [postSearchQuery, setPostSearchQuery] = useState('');
-  const [taxonomyFilter, setTaxonomyFilter] = useState<number | null>(null);
+  const [taxonomyFilter, setTaxonomyFilter] = useState<string | null>(null);
   const [termSearchQuery, setTermSearchQuery] = useState('');
   const [draggedItem, setDraggedItem] = useState<any>(null);
   const [dropTarget, setDropTarget] = useState<number | null>(null);
   const [dragIndent, setDragIndent] = useState(0);
   const [localMenuItems, setLocalMenuItems] = useState<any[]>([]);
-  const [deletedItemIds, setDeletedItemIds] = useState<number[]>([]);
+  const [deletedItemIds, setDeletedItemIds] = useState<(string | number)[]>([]);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -57,50 +57,60 @@ export default function NavigationPage() {
       const res = await axios.get('/api/user/meta?key=last_selected_menu');
       return res.data;
     },
+    staleTime: 0, // Always consider data stale
+    refetchOnMount: 'always', // Always refetch when component mounts
   });
 
   // Load last selected menu on page load
   useEffect(() => {
-    // Wait for both queries to complete
-    if (menuPreferenceLoaded || menusLoading || prefLoading) {
+    // Don't run if already loaded
+    if (menuPreferenceLoadedRef.current) {
       return;
     }
 
-    // Mark as loaded even if no menus exist
-    setMenuPreferenceLoaded(true);
-
-    if (menusData?.menus && menusData.menus.length > 0) {
-      let menuIdToSelect = null;
-      
-      // Check if we have a saved preference
-      if (lastMenuData?.meta_value) {
-        const lastMenuId = Number.parseInt(lastMenuData.meta_value, 10);
-        console.log('Last selected menu ID from user_meta:', lastMenuId);
-        const menuExists = menusData.menus.some((m: any) => m.id === lastMenuId);
-        console.log('Menu exists?', menuExists);
-        if (menuExists) {
-          menuIdToSelect = lastMenuId;
-        }
-      }
-      
-      // Fallback to first menu if no preference or preference doesn't exist
-      if (!menuIdToSelect) {
-        menuIdToSelect = menusData.menus[0].id;
-        console.log('Using first menu as fallback:', menuIdToSelect);
-      }
-      
-      console.log('Setting selected menu ID to:', menuIdToSelect);
-      setSelectedMenuId(menuIdToSelect);
+    // Wait for BOTH queries to complete before proceeding
+    if (menusLoading || prefLoading) {
+      return;
     }
-  }, [menuPreferenceLoaded, menusLoading, prefLoading, lastMenuData, menusData]);
+
+    // Check if we have menus data available
+    if (!menusData?.menus || menusData.menus.length === 0) {
+      // Mark as loaded even if no menus, to prevent infinite checking
+      menuPreferenceLoadedRef.current = true;
+      return;
+    }
+
+    // Now mark as loaded (both queries are done AND data is available)
+    menuPreferenceLoadedRef.current = true;
+
+    let menuIdToSelect = null;
+    
+    // Check if we have a saved preference
+    if (lastMenuData?.meta_value) {
+      const lastMenuId = lastMenuData.meta_value; // Keep as string (ObjectId)
+      const menuExists = menusData.menus.some((m: any) => m.id === lastMenuId);
+      if (menuExists) {
+        menuIdToSelect = lastMenuId;
+      }
+    }
+    
+    // Fallback to first menu if no preference or preference doesn't exist
+    if (!menuIdToSelect) {
+      menuIdToSelect = menusData.menus[0].id;
+    }
+    
+    setSelectedMenuId(menuIdToSelect);
+  }, [menusLoading, prefLoading, lastMenuData, menusData]);
 
   // Save selected menu to user preferences
-  const saveMenuPreference = async (menuId: number) => {
+  const saveMenuPreference = async (menuId: string) => {
     try {
       await axios.put('/api/user/meta', {
         meta_key: 'last_selected_menu',
-        meta_value: menuId.toString(),
+        meta_value: menuId, // Already a string (ObjectId)
       });
+      // Invalidate the cache so next time we get fresh data
+      queryClient.invalidateQueries({ queryKey: ['user-meta', 'last_selected_menu'] });
     } catch (error) {
       // Silent fail
     }
@@ -213,7 +223,7 @@ export default function NavigationPage() {
   });
 
   const deleteMenuMutation = useMutation({
-    mutationFn: async (id: number) => {
+    mutationFn: async (id: string) => {
       const res = await axios.delete(`/api/menus/${id}`);
       return res.data;
     },
@@ -240,9 +250,9 @@ export default function NavigationPage() {
     setIsSaving(true);
 
     try {
-      // Delete removed items first (only existing items with positive IDs)
+      // Delete removed items first (only existing items with string ObjectIds)
       for (const itemId of deletedItemIds) {
-        if (itemId > 0) {
+        if (typeof itemId === 'string') {
           await axios.delete(`/api/menu-items/${itemId}`);
         }
       }
@@ -258,7 +268,7 @@ export default function NavigationPage() {
         
         // Create new items first
         const newItems = itemsToSave.filter(item => item.isNew || item.id < 0);
-        const idMapping: { [key: number]: number } = {}; // Map temp IDs to real IDs
+        const idMapping: { [key: number]: string } = {}; // Map temp IDs (number) to real IDs (string ObjectId)
         
         for (let i = 0; i < newItems.length; i++) {
           const item = newItems[i];
@@ -309,7 +319,8 @@ export default function NavigationPage() {
         });
 
         // Only send existing items to reorder endpoint (new items already have order)
-        const existingItemsUpdates = allItems.filter(item => item.id > 0);
+        // Note: item.id is a string (ObjectId) for existing items, negative number for new items
+        const existingItemsUpdates = allItems.filter(item => typeof item.id === 'string' || item.id > 0);
         if (existingItemsUpdates.length > 0) {
           await axios.put('/api/menu-items/reorder', { items: existingItemsUpdates });
         }
@@ -317,7 +328,8 @@ export default function NavigationPage() {
         // Save meta data for all items (both new and existing)
         for (const item of itemsToSave) {
           const realId = item.id < 0 && idMapping[item.id] ? idMapping[item.id] : item.id;
-          if (realId > 0) {
+          // realId is string (ObjectId) for existing, or was just created
+          if (typeof realId === 'string' || realId > 0) {
             const meta = {
               title_attr: item.title_attr || '',
               css_classes: item.css_classes || '',
@@ -368,7 +380,7 @@ export default function NavigationPage() {
     toast.success('Changes discarded');
   };
 
-  const handleMenuSelect = (menuId: number) => {
+  const handleMenuSelect = (menuId: string) => {
     if (hasUnsavedChanges || hasMenuChanges) {
       if (!confirm('You have unsaved changes. Do you want to discard them?')) {
         return;
@@ -467,11 +479,11 @@ export default function NavigationPage() {
     setDragIndent(0);
   };
 
-  const handleEditItem = (itemId: number) => {
+  const handleEditItem = (itemId: string | number) => {
     setEditingItemId(editingItemId === itemId ? null : itemId);
   };
 
-  const handleUpdateItem = (itemId: number, field: string, value: any) => {
+  const handleUpdateItem = (itemId: string | number, field: string, value: any) => {
     const updatedItems = localMenuItems.map(item => 
       item.id === itemId ? { ...item, [field]: value } : item
     );
@@ -479,7 +491,7 @@ export default function NavigationPage() {
     setHasUnsavedChanges(true);
   };
 
-  const handleDeleteItem = (id: number) => {
+  const handleDeleteItem = (id: string | number) => {
     // Mark for deletion (don't actually delete until save)
     setDeletedItemIds(prev => [...prev, id]);
     setHasUnsavedChanges(true);
@@ -549,7 +561,7 @@ export default function NavigationPage() {
     }
   };
 
-  if (permissionLoading || menusLoading || prefLoading || !menuPreferenceLoaded) {
+  if (permissionLoading || menusLoading || prefLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">

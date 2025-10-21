@@ -5,42 +5,80 @@ All notable changes to Next CMS will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.0.4] - 2025-10-21
+## [3.1.0] - 2025-10-21
 
-### Fixed
+### Added
+- **Posts System**:
+  - Full multi-database architecture migration for all posts endpoints
+  - Autosave GET endpoint to retrieve saved drafts
+  - Autosave DELETE endpoint to clear saved drafts
+  - Featured image URL support in posts list and single post endpoints
+  - Proper handling of ObjectId validation using `mongoose.Types.ObjectId.isValid()`
 
-- **Terms Management**
-  - Migrated terms API routes to multi-database architecture
-  - Fixed term create/edit/delete functionality
-  - Fixed activity logging for term operations
+- **Terms**:
+  - Image support for taxonomy terms via `meta.image_id` field
+  - Image URL retrieval in terms list and single term endpoints
+  - Batch meta updates in POST and PUT handlers
 
-- **Settings**
-  - Fixed critical auth import bug in `lib/api-helpers.ts` that prevented settings from saving
-  - Fixed General Settings loading (changed `site_name` to `site_title`)
-  - Added missing `posts_per_page` and `max_revisions` fields to General Settings
-  - Fixed settings group assignment for media settings
-
-- **Media Settings**
-  - Added file type management UI (add/remove allowed MIME types)
-  - Added max upload size configuration
-  - Improved layout and made image size inputs more compact
-
-- **Post Types & Taxonomies**
-  - Added `show_in_menu` field to control sidebar visibility independently
-  - Fixed `menu_position` not saving correctly for taxonomies
-  - Fixed `featured_image` support not saving for post types
-  - Fixed sidebar filtering to properly use `show_in_menu`
-
-- **Admin UI**
-  - Fixed sidebar spacing between site switcher and dashboard
-  - Fixed Content Types menu visibility for authorized users
-  - Improved menu item filtering
+- **Posts Editor**:
+  - Autosave timestamp (`saved_at`) in autosave responses
+  - Proper display of last saved time
+  - Support for both nested and flat autosave data formats
 
 ### Changed
+- **Posts API**:
+  - Migrated `/api/posts/[id]` to multi-database architecture
+  - Migrated `/api/posts/[id]/terms` to multi-database architecture
+  - Migrated `/api/posts/[id]/permanent-delete` to multi-database architecture
+  - Migrated `/api/posts/[id]/restore` to multi-database architecture
+  - Migrated `/api/posts/[id]/revisions` to multi-database architecture
+  - Migrated `/api/posts/autosave` to multi-database architecture
+  - Migrated `/api/posts/process-scheduled` to multi-database architecture
+  - Migrated `/api/posts/trash/empty` to multi-database architecture
+  - Updated `/api/posts/[id]/meta` to make custom fields optional
+  - Featured images now use `filepath` field instead of non-existent `url` field
 
-- Updated default settings structure (removed redundant image dimension settings)
-- Changed default `session_timeout` from 30 minutes to 1440 minutes (24 hours)
-- Synchronized settings between initialization scripts
+- **Terms API**:
+  - `/api/posts/[id]/terms` now accepts both `taxonomy` (name) and `taxonomy_id` (ObjectId) parameters
+  - Terms endpoints now fetch and return image URLs from Media collection
+  - POST and PUT handlers now accept and save `meta` and `image_id` fields
+
+- **Type Safety**:
+  - Added `as any[]` type assertions to `.lean()` queries throughout codebase
+  - Changed `selectedTerms` state type from `{[taxonomyId: number]: number[]}` to `{[taxonomyId: string]: number[]}`
+  - Fixed Set iteration issues by using `Array.from()` instead of spread operator
+
+- **Import Fixes**:
+  - Updated all `next-auth` imports to `next-auth/next` for consistency
+  - Added missing `mongoose` imports where needed
+
+### Fixed
+- **Posts**:
+  - Featured images now load correctly in both posts list and post editor
+  - Taxonomy terms now filter correctly by taxonomy in post columns
+  - Post meta no longer requires `meta_key` when custom fields are not provided
+  - Autosave modal now displays when returning to a post with saved draft
+  - "Last saved" time now displays correctly instead of "Invalid Date"
+
+- **Terms**:
+  - Taxonomy term images now save and display correctly
+  - Terms list now shows proper taxonomy-specific terms in columns
+
+- **Type Errors**:
+  - Fixed `'r._id' is of type 'unknown'` errors in users route
+  - Fixed `Type 'Set<any>' can only be iterated through` errors
+  - Fixed `Element implicitly has an 'any' type` errors in PostTypeForm
+
+### Technical
+- All posts-related endpoints now use `SiteModels.Post(siteId)` and `GlobalModels.User()`
+- Removed all `connectDB()` calls from migrated endpoints
+- Removed `site_id` filters from queries (implicit in site-specific database)
+- Updated `logActivity` calls to use `siteId` parameter
+- Proper handling of MongoDB ObjectId vs Number for site identifiers
+
+## [3.0.4] - 2025-10-21
+
+See [changelog/v3.0.4.md](changelog/v3.0.4.md) for details.
 
 ## [3.0.3] - 2025-01-21
 

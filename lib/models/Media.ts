@@ -90,8 +90,8 @@ export const MediaSchema: Schema = new Schema(
   }
 );
 
-// Compound index for efficient queries
-MediaSchema.index({ site_id: 1, status: 1 });
+// Index for efficient queries
+MediaSchema.index({ status: 1, created_at: -1 });
 
 const Media = mongoose.models.Media || mongoose.model<IMedia>('Media', MediaSchema);
 

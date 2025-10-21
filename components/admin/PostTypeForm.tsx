@@ -83,7 +83,7 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
   const [authorId, setAuthorId] = useState<number | null>(null);
   const [parentId, setParentId] = useState<number | null>(null);
   const [menuOrder, setMenuOrder] = useState(0);
-  const [selectedTerms, setSelectedTerms] = useState<{[taxonomyId: number]: number[]}>({});
+  const [selectedTerms, setSelectedTerms] = useState<{[taxonomyId: string]: number[]}>({});
   const [featuredImageId, setFeaturedImageId] = useState<number | null>(null);
   const [featuredImageUrl, setFeaturedImageUrl] = useState('');
   const [showMediaModal, setShowMediaModal] = useState(false);
@@ -322,13 +322,24 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
   // Load selected terms when editing
   useEffect(() => {
     if (postTermsData?.terms && allTermsData) {
-      const termsByTaxonomy: {[taxonomyId: number]: number[]} = {};
+      const termsByTaxonomy: {[taxonomyId: string]: number[]} = {};
+      
+      // Create a map of taxonomy name to taxonomy ID
+      const taxonomyNameToId: {[name: string]: string} = {};
+      allTermsData.forEach((taxonomyData: any) => {
+        if (taxonomyData.taxonomy?.name) {
+          taxonomyNameToId[taxonomyData.taxonomy.name] = taxonomyData.taxonomyId;
+        }
+      });
       
       postTermsData.terms.forEach((term: any) => {
-        if (!termsByTaxonomy[term.taxonomy_id]) {
-          termsByTaxonomy[term.taxonomy_id] = [];
+        const taxonomyId = taxonomyNameToId[term.taxonomy_name];
+        if (taxonomyId) {
+          if (!termsByTaxonomy[taxonomyId]) {
+            termsByTaxonomy[taxonomyId] = [];
+          }
+          termsByTaxonomy[taxonomyId].push(term.id);
         }
-        termsByTaxonomy[term.taxonomy_id].push(term.id);
       });
       
       setSelectedTerms(termsByTaxonomy);
@@ -375,17 +386,25 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
         const res = await axios.get(`/api/posts/autosave?${params}`);
         if (res.data.autosave) {
           const autosave = res.data.autosave;
-          const savedDate = new Date(autosave.saved_at);
           
-          // Only show if autosave is recent (within last 24 hours)
-          const hoursSinceSave = (Date.now() - savedDate.getTime()) / (1000 * 60 * 60);
-          if (hoursSinceSave < 24) {
-            // Show the diff - but DON'T set autosaveSystemReady yet
-            // User must make a choice first
-            setAutosaveData(autosave);
-            setShowAutosaveDiff(true);
-            setCheckingAutosave(false);
-            return; // Exit without setting autosaveSystemReady
+          // Check if autosave has content
+          if (autosave.title || autosave.content || autosave.excerpt) {
+            // Check if autosave is recent (within last 24 hours) if saved_at exists
+            let showAutosave = true;
+            if (autosave.saved_at) {
+              const savedDate = new Date(autosave.saved_at);
+              const hoursSinceSave = (Date.now() - savedDate.getTime()) / (1000 * 60 * 60);
+              showAutosave = hoursSinceSave < 24;
+            }
+            
+            if (showAutosave) {
+              // Show the diff - but DON'T set autosaveSystemReady yet
+              // User must make a choice first
+              setAutosaveData(autosave);
+              setShowAutosaveDiff(true);
+              setCheckingAutosave(false);
+              return; // Exit without setting autosaveSystemReady
+            }
           }
         }
         // If no autosave or it's too old, system is ready
@@ -408,7 +427,7 @@ export default function PostTypeForm({ postTypeSlug, postId, isEdit = false }: P
     author_id?: number;
     featured_image_id?: number | null;
     featured_image_url?: string;
-    selected_terms?: {[taxonomyId: number]: number[]};
+    selected_terms?: {[taxonomyId: string]: number[]};
     title?: string;
     content?: string;
     excerpt?: string;
