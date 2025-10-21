@@ -5,54 +5,62 @@ All notable changes to Next CMS will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.0.3] - 2025-01-21
+## [3.0.4] - 2025-10-21
 
 ### Fixed
 
-- **Database Architecture Fixes**
-  - Fixed critical issues with multi-database architecture where Site ID references were inconsistent
-  - Changed Site references from `Site._id` (ObjectId) to `Site.id` (Number) throughout the codebase
-  - Fixed `SiteUser.site_id` and `UserMeta.site_id` to use Number instead of ObjectId
-  - Removed `site_id` filters from all site-specific models (they're in separate databases)
+- **Terms Management**
+  - Migrated terms API routes to multi-database architecture
+  - Fixed term create/edit/delete functionality
+  - Fixed activity logging for term operations
 
-- **SuperAdmin Functionality**
-  - Fixed user creation with proper role validation using `GlobalModels.Role()`
-  - Fixed site_id conversion from ObjectId to Number in site assignments
-  - Fixed user list queries to use numeric site IDs
-  - Fixed all site routes (GET, POST, PUT, DELETE) to use `Site.findOne({ id: siteId })`
-  - Fixed site creation to use numeric IDs for database initialization
-  - Fixed site user assignment routes to use numeric site_id
-  - Fixed site switching to use numeric site ID validation
+- **Settings**
+  - Fixed critical auth import bug in `lib/api-helpers.ts` that prevented settings from saving
+  - Fixed General Settings loading (changed `site_name` to `site_title`)
+  - Added missing `posts_per_page` and `max_revisions` fields to General Settings
+  - Fixed settings group assignment for media settings
 
-- **Activity Logging**
-  - Fixed activity log to correctly log to global database for SuperAdmin actions
-  - Fixed activity log viewer to query global database by default for SuperAdmin
-  - Removed site_id from global action logging (user creation, site creation, etc.)
-  - Fixed site lookup in activity logs to use numeric site.id
+- **Media Settings**
+  - Added file type management UI (add/remove allowed MIME types)
+  - Added max upload size configuration
+  - Improved layout and made image size inputs more compact
 
-- **API Routes**
-  - Post Types: Completely rewritten to use `SiteModels.PostType(siteId)` and removed site_id filters
-  - Settings: Removed site_id filters from site-specific settings queries
-  - User Metadata: Fixed to use numeric site_id in global UserMeta model
-  - Site Users: Fixed all routes to use numeric site_id for SiteUser queries
-  - Authentication: Fixed switch-site route to use numeric site ID
+- **Post Types & Taxonomies**
+  - Added `show_in_menu` field to control sidebar visibility independently
+  - Fixed `menu_position` not saving correctly for taxonomies
+  - Fixed `featured_image` support not saving for post types
+  - Fixed sidebar filtering to properly use `show_in_menu`
 
-- **Developer Experience**
-  - Added `dev:clean` script to kill node processes and clear build caches
-  - Separated dev startup from cache cleaning for better control
-  - Created comprehensive database structure documentation (`DATABASE_STRUCTURE_FINAL.md`)
+- **Admin UI**
+  - Fixed sidebar spacing between site switcher and dashboard
+  - Fixed Content Types menu visibility for authorized users
+  - Improved menu item filtering
+
+### Changed
+
+- Updated default settings structure (removed redundant image dimension settings)
+- Changed default `session_timeout` from 30 minutes to 1440 minutes (24 hours)
+- Synchronized settings between initialization scripts
+
+## [3.0.3] - 2025-01-21
 
 See [changelog/v3.0.3.md](changelog/v3.0.3.md) for details.
 
----
-
-## [3.0.2] - 2025-10-21
+## [3.0.2] - 2025-01-21
 
 See [changelog/v3.0.2.md](changelog/v3.0.2.md) for details.
 
+## [3.0.1] - 2025-01-21
+
+See [changelog/v3.0.1.md](changelog/v3.0.1.md) for details.
+
+## [3.0.0] - 2025-01-21
+
+See [changelog/v3.0.0.md](changelog/v3.0.0.md) for details.
+
 ---
 
-## [3.0.1] - 2025-10-20
+## [2.3.4] - 2025-01-20
 
 See [changelog/v3.0.1.md](changelog/v3.0.1.md) for details.
 

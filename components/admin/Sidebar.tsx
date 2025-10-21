@@ -28,10 +28,10 @@ const staticMenuItems = [
     name: 'Content Types', 
     icon: '📋', 
     position: 27,
-    permission: 'manage_post_types',
+    permission: '', // No parent permission - show if user has access to any subitem
     subItems: [
       { name: 'Post Types', href: '/admin/content-types/post-types', icon: '📝', permission: 'manage_post_types' },
-      { name: 'Taxonomies', href: '/admin/content-types/taxonomies', icon: '🏷️', permission: 'manage_post_types' },
+      { name: 'Taxonomies', href: '/admin/content-types/taxonomies', icon: '🏷️', permission: 'manage_taxonomies' },
     ]
   },
   { 
@@ -111,20 +111,23 @@ const getStaticMenuItemsWithTaxonomies = (taxonomiesData: any, permissions: any,
   });
   
   // Filter subitems based on permissions
-  const filteredItems = items.map(item => {
-    if (item.subItems) {
-      const filteredSubItems = item.subItems.filter((subItem: any) => 
-        hasPermission(permissions, subItem.permission, isSuperAdmin)
-      );
-      return { ...item, subItems: filteredSubItems };
-    }
-    return item;
-  });
+  const filteredItems = items
+    .map(item => {
+      if (item.subItems) {
+        const filteredSubItems = item.subItems.filter((subItem: any) => 
+          hasPermission(permissions, subItem.permission, isSuperAdmin)
+        );
+        return { ...item, subItems: filteredSubItems };
+      }
+      return item;
+    })
+    // Remove parent items that have no visible subitems
+    .filter(item => !item.subItems || item.subItems.length > 0);
   
   // Create Taxonomies submenu if there are taxonomies to show
   if (taxonomiesData?.taxonomies && hasPermission(permissions, 'manage_taxonomies', isSuperAdmin)) {
     const taxonomySubItems = taxonomiesData.taxonomies
-      .filter((taxonomy: any) => taxonomy.show_in_menu)
+      .filter((taxonomy: any) => taxonomy.show_in_menu !== false)
       .map((taxonomy: any) => ({
         name: taxonomy.label,
         href: `/admin/taxonomy/${taxonomy.name}`,
@@ -197,7 +200,7 @@ export default function Sidebar() {
       // 2. They have the specific manage_posts_<posttype> permission
       const hasAccess = permissions.manage_posts_all || permissions[postTypePermission];
       
-      if (hasAccess && postType.show_in_dashboard !== false) {
+      if (hasAccess && postType.show_in_menu !== false) {
         menuItems.push({
           name: postType.labels?.plural_name || postType.label,
           href: `/admin/post-type/${postType.name}`,
@@ -239,7 +242,7 @@ export default function Sidebar() {
         </div>
       )}
 
-      <nav className="flex-1 px-4">
+      <nav className="flex-1 px-4 pt-4">
         <ul className="space-y-2">
           {menuItems.map((item: any) => {
             // Check if item has sub-items and if any are active
@@ -419,7 +422,7 @@ export default function Sidebar() {
           <span>Logout</span>
         </button>
         <div className="text-center text-xs text-gray-500 mt-2">
-          Next CMS v3.0.3
+          Next CMS v3.0.4
         </div>
       </div>
     </aside>

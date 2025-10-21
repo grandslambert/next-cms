@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import connectDB from '@/lib/mongodb';
-import { Taxonomy, Term } from '@/lib/models';
+import { SiteModels } from '@/lib/model-factory';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function GET(
@@ -10,8 +9,6 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    await connectDB();
-    
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -24,9 +21,13 @@ export async function GET(
 
     const siteId = (session.user as any).currentSiteId;
     
+    if (!siteId) {
+      return NextResponse.json({ error: 'Invalid site ID' }, { status: 400 });
+    }
+    
+    const Taxonomy = await SiteModels.Taxonomy(siteId);
     const taxonomy = await Taxonomy.findOne({
       _id: params.id,
-      site_id: siteId,
     }).lean();
 
     if (!taxonomy) {
@@ -35,8 +36,11 @@ export async function GET(
 
     return NextResponse.json({ 
       taxonomy: {
-        id: taxonomy._id.toString(),
-        ...taxonomy,
+        ...(taxonomy as any),
+        id: (taxonomy as any)._id.toString(),
+        label: (taxonomy as any).labels?.plural_name || (taxonomy as any).name,
+        singular_label: (taxonomy as any).labels?.singular_name || (taxonomy as any).name,
+        hierarchical: (taxonomy as any).is_hierarchical,
         _id: undefined,
       }
     });
@@ -51,8 +55,6 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    await connectDB();
-    
     const session = await getServerSession(authOptions);
     const permissions = (session?.user as any)?.permissions || {};
     const isSuperAdmin = (session?.user as any)?.isSuperAdmin || false;
@@ -66,44 +68,88 @@ export async function PUT(
       return NextResponse.json({ error: 'Invalid taxonomy ID format' }, { status: 400 });
     }
 
-    const userId = (session.user as any).id;
     const siteId = (session.user as any).currentSiteId;
-
+    
+    if (!siteId) {
+      return NextResponse.json({ error: 'Invalid site ID' }, { status: 400 });
+    }
+    
+    const Taxonomy = await SiteModels.Taxonomy(siteId);
     const body = await request.json();
-    const { labels, description, is_hierarchical, show_in_dashboard, post_types } = body;
+    
+    let { 
+      name,
+      slug,
+      label, 
+      singular_label, 
+      description, 
+      is_hierarchical,
+      is_public,
+      show_in_dashboard,
+      show_in_menu,
+      menu_position,
+      post_types,
+      rewrite_slug,
+    } = body;
+    
+    // Ensure menu_position is a number
+    if (menu_position !== undefined && menu_position !== null) {
+      menu_position = typeof menu_position === 'string' ? parseInt(menu_position) : menu_position;
+    }
 
     // Get current taxonomy BEFORE updating (for activity log)
     const currentTaxonomy = await Taxonomy.findOne({
       _id: params.id,
-      site_id: siteId,
     });
 
     if (!currentTaxonomy) {
       return NextResponse.json({ error: 'Taxonomy not found' }, { status: 404 });
     }
 
-    // Prepare before/after changes
+    const isBuiltIn = currentTaxonomy.name === 'category' || currentTaxonomy.name === 'tag';
+
+    // Prepare update data
+    const updateData: any = {
+      labels: {
+        singular_name: singular_label,
+        plural_name: label,
+        all_items: `All ${label}`,
+        edit_item: `Edit ${singular_label}`,
+        add_new_item: `Add New ${singular_label}`,
+      },
+      description,
+      is_hierarchical,
+      is_public,
+      show_in_dashboard,
+      show_in_menu,
+      menu_position,
+      post_types: post_types || [],
+      rewrite_slug: rewrite_slug || slug || name,
+    };
+
+    // Only allow slug and name changes for non-built-in types
+    if (!isBuiltIn) {
+      if (slug !== undefined) updateData.slug = slug;
+      if (name !== undefined) updateData.name = name;
+    }
+
+    // Save current state for activity log
     const changesBefore = {
+      name: currentTaxonomy.name,
+      slug: currentTaxonomy.slug,
       labels: currentTaxonomy.labels,
       description: currentTaxonomy.description,
       is_hierarchical: currentTaxonomy.is_hierarchical,
       show_in_dashboard: currentTaxonomy.show_in_dashboard,
+      show_in_menu: currentTaxonomy.show_in_menu,
       post_types: currentTaxonomy.post_types?.join(', ') || 'None',
     };
 
     // Update taxonomy
     const updatedTaxonomy = await Taxonomy.findOneAndUpdate(
-      { _id: params.id, site_id: siteId },
-      { 
-        $set: { 
-          labels,
-          description: description || '',
-          is_hierarchical: is_hierarchical || false,
-          show_in_dashboard: show_in_dashboard !== false,
-          post_types: post_types || [],
-        }
-      },
-      { new: true }
+      { _id: params.id },
+      { $set: updateData },
+      { new: true, runValidators: true }
     );
 
     if (!updatedTaxonomy) {
@@ -111,14 +157,18 @@ export async function PUT(
     }
 
     const changesAfter = {
+      name: updatedTaxonomy.name,
+      slug: updatedTaxonomy.slug,
       labels: updatedTaxonomy.labels,
       description: updatedTaxonomy.description,
       is_hierarchical: updatedTaxonomy.is_hierarchical,
       show_in_dashboard: updatedTaxonomy.show_in_dashboard,
+      show_in_menu: updatedTaxonomy.show_in_menu,
       post_types: updatedTaxonomy.post_types?.join(', ') || 'None',
     };
 
     // Log activity
+    const userId = (session.user as any).id;
     await logActivity({
       userId,
       action: 'taxonomy_updated',
@@ -128,15 +178,18 @@ export async function PUT(
       details: `Updated taxonomy: ${updatedTaxonomy.labels.singular_name || updatedTaxonomy.name}`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
+      siteId,
       changesBefore,
       changesAfter,
-      siteId,
     });
 
     return NextResponse.json({ 
       taxonomy: {
         id: updatedTaxonomy._id.toString(),
         ...updatedTaxonomy.toObject(),
+        label: updatedTaxonomy.labels.plural_name,
+        singular_label: updatedTaxonomy.labels.singular_name,
+        hierarchical: updatedTaxonomy.is_hierarchical,
         _id: undefined,
       }
     });
@@ -151,8 +204,6 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    await connectDB();
-    
     const session = await getServerSession(authOptions);
     const permissions = (session?.user as any)?.permissions || {};
     const isSuperAdmin = (session?.user as any)?.isSuperAdmin || false;
@@ -166,13 +217,18 @@ export async function DELETE(
       return NextResponse.json({ error: 'Invalid taxonomy ID format' }, { status: 400 });
     }
 
-    const userId = (session.user as any).id;
     const siteId = (session.user as any).currentSiteId;
+    
+    if (!siteId) {
+      return NextResponse.json({ error: 'Invalid site ID' }, { status: 400 });
+    }
+    
+    const Taxonomy = await SiteModels.Taxonomy(siteId);
+    const Term = await SiteModels.Term(siteId);
 
     // Get taxonomy
     const taxonomy = await Taxonomy.findOne({
       _id: params.id,
-      site_id: siteId,
     });
 
     if (!taxonomy) {
@@ -188,17 +244,17 @@ export async function DELETE(
 
     // Check if any terms use this taxonomy
     const termCount = await Term.countDocuments({
-      site_id: siteId,
       taxonomy: taxonomy.name,
     });
 
     if (termCount > 0) {
       return NextResponse.json({ 
-        error: `Cannot delete taxonomy "${taxonomy.name}" because it has ${termCount} associated terms.` 
+        error: `Cannot delete taxonomy with ${termCount} existing terms` 
       }, { status: 400 });
     }
 
     // Log activity before deleting
+    const userId = (session.user as any).id;
     await logActivity({
       userId,
       action: 'taxonomy_deleted',

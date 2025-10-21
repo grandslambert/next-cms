@@ -23,6 +23,15 @@ export default function MediaSettingsPage() {
     medium: { width: 300, height: 300, crop: 'inside' },
     large: { width: 1024, height: 1024, crop: 'inside' },
   });
+  const [allowedFileTypes, setAllowedFileTypes] = useState<string[]>([
+    'image/jpeg',
+    'image/png',
+    'image/gif',
+    'image/webp',
+    'application/pdf',
+  ]);
+  const [maxUploadSize, setMaxUploadSize] = useState('10');
+  const [newFileType, setNewFileType] = useState('');
   const [newSizeName, setNewSizeName] = useState('');
   const [newSizeWidth, setNewSizeWidth] = useState('');
   const [newSizeHeight, setNewSizeHeight] = useState('');
@@ -39,8 +48,16 @@ export default function MediaSettingsPage() {
   });
 
   useEffect(() => {
-    if (data?.settings?.image_sizes) {
-      setImageSizes(data.settings.image_sizes);
+    if (data?.settings) {
+      if (data.settings.image_sizes) {
+        setImageSizes(data.settings.image_sizes);
+      }
+      if (data.settings.allowed_file_types) {
+        setAllowedFileTypes(data.settings.allowed_file_types);
+      }
+      if (data.settings.max_upload_size) {
+        setMaxUploadSize(data.settings.max_upload_size.toString());
+      }
     }
   }, [data]);
 
@@ -60,7 +77,11 @@ export default function MediaSettingsPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    updateMutation.mutate({ image_sizes: imageSizes });
+    updateMutation.mutate({ 
+      image_sizes: imageSizes,
+      allowed_file_types: allowedFileTypes,
+      max_upload_size: Number.parseInt(maxUploadSize),
+    });
   };
 
   const handleSizeChange = (sizeName: string, field: 'width' | 'height' | 'crop', value: string | number) => {
@@ -117,6 +138,33 @@ export default function MediaSettingsPage() {
     toast.success('Image size removed');
   };
 
+  const handleAddFileType = () => {
+    if (!newFileType) {
+      toast.error('Please enter a file type');
+      return;
+    }
+
+    // Validate MIME type format
+    if (!newFileType.includes('/')) {
+      toast.error('Invalid MIME type format. Example: image/jpeg');
+      return;
+    }
+
+    if (allowedFileTypes.includes(newFileType)) {
+      toast.error('This file type is already allowed');
+      return;
+    }
+
+    setAllowedFileTypes(prev => [...prev, newFileType]);
+    setNewFileType('');
+    toast.success('File type added');
+  };
+
+  const handleRemoveFileType = (fileType: string) => {
+    setAllowedFileTypes(prev => prev.filter(type => type !== fileType));
+    toast.success('File type removed');
+  };
+
   const handleRegenerateAll = async () => {
     if (!confirm('Regenerate ALL image sizes?\n\nThis will recreate all size variants for every image based on the current settings above. This may take a while for large libraries.\n\nMake sure you have saved your settings first!\n\nAre you sure you want to continue?')) {
       return;
@@ -157,7 +205,7 @@ export default function MediaSettingsPage() {
       <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Media Settings</h1>
-          <p className="text-sm text-gray-600">Configure image sizes and media handling</p>
+          <p className="text-sm text-gray-600">Configure file uploads, image sizes, and media handling</p>
         </div>
         <div className="flex space-x-3">
           <button
@@ -183,7 +231,86 @@ export default function MediaSettingsPage() {
       <div className="overflow-y-auto h-[calc(100vh-8rem)]">
         <div className="max-w-7xl px-8 py-6">
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Two Column Layout */}
+        {/* Upload Settings */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left: Allowed File Types (2/3 width) */}
+          <div className="lg:col-span-2 bg-white rounded-lg shadow p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Allowed File Types</h2>
+            <p className="text-sm text-gray-600 mb-6">
+              Specify which MIME types are allowed for upload. Use standard MIME type format (e.g., image/jpeg).
+            </p>
+
+            <div className="space-y-2 mb-4">
+              {allowedFileTypes.map((fileType, index) => (
+                <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <span className="font-mono text-sm text-gray-900">{fileType}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveFileType(fileType)}
+                    className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Right: Add File Type + Upload Size (1/3 width) */}
+          <div className="lg:col-span-1 space-y-6">
+            <div className="bg-white rounded-lg shadow p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Add File Type</h3>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    MIME Type
+                  </label>
+                  <input
+                    type="text"
+                    value={newFileType}
+                    onChange={(e) => setNewFileType(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
+                    placeholder="image/jpeg"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Common: image/jpeg, image/png, image/gif, image/webp, application/pdf, video/mp4
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddFileType}
+                  className="w-full px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                >
+                  Add Type
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Upload Limits</h3>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Max Upload Size (MB)
+                </label>
+                <input
+                  type="number"
+                  value={maxUploadSize}
+                  onChange={(e) => setMaxUploadSize(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  min="1"
+                  max="100"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Maximum file size for uploads
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Image Sizes */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left: Image Sizes (2/3 width) */}
           <div className="lg:col-span-2 bg-white rounded-lg shadow p-6">
@@ -207,42 +334,42 @@ export default function MediaSettingsPage() {
                       </button>
                     )}
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <div className="flex items-center space-x-2">
-                      <label className="text-sm text-gray-600 w-16">Width:</label>
+                      <label className="text-sm text-gray-600 w-12 flex-shrink-0">Width:</label>
                       <input
                         type="number"
                         value={dimensions.width}
                         onChange={(e) => handleSizeChange(sizeName, 'width', e.target.value)}
-                        className="flex-1 px-3 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        className="w-20 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
                         min="1"
                         max="10000"
                       />
-                      <span className="text-sm text-gray-500">px</span>
+                      <span className="text-xs text-gray-500">px</span>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <label className="text-sm text-gray-600 w-16">Height:</label>
+                      <label className="text-sm text-gray-600 w-12 flex-shrink-0">Height:</label>
                       <input
                         type="number"
                         value={dimensions.height}
                         onChange={(e) => handleSizeChange(sizeName, 'height', e.target.value)}
-                        className="flex-1 px-3 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        className="w-20 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
                         min="1"
                         max="10000"
                       />
-                      <span className="text-sm text-gray-500">px</span>
+                      <span className="text-xs text-gray-500">px</span>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <label className="text-sm text-gray-600 w-16">Crop:</label>
+                      <label className="text-sm text-gray-600 w-12 flex-shrink-0">Crop:</label>
                       <select
                         value={dimensions.crop || 'inside'}
                         onChange={(e) => handleSizeChange(sizeName, 'crop', e.target.value)}
-                        className="flex-1 px-3 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                        className="flex-1 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
                       >
-                        <option value="inside">Fit Inside (no crop)</option>
-                        <option value="cover">Cover (crop to fill)</option>
-                        <option value="contain">Contain (fit, add padding)</option>
-                        <option value="fill">Fill (stretch)</option>
+                        <option value="inside">Fit Inside</option>
+                        <option value="cover">Cover</option>
+                        <option value="contain">Contain</option>
+                        <option value="fill">Fill</option>
                       </select>
                     </div>
                   </div>
@@ -332,9 +459,12 @@ export default function MediaSettingsPage() {
 
         {/* Info Box Below Grid */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <p className="text-sm text-blue-800">
-              <strong>Note:</strong> Size changes only apply to newly uploaded images. 
+          <p className="text-sm text-blue-800 mb-2">
+            <strong>Note:</strong> Image size changes only apply to newly uploaded images. 
             To apply new settings to existing images, use the "Regenerate All" button in the header.
+          </p>
+          <p className="text-sm text-blue-800">
+            <strong>File Type & Upload Size:</strong> Changes take effect immediately for all new uploads.
           </p>
         </div>
       </form>

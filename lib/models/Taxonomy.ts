@@ -13,7 +13,9 @@ export interface ITaxonomy extends Document {
   description?: string;
   is_hierarchical: boolean; // Can terms have parent/child relationships?
   is_public: boolean; // Visible on frontend?
-  show_in_dashboard: boolean; // Show in dashboard?
+  show_in_dashboard: boolean; // Show in dashboard content summary?
+  show_in_menu: boolean; // Show in sidebar navigation menu?
+  menu_position: number; // Position in menu (lower numbers appear first)
   post_types: string[]; // Which post types use this taxonomy
   rewrite_slug?: string; // Custom URL slug
   created_at: Date;
@@ -34,6 +36,8 @@ export const TaxonomySchema: Schema = new Schema({
   is_hierarchical: { type: Boolean, default: false },
   is_public: { type: Boolean, default: true },
   show_in_dashboard: { type: Boolean, default: true },
+  show_in_menu: { type: Boolean, default: true },
+  menu_position: { type: Number, default: 10 },
   post_types: [{ type: String }],
   rewrite_slug: { type: String, trim: true },
   created_at: { type: Date, default: Date.now },

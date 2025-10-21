@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
 import connectDB from '@/lib/mongodb';
-import { Term } from '@/lib/models';
+import { SiteModels } from '@/lib/model-factory';
 import { slugify } from '@/lib/utils';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
@@ -24,11 +24,9 @@ export async function GET(
     }
 
     const siteId = (session.user as any).currentSiteId;
+    const Term = await SiteModels.Term(siteId);
     
-    const term = await Term.findOne({
-      _id: params.id,
-      site_id: siteId,
-    }).lean();
+    const term = await Term.findById(params.id).lean();
 
     if (!term) {
       return NextResponse.json({ error: 'Term not found' }, { status: 404 });
@@ -36,9 +34,9 @@ export async function GET(
 
     return NextResponse.json({ 
       term: {
-        id: term._id.toString(),
-        ...term,
-        taxonomy_name: term.taxonomy,
+        id: (term as any)._id.toString(),
+        ...(term as any),
+        taxonomy_name: (term as any).taxonomy,
         _id: undefined,
       }
     });
@@ -67,6 +65,7 @@ export async function PUT(
 
     const userId = (session.user as any).id;
     const siteId = (session.user as any).currentSiteId;
+    const Term = await SiteModels.Term(siteId);
 
     const body = await request.json();
     const { name, description, parent_id } = body;
@@ -78,10 +77,7 @@ export async function PUT(
     const slug = slugify(name);
 
     // Get current term BEFORE updating (for activity log)
-    const currentTerm = await Term.findOne({
-      _id: params.id,
-      site_id: siteId,
-    });
+    const currentTerm = await Term.findById(params.id);
 
     if (!currentTerm) {
       return NextResponse.json({ error: 'Term not found' }, { status: 404 });
@@ -89,7 +85,6 @@ export async function PUT(
 
     // Check if new slug already exists for this taxonomy (excluding current term)
     const existing = await Term.findOne({
-      site_id: siteId,
       taxonomy: currentTerm.taxonomy,
       slug,
       _id: { $ne: params.id },
@@ -118,8 +113,8 @@ export async function PUT(
     };
 
     // Update term
-    const updatedTerm = await Term.findOneAndUpdate(
-      { _id: params.id, site_id: siteId },
+    const updatedTerm = await Term.findByIdAndUpdate(
+      params.id,
       { 
         $set: { 
           name,
@@ -190,12 +185,10 @@ export async function DELETE(
 
     const userId = (session.user as any).id;
     const siteId = (session.user as any).currentSiteId;
+    const Term = await SiteModels.Term(siteId);
 
     // Get term details for logging
-    const term = await Term.findOne({
-      _id: params.id,
-      site_id: siteId,
-    });
+    const term = await Term.findById(params.id);
 
     if (!term) {
       return NextResponse.json({ error: 'Term not found' }, { status: 404 });
@@ -203,7 +196,6 @@ export async function DELETE(
 
     // Check if term has children
     const childCount = await Term.countDocuments({
-      site_id: siteId,
       parent_id: params.id,
     });
 

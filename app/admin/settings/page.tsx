@@ -11,6 +11,7 @@ export default function GeneralSettingsPage() {
   const [siteName, setSiteName] = useState('');
   const [siteTagline, setSiteTagline] = useState('');
   const [siteDescription, setSiteDescription] = useState('');
+  const [postsPerPage, setPostsPerPage] = useState('10');
   const [maxRevisions, setMaxRevisions] = useState('10');
   const [sessionTimeoutValue, setSessionTimeoutValue] = useState('24');
   const [sessionTimeoutUnit, setSessionTimeoutUnit] = useState<'minutes' | 'hours' | 'days'>('hours');
@@ -26,10 +27,11 @@ export default function GeneralSettingsPage() {
 
   useEffect(() => {
     if (data?.settings) {
-      setSiteName(data.settings.site_name || '');
+      setSiteName(data.settings.site_title || '');
       setSiteTagline(data.settings.site_tagline || '');
       setSiteDescription(data.settings.site_description || '');
-      setMaxRevisions(data.settings.max_revisions || '10');
+      setPostsPerPage(data.settings.posts_per_page?.toString() || '10');
+      setMaxRevisions(data.settings.max_revisions?.toString() || '10');
       
       // Convert stored minutes to appropriate unit for display
       const minutes = Number.parseInt(data.settings.session_timeout || '1440');
@@ -76,10 +78,11 @@ export default function GeneralSettingsPage() {
     }
     
     updateMutation.mutate({
-      site_name: siteName,
+      site_title: siteName,
       site_tagline: siteTagline,
       site_description: siteDescription,
-      max_revisions: maxRevisions,
+      posts_per_page: Number.parseInt(postsPerPage),
+      max_revisions: Number.parseInt(maxRevisions),
       session_timeout: timeoutInMinutes.toString(),
     });
   };
@@ -168,6 +171,24 @@ export default function GeneralSettingsPage() {
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Content Management</h2>
           
           <div className="mb-6">
+            <label htmlFor="posts-per-page" className="block text-sm font-medium text-gray-700 mb-2">
+              Posts Per Page
+            </label>
+            <input
+              id="posts-per-page"
+              type="number"
+              min="1"
+              max="100"
+              value={postsPerPage}
+              onChange={(e) => setPostsPerPage(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+            <p className="text-sm text-gray-500 mt-1">
+              Number of posts to display per page in archives and listings
+            </p>
+          </div>
+          
+          <div className="mb-6">
             <label htmlFor="max-revisions" className="block text-sm font-medium text-gray-700 mb-2">
               Maximum Revisions Per Post
             </label>
@@ -184,7 +205,11 @@ export default function GeneralSettingsPage() {
               Number of revisions to keep for each post. Set to 0 to disable revisions. Older revisions will be automatically deleted.
             </p>
           </div>
+        </div>
 
+        <div className="border-t pt-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Authentication</h2>
+          
           <div>
             <label htmlFor="session-timeout" className="block text-sm font-medium text-gray-700 mb-2">
               Session Timeout

@@ -118,6 +118,7 @@ async function initializeDatabase() {
       permissions: {
         view_dashboard: true,
         manage_posts_all: true,
+        manage_post_types: true,
         manage_media: true,
         manage_taxonomies: true,
         manage_menus: true,
@@ -301,15 +302,11 @@ async function initializeDatabase() {
       { key: 'site_tagline', value: 'A modern content management system', type: 'string', group: 'general', label: 'Site Tagline', description: 'A short description of your site' },
       { key: 'site_description', value: 'A powerful CMS built with Next.js and MongoDB', type: 'text', group: 'general', label: 'Site Description' },
       { key: 'posts_per_page', value: 10, type: 'number', group: 'general', label: 'Posts Per Page', description: 'Number of posts to show per page' },
-      { key: 'session_timeout', value: 30, type: 'number', group: 'authentication', label: 'Session Timeout (minutes)', description: 'How long users stay logged in' },
+      { key: 'max_revisions', value: 10, type: 'number', group: 'general', label: 'Maximum Revisions Per Post', description: 'Number of revisions to keep for each post' },
+      { key: 'session_timeout', value: 1440, type: 'number', group: 'authentication', label: 'Session Timeout (minutes)', description: 'How long users stay logged in (default: 24 hours)' },
       { key: 'max_upload_size', value: 10, type: 'number', group: 'media', label: 'Max Upload Size (MB)', description: 'Maximum file upload size' },
       { key: 'allowed_file_types', value: ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'], type: 'json', group: 'media', label: 'Allowed File Types' },
-      { key: 'thumbnail_width', value: 150, type: 'number', group: 'media', label: 'Thumbnail Width (px)' },
-      { key: 'thumbnail_height', value: 150, type: 'number', group: 'media', label: 'Thumbnail Height (px)' },
-      { key: 'medium_width', value: 300, type: 'number', group: 'media', label: 'Medium Width (px)' },
-      { key: 'medium_height', value: 300, type: 'number', group: 'media', label: 'Medium Height (px)' },
-      { key: 'large_width', value: 1024, type: 'number', group: 'media', label: 'Large Width (px)' },
-      { key: 'large_height', value: 1024, type: 'number', group: 'media', label: 'Large Height (px)' },
+      { key: 'image_sizes', value: { thumbnail: { width: 150, height: 150, crop: 'cover' }, medium: { width: 300, height: 300, crop: 'inside' }, large: { width: 1024, height: 1024, crop: 'inside' } }, type: 'json', group: 'media', label: 'Image Sizes', description: 'Automatic image size generation settings' },
     ];
 
     for (const setting of defaultSettings) {
@@ -338,8 +335,9 @@ async function initializeDatabase() {
       is_public: true,
       supports: ['title', 'editor', 'thumbnail', 'excerpt', 'comments', 'custom_fields', 'author'],
       menu_icon: '📝',
-      menu_position: 5,
+      menu_position: 1,
       show_in_dashboard: true,
+      show_in_menu: true,
       has_archive: true,
       rewrite_slug: 'blog',
       taxonomies: ['category', 'tag'],
@@ -361,8 +359,9 @@ async function initializeDatabase() {
       is_public: true,
       supports: ['title', 'editor', 'thumbnail', 'excerpt', 'custom_fields', 'author'],
       menu_icon: '📄',
-      menu_position: 20,
+      menu_position: 2,
       show_in_dashboard: true,
+      show_in_menu: true,
       has_archive: false,
       taxonomies: [],
     });
@@ -385,6 +384,8 @@ async function initializeDatabase() {
       is_hierarchical: true,
       is_public: true,
       show_in_dashboard: true,
+      show_in_menu: true,
+      menu_position: 1,
       post_types: ['post'],
       rewrite_slug: 'category',
     });
@@ -403,6 +404,8 @@ async function initializeDatabase() {
       is_hierarchical: false,
       is_public: true,
       show_in_dashboard: true,
+      show_in_menu: true,
+      menu_position: 2,
       post_types: ['post'],
       rewrite_slug: 'tag',
     });

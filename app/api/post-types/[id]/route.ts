@@ -1,18 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import connectDB from '@/lib/mongodb';
-import { PostType, Post } from '@/lib/models';
+import { SiteModels } from '@/lib/model-factory';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
-import mongoose from 'mongoose';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    await connectDB();
-    
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -25,9 +21,13 @@ export async function GET(
 
     const siteId = (session.user as any).currentSiteId;
     
+    if (!siteId) {
+      return NextResponse.json({ error: 'Invalid site ID' }, { status: 400 });
+    }
+    
+    const PostType = await SiteModels.PostType(siteId);
     const postType = await PostType.findOne({
       _id: params.id,
-      site_id: siteId,
     }).lean();
 
     if (!postType) {
@@ -48,6 +48,14 @@ export async function GET(
       });
     }
 
+    // Transform taxonomies array to object for UI compatibility
+    const taxonomiesObj: any = {};
+    if (Array.isArray((postType as any).taxonomies)) {
+      (postType as any).taxonomies.forEach((taxonomy: string) => {
+        taxonomiesObj[taxonomy] = true;
+      });
+    }
+
     return NextResponse.json({ 
       postType: {
         ...(postType as any),
@@ -56,6 +64,7 @@ export async function GET(
         singular_label: (postType as any).labels?.singular_name || (postType as any).name,
         hierarchical: (postType as any).is_hierarchical,
         supports: supportsObj,
+        taxonomies: taxonomiesObj,
         _id: undefined,
       }
     });
@@ -70,8 +79,6 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    await connectDB();
-    
     const session = await getServerSession(authOptions);
     const permissions = (session?.user as any)?.permissions || {};
     const isSuperAdmin = (session?.user as any)?.isSuperAdmin || false;
@@ -86,6 +93,12 @@ export async function PUT(
     }
 
     const siteId = (session.user as any).currentSiteId;
+    
+    if (!siteId) {
+      return NextResponse.json({ error: 'Invalid site ID' }, { status: 400 });
+    }
+    
+    const PostType = await SiteModels.PostType(siteId);
     const body = await request.json();
     const { 
       slug, 
@@ -94,8 +107,9 @@ export async function PUT(
       description, 
       menu_icon, 
       supports, 
-      menu_position, 
-      show_in_dashboard, 
+      menu_position,
+      show_in_dashboard,
+      show_in_menu,
       is_hierarchical, 
       taxonomies,
       has_archive,
@@ -105,7 +119,6 @@ export async function PUT(
     // Get current post type BEFORE updating (for activity log)
     const currentPostType = await PostType.findOne({
       _id: params.id,
-      site_id: siteId,
     });
 
     if (!currentPostType) {
@@ -114,18 +127,61 @@ export async function PUT(
 
     const isBuiltIn = currentPostType.name === 'post' || currentPostType.name === 'page';
 
+    // Parse supports if it's a JSON string (same logic as POST)
+    let parsedSupports = supports || ['title', 'editor'];
+    if (typeof supports === 'string') {
+      try {
+        parsedSupports = JSON.parse(supports);
+      } catch (e) {
+        parsedSupports = ['title', 'editor'];
+      }
+    } else if (Array.isArray(supports)) {
+      parsedSupports = supports;
+    }
+
+    // If parsedSupports is an array containing objects, extract keys from the first object
+    if (Array.isArray(parsedSupports) && parsedSupports.length > 0 && typeof parsedSupports[0] === 'object') {
+      parsedSupports = Object.keys(parsedSupports[0]).filter(key => parsedSupports[0][key] === true);
+    }
+    // If it's an object with boolean values, extract the keys where value is true
+    else if (typeof parsedSupports === 'object' && !Array.isArray(parsedSupports)) {
+      parsedSupports = Object.keys(parsedSupports).filter(key => parsedSupports[key] === true);
+    }
+    // Ensure it's an array of strings
+    if (!Array.isArray(parsedSupports)) {
+      parsedSupports = ['title', 'editor'];
+    }
+    
+    // Map UI field names back to database field names
+    parsedSupports = parsedSupports.map((feature: string) => {
+      if (feature === 'featured_image') return 'thumbnail';
+      if (feature === 'content') return 'editor';
+      return feature;
+    });
+
+    // Parse taxonomies if it's a JSON string
+    let parsedTaxonomies = taxonomies || [];
+    if (typeof taxonomies === 'string') {
+      try {
+        parsedTaxonomies = JSON.parse(taxonomies);
+      } catch (e) {
+        parsedTaxonomies = [];
+      }
+    }
+
     // Prepare update data
     const updateData: any = {
       labels,
       description,
       menu_icon,
-      supports,
+      supports: parsedSupports,
       menu_position,
-      show_in_dashboard: show_in_dashboard !== false,
-      is_hierarchical: is_hierarchical || false,
+      show_in_dashboard,
+      show_in_menu,
+      is_hierarchical,
       has_archive,
       rewrite_slug,
-      taxonomies: taxonomies || [],
+      taxonomies: parsedTaxonomies,
     };
 
     // Only allow slug and name changes for non-built-in types
@@ -150,7 +206,7 @@ export async function PUT(
 
     // Update post type
     const updatedPostType = await PostType.findOneAndUpdate(
-      { _id: params.id, site_id: siteId },
+      { _id: params.id },
       { $set: updateData },
       { new: true }
     );
@@ -206,8 +262,6 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    await connectDB();
-    
     const session = await getServerSession(authOptions);
     const permissions = (session?.user as any)?.permissions || {};
     const isSuperAdmin = (session?.user as any)?.isSuperAdmin || false;
@@ -222,11 +276,17 @@ export async function DELETE(
     }
 
     const siteId = (session.user as any).currentSiteId;
+    
+    if (!siteId) {
+      return NextResponse.json({ error: 'Invalid site ID' }, { status: 400 });
+    }
+    
+    const PostType = await SiteModels.PostType(siteId);
+    const Post = await SiteModels.Post(siteId);
 
     // Get post type
     const postType = await PostType.findOne({
       _id: params.id,
-      site_id: siteId,
     });
 
     if (!postType) {
@@ -242,7 +302,6 @@ export async function DELETE(
 
     // Check if any posts use this post type
     const postCount = await Post.countDocuments({
-      site_id: siteId,
       post_type: postType.name,
     });
 

@@ -1,6 +1,6 @@
 # Next CMS
 
-> Version 3.0.3
+> Version 3.0.4
 
 A powerful, modern content management system built with Next.js 14, TypeScript, Tailwind CSS, and MongoDB with multi-site support.
 

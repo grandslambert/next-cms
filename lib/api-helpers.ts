@@ -4,7 +4,7 @@
  */
 
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { authOptions } from '@/lib/auth-mongo';
 
 /**
  * Get the current site ID from the user's session

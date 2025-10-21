@@ -1,29 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import connectDB from '@/lib/mongodb';
-import { Term, Taxonomy } from '@/lib/models';
+import { SiteModels } from '@/lib/model-factory';
 import { slugify } from '@/lib/utils';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function GET(request: NextRequest) {
   try {
-    await connectDB();
-    
     const session = await getServerSession(authOptions);
     const siteId = (session?.user as any)?.currentSiteId;
+    
+    if (!siteId) {
+      return NextResponse.json({ error: 'No site context' }, { status: 400 });
+    }
+    
+    const Term = await SiteModels.Term(siteId);
+    const Taxonomy = await SiteModels.Taxonomy(siteId);
     
     const searchParams = request.nextUrl.searchParams;
     const taxonomyId = searchParams.get('taxonomy_id');
     const taxonomyName = searchParams.get('taxonomy');
 
-    const query: any = { site_id: siteId };
+    const query: any = {};
 
     if (taxonomyId && /^[0-9a-fA-F]{24}$/.test(taxonomyId)) {
       // If taxonomy_id is provided, it could be for filtering, but our model uses taxonomy name
       const taxonomy = await Taxonomy.findById(taxonomyId).lean();
       if (taxonomy) {
-        query.taxonomy = taxonomy.name;
+        query.taxonomy = (taxonomy as any).name;
       }
     } else if (taxonomyName) {
       query.taxonomy = taxonomyName;
@@ -32,6 +36,8 @@ export async function GET(request: NextRequest) {
     const terms = await Term.find(query)
       .sort({ name: 1 })
       .lean();
+    
+    const total = await Term.countDocuments(query);
 
     // Format for UI
     const formattedTerms = terms.map((term: any) => ({
@@ -41,7 +47,7 @@ export async function GET(request: NextRequest) {
       hierarchical: term.parent_id ? true : false,
     }));
 
-    return NextResponse.json({ terms: formattedTerms });
+    return NextResponse.json({ terms: formattedTerms, total });
   } catch (error) {
     console.error('Error fetching terms:', error);
     return NextResponse.json({ error: 'Failed to fetch terms' }, { status: 500 });
@@ -50,8 +56,6 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    await connectDB();
-    
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -59,6 +63,13 @@ export async function POST(request: NextRequest) {
 
     const userId = (session.user as any).id;
     const siteId = (session.user as any).currentSiteId;
+    
+    if (!siteId) {
+      return NextResponse.json({ error: 'No site context' }, { status: 400 });
+    }
+    
+    const Term = await SiteModels.Term(siteId);
+    const Taxonomy = await SiteModels.Taxonomy(siteId);
 
     const body = await request.json();
     const { taxonomy, taxonomy_id, name, description, parent_id } = body;
@@ -72,7 +83,7 @@ export async function POST(request: NextRequest) {
     if (!taxonomyName && taxonomy_id && /^[0-9a-fA-F]{24}$/.test(taxonomy_id)) {
       const taxonomyDoc = await Taxonomy.findById(taxonomy_id).lean();
       if (taxonomyDoc) {
-        taxonomyName = taxonomyDoc.name;
+        taxonomyName = (taxonomyDoc as any).name;
       }
     }
 
@@ -84,7 +95,6 @@ export async function POST(request: NextRequest) {
 
     // Check if slug already exists for this taxonomy
     const existing = await Term.findOne({
-      site_id: siteId,
       taxonomy: taxonomyName,
       slug,
     });
@@ -105,7 +115,6 @@ export async function POST(request: NextRequest) {
 
     // Create term
     const newTerm = await Term.create({
-      site_id: siteId,
       taxonomy: taxonomyName,
       name,
       slug,

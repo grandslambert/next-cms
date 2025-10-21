@@ -37,6 +37,7 @@ export default function PostTypesSettings() {
     url_structure: 'default' as 'default' | 'date_based',
     menu_position: 5,
     show_in_dashboard: true,
+    show_in_menu: true,
     hierarchical: false,
     supports: {
       title: true,
@@ -136,6 +137,7 @@ export default function PostTypesSettings() {
       url_structure: 'default' as 'default' | 'date_based',
       menu_position: 5,
       show_in_dashboard: true,
+      show_in_menu: true,
       hierarchical: false,
       supports: {
         title: true,
@@ -179,6 +181,7 @@ export default function PostTypesSettings() {
       url_structure: postType.url_structure || 'default',
       menu_position: postType.menu_position || 5,
       show_in_dashboard: postType.show_in_dashboard !== false,
+      show_in_menu: postType.show_in_menu !== false,
       hierarchical: postType.hierarchical || false,
       supports: {
         title: postType.supports?.title ?? true,
@@ -493,6 +496,23 @@ export default function PostTypesSettings() {
                 </label>
                 <p className="mt-1 text-xs text-gray-500 ml-6">
                   Display this post type in the dashboard overview card
+                </p>
+              </div>
+
+              <div className="border-t pt-4">
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.show_in_menu}
+                    onChange={(e) => setFormData({ ...formData, show_in_menu: e.target.checked })}
+                    className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  />
+                  <span className="ml-2 text-sm font-medium text-gray-700">
+                    Show in Sidebar Navigation Menu
+                  </span>
+                </label>
+                <p className="mt-1 text-xs text-gray-500 ml-6">
+                  Display this post type in the admin sidebar menu
                 </p>
               </div>
 

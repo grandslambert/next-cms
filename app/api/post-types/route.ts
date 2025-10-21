@@ -74,7 +74,9 @@ export async function POST(request: NextRequest) {
       description, 
       icon, 
       supports, 
-      menu_position, 
+      menu_position,
+      show_in_dashboard,
+      show_in_menu,
       hierarchical,
       has_archive,
       rewrite_slug,
@@ -98,6 +100,48 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Post type with this name already exists' }, { status: 400 });
     }
 
+    // Parse supports if it's a JSON string
+    let parsedSupports = supports || ['title', 'editor'];
+    if (typeof supports === 'string') {
+      try {
+        parsedSupports = JSON.parse(supports);
+      } catch (e) {
+        parsedSupports = ['title', 'editor'];
+      }
+    } else if (Array.isArray(supports)) {
+      parsedSupports = supports;
+    }
+
+    // If parsedSupports is an array containing objects, extract keys from the first object
+    if (Array.isArray(parsedSupports) && parsedSupports.length > 0 && typeof parsedSupports[0] === 'object') {
+      parsedSupports = Object.keys(parsedSupports[0]).filter(key => parsedSupports[0][key] === true);
+    }
+    // If it's an object with boolean values, extract the keys where value is true
+    else if (typeof parsedSupports === 'object' && !Array.isArray(parsedSupports)) {
+      parsedSupports = Object.keys(parsedSupports).filter(key => parsedSupports[key] === true);
+    }
+    // Ensure it's an array of strings
+    if (!Array.isArray(parsedSupports)) {
+      parsedSupports = ['title', 'editor'];
+    }
+    
+    // Map UI field names back to database field names
+    parsedSupports = parsedSupports.map((feature: string) => {
+      if (feature === 'featured_image') return 'thumbnail';
+      if (feature === 'content') return 'editor';
+      return feature;
+    });
+
+    // Parse taxonomies if it's a JSON string
+    let parsedTaxonomies = taxonomies || [];
+    if (typeof taxonomies === 'string') {
+      try {
+        parsedTaxonomies = JSON.parse(taxonomies);
+      } catch (e) {
+        parsedTaxonomies = [];
+      }
+    }
+
     // Create post type
     const postType = await PostType.create({
       name,
@@ -112,12 +156,14 @@ export async function POST(request: NextRequest) {
       description: description || '',
       is_hierarchical: hierarchical || false,
       is_public: true,
-      supports: supports || ['title', 'editor'],
+      supports: parsedSupports,
       menu_icon: icon || '📄',
       menu_position: menu_position || 5,
+      show_in_dashboard: show_in_dashboard !== false,
+      show_in_menu: show_in_menu !== false,
       has_archive: has_archive !== false,
       rewrite_slug: rewrite_slug || slug || name,
-      taxonomies: taxonomies || [],
+      taxonomies: parsedTaxonomies,
     });
 
     // Log activity

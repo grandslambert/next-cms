@@ -16,7 +16,8 @@ export interface IPostType extends Document {
   supports: string[]; // Features: 'title', 'editor', 'thumbnail', 'excerpt', 'comments', 'custom_fields'
   menu_icon?: string; // Icon for admin menu
   menu_position?: number; // Position in admin menu
-  show_in_dashboard: boolean; // Show in dashboard?
+  show_in_dashboard: boolean; // Show in dashboard content list?
+  show_in_menu: boolean; // Show in sidebar navigation menu?
   has_archive: boolean; // Enable archive page?
   rewrite_slug?: string; // Custom URL slug for archive
   taxonomies: string[]; // Associated taxonomy names (e.g., ['category', 'tag'])
@@ -41,6 +42,7 @@ export const PostTypeSchema: Schema = new Schema({
   menu_icon: { type: String, trim: true },
   menu_position: { type: Number },
   show_in_dashboard: { type: Boolean, default: true },
+  show_in_menu: { type: Boolean, default: true },
   has_archive: { type: Boolean, default: true },
   rewrite_slug: { type: String, trim: true },
   taxonomies: [{ type: String }],
