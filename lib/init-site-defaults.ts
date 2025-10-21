@@ -1,17 +1,35 @@
 import mongoose from 'mongoose';
-import { PostType, Taxonomy, Setting } from './models';
+import { SiteModels } from './model-factory';
 
 /**
  * Initialize default data for a newly created site
+ * @param siteId - Numeric site ID (maps to database nextcms_site{siteId})
+ * @param userId - Optional user ID to set as the author of default content
  */
-export async function initializeSiteDefaults(siteId: mongoose.Types.ObjectId) {
-  console.log(`\n📦 Initializing defaults for site ${siteId}...`);
+export async function initializeSiteDefaults(siteId: number, userId?: string) {
+  console.log(`\n📦 Initializing defaults for site ${siteId} (database: nextcms_site${siteId})...`);
+
+  // Get models for this site's database
+  const PostType = await SiteModels.PostType(siteId);
+  const Taxonomy = await SiteModels.Taxonomy(siteId);
+  const Setting = await SiteModels.Setting(siteId);
+  const Term = await SiteModels.Term(siteId);
+  const Post = await SiteModels.Post(siteId);
+  const PostMeta = await SiteModels.PostMeta(siteId);
+  const PostRevision = await SiteModels.PostRevision(siteId);
+  const PostTerm = await SiteModels.PostTerm(siteId);
+  const Menu = await SiteModels.Menu(siteId);
+  const MenuItem = await SiteModels.MenuItem(siteId);
+  const MenuItemMeta = await SiteModels.MenuItemMeta(siteId);
+  const MenuLocation = await SiteModels.MenuLocation(siteId);
+  const Media = await SiteModels.Media(siteId);
+  const MediaFolder = await SiteModels.MediaFolder(siteId);
+  const ActivityLog = await SiteModels.ActivityLog(siteId);
 
   // Create default post types
   console.log('  📝 Creating default post types...');
   
   const postPostType = await PostType.create({
-    site_id: siteId,
     name: 'post',
     slug: 'posts',
     labels: {
@@ -35,7 +53,6 @@ export async function initializeSiteDefaults(siteId: mongoose.Types.ObjectId) {
   });
 
   const pagePostType = await PostType.create({
-    site_id: siteId,
     name: 'page',
     slug: 'pages',
     labels: {
@@ -63,7 +80,6 @@ export async function initializeSiteDefaults(siteId: mongoose.Types.ObjectId) {
   console.log('  🏷️  Creating default taxonomies...');
 
   await Taxonomy.create({
-    site_id: siteId,
     name: 'category',
     slug: 'category',
     labels: {
@@ -82,7 +98,6 @@ export async function initializeSiteDefaults(siteId: mongoose.Types.ObjectId) {
   });
 
   await Taxonomy.create({
-    site_id: siteId,
     name: 'tag',
     slug: 'tag',
     labels: {
@@ -106,35 +121,222 @@ export async function initializeSiteDefaults(siteId: mongoose.Types.ObjectId) {
   console.log('  ⚙️  Creating default site settings...');
 
   const defaultSettings = [
-    { setting_key: 'site_title', setting_value: 'New Site', setting_type: 'general' },
-    { setting_key: 'site_description', setting_value: 'Just another Next CMS site', setting_type: 'general' },
-    { setting_key: 'homepage_type', setting_value: 'posts', setting_type: 'reading' },
-    { setting_key: 'homepage_page_id', setting_value: '', setting_type: 'reading' },
-    { setting_key: 'posts_per_page', setting_value: '10', setting_type: 'reading' },
-    { setting_key: 'permalink_structure', setting_value: '/%postname%/', setting_type: 'permalink' },
-    { setting_key: 'date_format', setting_value: 'F j, Y', setting_type: 'general' },
-    { setting_key: 'time_format', setting_value: 'g:i a', setting_type: 'general' },
-    { setting_key: 'timezone', setting_value: 'UTC', setting_type: 'general' },
-    { setting_key: 'comments_enabled', setting_value: 'true', setting_type: 'discussion' },
-    { setting_key: 'comment_moderation', setting_value: 'false', setting_type: 'discussion' },
-    { setting_key: 'media_thumbnail_width', setting_value: '150', setting_type: 'media' },
-    { setting_key: 'media_thumbnail_height', setting_value: '150', setting_type: 'media' },
-    { setting_key: 'media_medium_width', setting_value: '300', setting_type: 'media' },
-    { setting_key: 'media_medium_height', setting_value: '300', setting_type: 'media' },
-    { setting_key: 'media_large_width', setting_value: '1024', setting_type: 'media' },
-    { setting_key: 'media_large_height', setting_value: '1024', setting_type: 'media' },
+    { key: 'site_title', value: 'Next CMS', type: 'string', group: 'general', label: 'Site Title', description: 'The name of your website' },
+    { key: 'site_tagline', value: 'A modern content management system', type: 'string', group: 'general', label: 'Site Tagline', description: 'A short description of your site' },
+    { key: 'site_description', value: 'A powerful CMS built with Next.js and MongoDB', type: 'text', group: 'general', label: 'Site Description' },
+    { key: 'posts_per_page', value: 10, type: 'number', group: 'general', label: 'Posts Per Page', description: 'Number of posts to show per page' },
+    { key: 'session_timeout', value: 30, type: 'number', group: 'authentication', label: 'Session Timeout (minutes)', description: 'How long users stay logged in' },
+    { key: 'max_upload_size', value: 10, type: 'number', group: 'media', label: 'Max Upload Size (MB)', description: 'Maximum file upload size' },
+    { key: 'allowed_file_types', value: ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'], type: 'json', group: 'media', label: 'Allowed File Types' },
+    { key: 'thumbnail_width', value: 150, type: 'number', group: 'media', label: 'Thumbnail Width (px)' },
+    { key: 'thumbnail_height', value: 150, type: 'number', group: 'media', label: 'Thumbnail Height (px)' },
+    { key: 'medium_width', value: 300, type: 'number', group: 'media', label: 'Medium Width (px)' },
+    { key: 'medium_height', value: 300, type: 'number', group: 'media', label: 'Medium Height (px)' },
+    { key: 'large_width', value: 1024, type: 'number', group: 'media', label: 'Large Width (px)' },
+    { key: 'large_height', value: 1024, type: 'number', group: 'media', label: 'Large Height (px)' },
   ];
 
   for (const setting of defaultSettings) {
     await Setting.create({
-      site_id: siteId,
-      setting_key: setting.setting_key,
-      setting_value: setting.setting_value,
-      setting_type: setting.setting_type,
+      ...setting,
     });
   }
 
   console.log(`  ✓ Created ${defaultSettings.length} default settings`);
+
+  // Create default term (Uncategorized category)
+  console.log('  🏷️  Creating default term...');
+  
+  await Term.create({
+    taxonomy: 'category',
+    name: 'Uncategorized',
+    slug: 'uncategorized',
+    description: 'Default category for posts without a category',
+  });
+
+  console.log('  ✓ Created default "Uncategorized" category');
+
+  // Create default menu locations
+  console.log('  📍 Creating default menu locations...');
+  
+  await MenuLocation.create({
+    name: 'header',
+    display_name: 'Header Menu',
+    description: 'Primary header navigation',
+  });
+
+  await MenuLocation.create({
+    name: 'footer',
+    display_name: 'Footer Menu',
+    description: 'Footer navigation',
+  });
+
+  console.log('  ✓ Created 2 menu locations');
+
+  // Create sample media folder
+  console.log('  📁 Creating sample media folder...');
+  
+  await MediaFolder.create({
+    name: 'Images',
+    parent_id: null,
+  });
+
+  console.log('  ✓ Created sample media folder');
+
+  // Initialize empty collections (MongoDB only creates collections when data is inserted)
+  console.log('  📦 Ensuring all collections exist...');
+  
+  // Create indexes for collections that don't have data yet (this creates the collection)
+  await PostMeta.createIndexes();
+  await PostRevision.createIndexes();
+  await PostTerm.createIndexes();
+  await MenuItemMeta.createIndexes();
+  await Media.createIndexes();
+  await ActivityLog.createIndexes();
+  
+  console.log('  ✓ All 15 collections initialized');
+
+  // Create sample pages and posts (if userId provided)
+  if (userId) {
+    console.log('  📄 Creating sample pages...');
+    
+    const authorId = new mongoose.Types.ObjectId(userId);
+    
+    const homePage = await Post.create({
+      post_type: 'page',
+      title: 'Home',
+      slug: 'home',
+      content: '<h1>Welcome to Next CMS</h1><p>This is your homepage. Edit it to customize your site!</p>',
+      excerpt: 'Welcome to your new CMS',
+      status: 'published',
+      visibility: 'public',
+      author_id: authorId,
+      published_at: new Date(),
+    });
+
+    const aboutPage = await Post.create({
+      post_type: 'page',
+      title: 'About',
+      slug: 'about',
+      content: '<h1>About Us</h1><p>Tell your visitors about your site and organization.</p>',
+      excerpt: 'Learn more about us',
+      status: 'published',
+      visibility: 'public',
+      author_id: authorId,
+      published_at: new Date(),
+    });
+
+    const contactPage = await Post.create({
+      post_type: 'page',
+      title: 'Contact',
+      slug: 'contact',
+      content: '<h1>Contact Us</h1><p>Get in touch with us!</p>',
+      excerpt: 'Contact information',
+      status: 'published',
+      visibility: 'public',
+      author_id: authorId,
+      published_at: new Date(),
+    });
+
+    console.log('  ✓ Created 3 sample pages');
+
+    console.log('  📝 Creating sample blog post...');
+    
+    await Post.create({
+      post_type: 'post',
+      title: 'Hello World!',
+      slug: 'hello-world',
+      content: '<h2>Welcome to Next CMS</h2><p>This is your first blog post. You can edit or delete it to get started with your content!</p><p><strong>Features:</strong></p><ul><li>Powerful content management</li><li>Multi-site support</li><li>Flexible taxonomies</li><li>Media management</li><li>And much more!</li></ul>',
+      excerpt: 'Welcome to your new CMS! This is your first blog post.',
+      status: 'published',
+      visibility: 'public',
+      author_id: authorId,
+      published_at: new Date(),
+      allow_comments: true,
+    });
+
+    console.log('  ✓ Created sample blog post');
+
+    // Create default menus
+    console.log('  📋 Creating default menus...');
+    
+    const mainMenu = await Menu.create({
+      name: 'main-menu',
+      display_name: 'Main Menu',
+      location: 'header',
+    });
+
+    const footerMenu = await Menu.create({
+      name: 'footer-menu',
+      display_name: 'Footer Menu',
+      location: 'footer',
+    });
+
+    console.log('  ✓ Created 2 menus');
+
+    // Create menu items
+    console.log('  🔗 Creating menu items...');
+    
+    await MenuItem.create({
+      menu_id: mainMenu._id,
+      custom_label: 'Home',
+      type: 'post',
+      object_id: homePage._id,
+      custom_url: '/',
+      menu_order: 1,
+      target: '_self',
+    });
+
+    await MenuItem.create({
+      menu_id: mainMenu._id,
+      custom_label: 'About',
+      type: 'post',
+      object_id: aboutPage._id,
+      custom_url: '/about',
+      menu_order: 2,
+      target: '_self',
+    });
+
+    await MenuItem.create({
+      menu_id: mainMenu._id,
+      custom_label: 'Blog',
+      type: 'custom',
+      custom_url: '/blog',
+      menu_order: 3,
+      target: '_self',
+    });
+
+    await MenuItem.create({
+      menu_id: mainMenu._id,
+      custom_label: 'Contact',
+      type: 'post',
+      object_id: contactPage._id,
+      custom_url: '/contact',
+      menu_order: 4,
+      target: '_self',
+    });
+
+    await MenuItem.create({
+      menu_id: footerMenu._id,
+      custom_label: 'Privacy Policy',
+      type: 'custom',
+      custom_url: '/privacy',
+      menu_order: 1,
+      target: '_self',
+    });
+
+    await MenuItem.create({
+      menu_id: footerMenu._id,
+      custom_label: 'Terms of Service',
+      type: 'custom',
+      custom_url: '/terms',
+      menu_order: 2,
+      target: '_self',
+    });
+
+    console.log('  ✓ Created 6 menu items');
+  }
+
   console.log(`✅ Site initialization complete!\n`);
 
   return {

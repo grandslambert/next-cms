@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import connectDB from '@/lib/mongodb';
-import { User, SiteUser } from '@/lib/models';
+import { GlobalModels } from '@/lib/model-factory';
 import bcrypt from 'bcryptjs';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 import mongoose from 'mongoose';
 
 export async function GET(request: NextRequest) {
   try {
-    await connectDB();
+    const User = await GlobalModels.User();
+    const SiteUser = await GlobalModels.SiteUser();
     
     const session = await getServerSession(authOptions);
     if (!session?.user) {
@@ -29,35 +29,58 @@ export async function GET(request: NextRequest) {
 
     if (isSuperAdmin) {
       // Super admin sees all users with their site assignments
+      const Role = await GlobalModels.Role();
+      const Site = await GlobalModels.Site();
+      
       users = await User.find()
-        .populate('role', 'name label permissions')
         .select('-password')
         .sort({ created_at: -1 })
         .lean();
       
+      // Get all roles for lookup
+      const allRoles = await Role.find().lean();
+      const rolesById = new Map(allRoles.map(r => [r._id.toString(), r]));
+      
       // Fetch site assignments for each user and map _id to id
       for (const user of users) {
         try {
-          const siteAssignments = await SiteUser.find({ user_id: user._id })
-            .populate('site_id', 'name display_name')
-            .populate('role_id', 'name label')
-            .lean();
+          const siteAssignments = await SiteUser.find({ user_id: user._id }).lean();
           
-          (user as any).id = user._id.toString(); // Add id field for compatibility
-          (user as any).role_name = (user.role as any)?.name;
-          (user as any).role_display_name = (user.role as any)?.label;
-          (user as any).sites = siteAssignments.map(sa => ({
-            id: (sa.site_id as any)?._id?.toString(),
-            name: (sa.site_id as any)?.name,
-            display_name: (sa.site_id as any)?.display_name,
-            role_id: (sa.role_id as any)?._id?.toString(),
-            role_display_name: (sa.role_id as any)?.label,
-          }));
+          // Get unique site and role IDs from assignments
+          const siteIds = siteAssignments.map(sa => sa.site_id);
+          const assignmentRoleIds = siteAssignments.map(sa => sa.role_id);
+          
+          // Fetch related sites and roles
+          const relatedSites = await Site.find({ id: { $in: siteIds } }).lean() as any[];
+          const assignmentRoles = await Role.find({ _id: { $in: assignmentRoleIds } }).lean() as any[];
+          
+          // Map by ID
+          const sitesById = new Map(relatedSites.map(s => [s.id.toString(), s]));
+          const assignmentRolesById = new Map(assignmentRoles.map(r => [r._id.toString(), r]));
+          
+          const userRole = rolesById.get(user.role.toString());
+          
+          (user as any).id = user._id.toString();
+          (user as any).role_name = userRole?.name || 'Unknown';
+          (user as any).role_display_name = userRole?.label || 'Unknown';
+          (user as any).sites = siteAssignments.map(sa => {
+            const site = sitesById.get(sa.site_id.toString());
+            const role = assignmentRolesById.get(sa.role_id.toString());
+            
+            return {
+              id: site?.id || '',
+              name: site?.name || 'Unknown',
+              display_name: site?.display_name || 'Unknown',
+              role_id: role?._id?.toString() || '',
+              role_display_name: role?.label || 'Unknown',
+            };
+          });
         } catch (error) {
           console.error('Error fetching site assignments for user:', user._id, error);
+          const userRole = rolesById.get(user.role.toString());
           (user as any).id = user._id.toString();
-          (user as any).role_name = (user.role as any)?.name;
-          (user as any).role_display_name = (user.role as any)?.label;
+          (user as any).role_name = userRole?.name || 'Unknown';
+          (user as any).role_display_name = userRole?.label || 'Unknown';
           (user as any).sites = [];
         }
       }
@@ -66,28 +89,46 @@ export async function GET(request: NextRequest) {
       if (!currentSiteId) {
         return NextResponse.json({ users: [] });
       }
-      const siteAssignments = await SiteUser.find({ site_id: currentSiteId })
-        .populate({
-          path: 'user_id',
-          populate: { path: 'role', select: 'name label permissions' }
-        })
-        .populate('role_id', 'name label')
-        .lean();
+      
+      const Role = await GlobalModels.Role();
+      const siteAssignments = await SiteUser.find({ site_id: currentSiteId }).lean();
+      
+      // Get all user IDs and role IDs
+      const userIds = siteAssignments.map(sa => sa.user_id);
+      const assignmentRoleIds = siteAssignments.map(sa => sa.role_id);
+      
+      // Fetch users and roles
+      const relatedUsers = await User.find({ _id: { $in: userIds } }).select('-password').lean();
+      const assignmentRoles = await Role.find({ _id: { $in: assignmentRoleIds } }).lean();
+      
+      // Get user role IDs for their global roles
+      const userRoleIds = relatedUsers.map(u => u.role);
+      const userRoles = await Role.find({ _id: { $in: userRoleIds } }).lean();
+      
+      // Map by ID
+      const usersById = new Map(relatedUsers.map(u => [u._id.toString(), u]));
+      const rolesById = new Map(userRoles.map(r => [r._id.toString(), r]));
+      const assignmentRolesById = new Map(assignmentRoles.map(r => [r._id.toString(), r]));
       
       users = siteAssignments.map(sa => {
-        const user = sa.user_id as any;
+        const user = usersById.get(sa.user_id.toString());
+        if (!user) return null;
+        
+        const userRole = rolesById.get(user.role.toString());
+        const assignmentRole = assignmentRolesById.get(sa.role_id.toString());
+        
         return {
           ...user,
           id: user._id.toString(),
-          role_name: user.role?.name,
-          role_display_name: user.role?.label,
+          role_name: userRole?.name || 'Unknown',
+          role_display_name: userRole?.label || 'Unknown',
           sites: [{
             id: currentSiteId.toString(),
-            role_id: (sa.role_id as any)?._id?.toString(),
-            role_display_name: (sa.role_id as any)?.label,
+            role_id: assignmentRole?._id?.toString() || '',
+            role_display_name: assignmentRole?.label || 'Unknown',
           }]
         };
-      });
+      }).filter(u => u !== null);
     }
 
     return NextResponse.json({ users });
@@ -99,7 +140,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    await connectDB();
+    const User = await GlobalModels.User();
+    const SiteUser = await GlobalModels.SiteUser();
     
     const session = await getServerSession(authOptions);
     const isSuperAdmin = (session?.user as any)?.isSuperAdmin || false;
@@ -147,7 +189,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate role exists
-    const role = await mongoose.model('Role').findById(role_id);
+    const Role = await GlobalModels.Role();
+    const role = await Role.findById(role_id);
     if (!role) {
       return NextResponse.json({ 
         error: 'Invalid role selected' 
@@ -178,11 +221,8 @@ export async function POST(request: NextRequest) {
 
     for (const siteAssignment of sitesToAssign) {
       try {
-        // Convert IDs to ObjectIds if they're valid hex strings
-        let assignmentSiteId = siteAssignment.site_id;
-        if (typeof siteAssignment.site_id === 'string' && /^[0-9a-fA-F]{24}$/.test(siteAssignment.site_id)) {
-          assignmentSiteId = mongoose.Types.ObjectId.createFromHexString(siteAssignment.site_id);
-        }
+        // site_id is now a number (site.id), not ObjectId
+        const assignmentSiteId = parseInt(siteAssignment.site_id);
         
         const assignmentRoleId = siteAssignment.role_id || role_id;
         let assignmentRoleObjId = assignmentRoleId;
@@ -205,9 +245,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Log activity
+    // Log activity (NO siteId - user creation is a global action)
     const userId = (session.user as any).id;
-    const currentSiteId = (session.user as any).currentSiteId;
     await logActivity({
       userId,
       action: 'user_created',
@@ -217,21 +256,23 @@ export async function POST(request: NextRequest) {
       details: `Created user: ${username} (${email})`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
-      siteId: currentSiteId || undefined,
+      // NO siteId - this logs to global database
     });
 
     // Return user without password
     const userResponse = await User.findById(newUser._id)
-      .populate('role', 'name label permissions')
       .select('-password')
       .lean();
+
+    // Manually fetch role (Role already declared above)
+    const userRole = await Role.findById(userResponse?.role);
 
     // Add id field for compatibility
     const responseUser = {
       ...userResponse,
       id: userResponse?._id.toString(),
-      role_name: (userResponse?.role as any)?.name,
-      role_display_name: (userResponse?.role as any)?.label,
+      role_name: userRole?.name || 'Unknown',
+      role_display_name: userRole?.label || 'Unknown',
     };
 
     return NextResponse.json({ user: responseUser }, { status: 201 });

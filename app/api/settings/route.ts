@@ -1,18 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import connectDB from '@/lib/mongodb';
-import { Setting } from '@/lib/models';
+import { SiteModels } from '@/lib/model-factory';
+import { getCurrentSiteId } from '@/lib/api-helpers';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function GET(request: NextRequest) {
   try {
-    await connectDB();
+    const siteId = await getCurrentSiteId();
+    const Setting = await SiteModels.Setting(siteId);
     
-    const session = await getServerSession(authOptions);
-    const siteId = (session?.user as any)?.currentSiteId || 1;
-    
-    const settingsRecords = await Setting.find({ site_id: siteId }).lean();
+    const settingsRecords = await Setting.find().lean();
 
     // Convert to key-value object
     const settings: any = {};
@@ -29,14 +27,13 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    await connectDB();
+    const siteId = await getCurrentSiteId();
+    const Setting = await SiteModels.Setting(siteId);
     
     const session = await getServerSession(authOptions);
     if (!session?.user || (session.user as any).role !== 'admin') {
       return NextResponse.json({ error: 'Unauthorized - Admin only' }, { status: 401 });
     }
-
-    const siteId = (session.user as any).currentSiteId || 1;
     const body = await request.json();
     const { settings } = body;
 
@@ -45,7 +42,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // Fetch current settings BEFORE updating (for activity log)
-    const currentRecords = await Setting.find({ site_id: siteId }).lean();
+    const currentRecords = await Setting.find({}).lean(); // No site_id filter needed
     const beforeSettings: any = {};
     currentRecords.forEach((record: any) => {
       beforeSettings[record.key] = record.value;
@@ -65,7 +62,7 @@ export async function PUT(request: NextRequest) {
 
       // Upsert setting
       await Setting.findOneAndUpdate(
-        { site_id: siteId, key },
+        { key }, // No site_id - we're in the site database
         { 
           value, 
           type: settingType,

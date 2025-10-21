@@ -17,7 +17,7 @@ export interface IUser extends Document {
   updated_at: Date;
 }
 
-const UserSchema: Schema = new Schema(
+export const UserSchema: Schema = new Schema(
   {
     username: {
       type: String,
@@ -95,6 +95,7 @@ UserSchema.virtual('full_name').get(function () {
 UserSchema.set('toJSON', { virtuals: true });
 UserSchema.set('toObject', { virtuals: true });
 
+// Legacy default export for backwards compatibility
 const User: Model<IUser> = mongoose.models.User || mongoose.model<IUser>('User', UserSchema);
 
 export default User;

@@ -2,17 +2,16 @@ import mongoose, { Schema, Model, Document } from 'mongoose';
 
 export interface ISiteUser extends Document {
   _id: mongoose.Types.ObjectId;
-  site_id: mongoose.Types.ObjectId;
+  site_id: number;
   user_id: mongoose.Types.ObjectId;
   role_id: mongoose.Types.ObjectId;
   assigned_at: Date;
 }
 
-const SiteUserSchema: Schema = new Schema(
+export const SiteUserSchema: Schema = new Schema(
   {
     site_id: {
-      type: Schema.Types.ObjectId,
-      ref: 'Site',
+      type: Number,
       required: true,
       index: true,
     },

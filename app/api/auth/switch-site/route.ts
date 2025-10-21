@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import { connectDB } from '@/lib/db';
-import { Site, SiteUser } from '@/lib/models';
+import { GlobalModels } from '@/lib/model-factory';
 import mongoose from 'mongoose';
 
 export async function POST(request: NextRequest) {
@@ -19,17 +18,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'site_id is required' }, { status: 400 });
     }
 
-    if (!mongoose.Types.ObjectId.isValid(site_id)) {
+    const siteIdNum = parseInt(site_id);
+    if (!siteIdNum || isNaN(siteIdNum)) {
       return NextResponse.json({ error: 'Invalid site ID' }, { status: 400 });
     }
 
     const userId = (session.user as any).id;
     const isSuperAdmin = (session.user as any).isSuperAdmin;
 
-    await connectDB();
+    const Site = await GlobalModels.Site();
+    const SiteUser = await GlobalModels.SiteUser();
 
     // Verify site exists
-    const site = await Site.findById(site_id).lean();
+    const site = await Site.findOne({ id: siteIdNum }).lean();
     if (!site) {
       return NextResponse.json({ error: 'Site not found' }, { status: 404 });
     }
@@ -38,7 +39,7 @@ export async function POST(request: NextRequest) {
     if (!isSuperAdmin) {
       const siteUser = await SiteUser.findOne({
         user_id: new mongoose.Types.ObjectId(userId),
-        site_id: new mongoose.Types.ObjectId(site_id),
+        site_id: siteIdNum,
       }).lean();
 
       if (!siteUser) {
@@ -49,7 +50,7 @@ export async function POST(request: NextRequest) {
     // Return the site_id to be updated in the session by the client
     return NextResponse.json({ 
       success: true,
-      site_id: site_id,
+      site_id: siteIdNum,
       site_name: (site as any).display_name,
       message: 'Site switched successfully',
     });

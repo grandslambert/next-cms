@@ -2,7 +2,6 @@ import mongoose, { Schema, Model, Document } from 'mongoose';
 
 export interface IMenuItem extends Document {
   _id: mongoose.Types.ObjectId;
-  site_id: mongoose.Types.ObjectId;
   menu_id: mongoose.Types.ObjectId;
   parent_id?: mongoose.Types.ObjectId;
   type: 'custom' | 'post_type' | 'taxonomy' | 'post' | 'term';
@@ -19,14 +18,8 @@ export interface IMenuItem extends Document {
   updated_at: Date;
 }
 
-const MenuItemSchema: Schema = new Schema(
+export const MenuItemSchema: Schema = new Schema(
   {
-    site_id: {
-      type: Schema.Types.ObjectId,
-      ref: 'Site',
-      required: true,
-      index: true,
-    },
     menu_id: {
       type: Schema.Types.ObjectId,
       ref: 'Menu',

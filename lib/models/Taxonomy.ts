@@ -1,7 +1,6 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 export interface ITaxonomy extends Document {
-  site_id: mongoose.Schema.Types.ObjectId;
   name: string; // Internal name (e.g., 'category', 'tag', 'genre')
   slug: string; // URL-friendly name
   labels: {
@@ -21,8 +20,7 @@ export interface ITaxonomy extends Document {
   updated_at: Date;
 }
 
-const TaxonomySchema: Schema = new Schema({
-  site_id: { type: Schema.Types.ObjectId, ref: 'Site', required: true },
+export const TaxonomySchema: Schema = new Schema({
   name: { type: String, required: true, trim: true },
   slug: { type: String, required: true, trim: true },
   labels: {
@@ -42,9 +40,9 @@ const TaxonomySchema: Schema = new Schema({
   updated_at: { type: Date, default: Date.now },
 });
 
-// Compound index for fast lookups by site and name
-TaxonomySchema.index({ site_id: 1, name: 1 }, { unique: true });
-TaxonomySchema.index({ site_id: 1, slug: 1 }, { unique: true });
+// Unique indexes
+TaxonomySchema.index({ name: 1 }, { unique: true });
+TaxonomySchema.index({ slug: 1 }, { unique: true });
 
 // Update timestamp on save
 TaxonomySchema.pre('save', function (next) {

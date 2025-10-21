@@ -1,7 +1,6 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 export interface ITerm extends Document {
-  site_id: mongoose.Schema.Types.ObjectId;
   taxonomy: string; // e.g., 'category', 'tag'
   name: string; // Display name
   slug: string; // URL-friendly name
@@ -13,8 +12,7 @@ export interface ITerm extends Document {
   updated_at: Date;
 }
 
-const TermSchema: Schema = new Schema({
-  site_id: { type: Schema.Types.ObjectId, ref: 'Site', required: true },
+export const TermSchema: Schema = new Schema({
   taxonomy: { type: String, required: true, trim: true },
   name: { type: String, required: true, trim: true },
   slug: { type: String, required: true, trim: true },
@@ -27,9 +25,9 @@ const TermSchema: Schema = new Schema({
 });
 
 // Indexes for performance
-TermSchema.index({ site_id: 1, taxonomy: 1 });
-TermSchema.index({ site_id: 1, taxonomy: 1, slug: 1 }, { unique: true });
-TermSchema.index({ site_id: 1, taxonomy: 1, parent_id: 1 });
+TermSchema.index({ taxonomy: 1 });
+TermSchema.index({ taxonomy: 1, slug: 1 }, { unique: true });
+TermSchema.index({ taxonomy: 1, parent_id: 1 });
 
 // Update timestamp on save
 TermSchema.pre('save', function (next) {

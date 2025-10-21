@@ -1,14 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import connectDB from '@/lib/mongodb';
-import { Setting } from '@/lib/models';
+import { SiteModels } from '@/lib/model-factory';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function GET() {
   try {
-    await connectDB();
-    
     // Note: This endpoint is public (no auth check) because it's used on the login page
     // Only safe settings (hide_default_user, password requirements) are exposed
     
@@ -35,8 +32,6 @@ export async function GET() {
 
 export async function PUT(request: NextRequest) {
   try {
-    await connectDB();
-    
     const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -65,6 +60,9 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'No site context available' }, { status: 400 });
     }
 
+    // Get Setting model for the current site
+    const Setting = await SiteModels.Setting(siteIdStr);
+
     // Save password settings to MongoDB
     const passwordSettings = [
       { key: 'password_min_length', value: body.password_min_length, type: 'number' },
@@ -76,7 +74,7 @@ export async function PUT(request: NextRequest) {
 
     for (const setting of passwordSettings) {
       await Setting.findOneAndUpdate(
-        { site_id: siteIdStr, key: setting.key },
+        { key: setting.key }, // No site_id - we're already in the site database
         {
           value: setting.value,
           type: setting.type,

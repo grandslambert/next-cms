@@ -9,7 +9,7 @@ export interface IPostMeta extends Document {
   updated_at: Date;
 }
 
-const PostMetaSchema: Schema = new Schema(
+export const PostMetaSchema: Schema = new Schema(
   {
     post_id: {
       type: Schema.Types.ObjectId,

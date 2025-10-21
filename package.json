@@ -1,15 +1,17 @@
 {
   "name": "next-cms",
-  "version": "3.0.2",
+  "version": "3.0.3",
   "description": "A complete WordPress-like CMS built with Next.js, Tailwind CSS, and MongoDB",
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:clean": "powershell -Command \"taskkill /F /IM node.exe 2>$null; if (Test-Path .next) { Remove-Item -Recurse -Force .next }; if (Test-Path node_modules\\.cache) { Remove-Item -Recurse -Force node_modules\\.cache }\"",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "db:init": "npx ts-node --project tsconfig.node.json scripts/init-mongodb.ts",
-    "db:init:clear": "npx ts-node --project tsconfig.node.json scripts/init-mongodb.ts --clear"
+    "db:init:clear": "npx ts-node --project tsconfig.node.json scripts/init-mongodb.ts --clear",
+    "test:api": "node tests/api/test-superadmin-mongo.js"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.14.2",

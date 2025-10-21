@@ -2,7 +2,6 @@ import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IMedia extends Document {
   _id: mongoose.Types.ObjectId;
-  site_id: mongoose.Types.ObjectId;
   filename: string;
   original_filename: string;
   filepath: string;
@@ -21,14 +20,8 @@ export interface IMedia extends Document {
   deleted_at: Date | null;
 }
 
-const MediaSchema: Schema = new Schema(
+export const MediaSchema: Schema = new Schema(
   {
-    site_id: {
-      type: Schema.Types.ObjectId,
-      ref: 'Site',
-      required: true,
-      index: true,
-    },
     filename: {
       type: String,
       required: true,

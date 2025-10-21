@@ -1,5 +1,4 @@
-import connectDB from '@/lib/mongodb';
-import { ActivityLog } from '@/lib/models';
+import { GlobalModels, SiteModels } from '@/lib/model-factory';
 
 export type ActivityAction = 
   // Auth actions
@@ -60,7 +59,14 @@ export async function logActivity({
   siteId = null, // Site context (null for global/system-wide activities)
 }: LogActivityParams): Promise<void> {
   try {
-    await connectDB();
+    // Determine which database to log to
+    // If siteId is provided, log to site database; otherwise log to global database
+    let ActivityLog;
+    if (siteId) {
+      ActivityLog = await SiteModels(siteId).ActivityLog();
+    } else {
+      ActivityLog = await GlobalModels.ActivityLog();
+    }
 
     // Convert details to JSON string if it's an object
     const detailsStr = details 

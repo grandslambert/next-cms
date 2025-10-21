@@ -1,8 +1,7 @@
 import { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import bcrypt from 'bcryptjs';
-import connectDB from './mongodb';
-import { User, Site, SiteUser } from './models';
+import { GlobalModels } from './model-factory';
 
 interface AuthUser {
   id: string;
@@ -30,16 +29,19 @@ export const authOptions: NextAuthOptions = {
         }
 
         try {
-          // Connect to MongoDB
-          await connectDB();
+          // Get global models
+          const User = await GlobalModels.User();
+          const Role = await GlobalModels.Role();
+          const Site = await GlobalModels.Site();
+          const SiteUser = await GlobalModels.SiteUser();
 
-          // Find user by email or username and populate role
+          // Find user by email or username (don't populate yet)
           const user = await User.findOne({
             $or: [
               { email: credentials.email },
               { username: credentials.email }
             ]
-          }).populate('role');
+          });
 
           if (!user) {
             return null;
@@ -56,16 +58,16 @@ export const authOptions: NextAuthOptions = {
             return null;
           }
 
-          // Get role and permissions
-          const role = user.role as any; // Already populated
+          // Get role and permissions (manually fetch instead of populate)
+          const role = await Role.findById(user.role);
           const permissions = role?.permissions ? Object.fromEntries(role.permissions) : {};
 
           // Get user's sites - get the default site for now
           let currentSiteId: string | undefined;
           if (!user.is_super_admin) {
-            const siteAssignment = await SiteUser.findOne({ user_id: user._id }).populate('site_id');
+            const siteAssignment = await SiteUser.findOne({ user_id: user._id });
             if (siteAssignment && siteAssignment.site_id) {
-              currentSiteId = (siteAssignment.site_id as any)._id.toString();
+              currentSiteId = siteAssignment.site_id.toString();
             }
           } else {
             // Super admin gets the first/default site

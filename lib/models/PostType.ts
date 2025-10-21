@@ -1,7 +1,6 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IPostType extends Document {
-  site_id: mongoose.Schema.Types.ObjectId;
   name: string; // Internal name (e.g., 'post', 'page', 'product')
   slug: string; // URL-friendly name
   labels: {
@@ -25,8 +24,7 @@ export interface IPostType extends Document {
   updated_at: Date;
 }
 
-const PostTypeSchema: Schema = new Schema({
-  site_id: { type: Schema.Types.ObjectId, ref: 'Site', required: true },
+export const PostTypeSchema: Schema = new Schema({
   name: { type: String, required: true, trim: true },
   slug: { type: String, required: true, trim: true },
   labels: {
@@ -50,9 +48,9 @@ const PostTypeSchema: Schema = new Schema({
   updated_at: { type: Date, default: Date.now },
 });
 
-// Compound index for fast lookups by site and name
-PostTypeSchema.index({ site_id: 1, name: 1 }, { unique: true });
-PostTypeSchema.index({ site_id: 1, slug: 1 }, { unique: true });
+// Unique indexes for name and slug (database isolation ensures per-site uniqueness)
+PostTypeSchema.index({ name: 1 }, { unique: true });
+PostTypeSchema.index({ slug: 1 }, { unique: true });
 
 // Update timestamp on save
 PostTypeSchema.pre('save', function (next) {

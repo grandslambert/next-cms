@@ -1,39 +1,23 @@
 /**
  * MongoDB Database Initialization Script
- * Creates initial collections, indexes, and seed data
+ * Creates initial collections, indexes, and seed data in separate databases:
+ * - nextcms_global: Users, Roles, Sites, SiteUsers, GlobalSettings, UserMeta
+ * - nextcms_site1: Site-specific content (Posts, Media, Settings, etc.)
  * 
  * Usage: 
  *   npx ts-node --project tsconfig.node.json scripts/init-mongodb.ts
  *   npx ts-node --project tsconfig.node.json scripts/init-mongodb.ts --clear
  */
 
-import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import * as dotenv from 'dotenv';
 
 // Load environment variables
 dotenv.config();
 
-// Import models
-import { 
-  User, 
-  Role, 
-  Site, 
-  SiteUser, 
-  Setting, 
-  GlobalSetting,
-  UserMeta,
-  ActivityLog,
-  PostType, 
-  Taxonomy, 
-  Term,
-  Post,
-  Menu,
-  MenuItem,
-  MenuLocation,
-  Media,
-  MediaFolder,
-} from '../lib/models';
+// Import model factories
+import { GlobalModels, SiteModels } from '../lib/model-factory';
+import { connectToGlobalDB, connectToSiteDB, disconnectDB } from '../lib/mongodb';
 
 const MONGODB_URI = process.env.MONGODB_URI || '';
 
@@ -45,34 +29,61 @@ if (!MONGODB_URI) {
 
 async function initializeDatabase() {
   try {
-    console.log('🔌 Connecting to MongoDB...');
-    await mongoose.connect(MONGODB_URI);
-    console.log('✅ Connected to MongoDB');
+    console.log('🔌 Connecting to MongoDB databases...');
+    
+    // Connect to global database
+    await connectToGlobalDB();
+    console.log('✅ Connected to nextcms_global database');
+    
+    // Connect to site 1 database
+    await connectToSiteDB(1);
+    console.log('✅ Connected to nextcms_site1 database');
+
+    // Get model instances
+    const User = await GlobalModels.User();
+    const Role = await GlobalModels.Role();
+    const Site = await GlobalModels.Site();
+    const SiteUser = await GlobalModels.SiteUser();
+    const GlobalSetting = await GlobalModels.GlobalSetting();
+    const UserMeta = await GlobalModels.UserMeta();
+    const GlobalActivityLog = await GlobalModels.ActivityLog();
 
     // Clear existing data (only for fresh installs)
     const clearData = process.argv.includes('--clear');
     if (clearData) {
-      console.log('🗑️  Clearing existing data...');
+      console.log('🗑️  Clearing existing data from all databases...');
+      
+      // Clear global database
       await Promise.all([
         User.deleteMany({}),
         Role.deleteMany({}),
         Site.deleteMany({}),
         SiteUser.deleteMany({}),
-        Setting.deleteMany({}),
         GlobalSetting.deleteMany({}),
         UserMeta.deleteMany({}),
-        ActivityLog.deleteMany({}),
-        PostType.deleteMany({}),
-        Taxonomy.deleteMany({}),
-        Term.deleteMany({}),
-        Post.deleteMany({}),
-        Menu.deleteMany({}),
-        MenuItem.deleteMany({}),
-        MenuLocation.deleteMany({}),
-        Media.deleteMany({}),
-        MediaFolder.deleteMany({}),
+        GlobalActivityLog.deleteMany({}),
       ]);
-      console.log('✅ Existing data cleared');
+      console.log('✅ Global database cleared');
+      
+      // Clear site 1 database
+      await Promise.all([
+        (await SiteModels.Setting(1)).deleteMany({}),
+        (await SiteModels.PostType(1)).deleteMany({}),
+        (await SiteModels.Taxonomy(1)).deleteMany({}),
+        (await SiteModels.Term(1)).deleteMany({}),
+        (await SiteModels.Post(1)).deleteMany({}),
+        (await SiteModels.Menu(1)).deleteMany({}),
+        (await SiteModels.MenuItem(1)).deleteMany({}),
+        (await SiteModels.MenuLocation(1)).deleteMany({}),
+        (await SiteModels.Media(1)).deleteMany({}),
+        (await SiteModels.MediaFolder(1)).deleteMany({}),
+        (await SiteModels.ActivityLog(1)).deleteMany({}),
+        (await SiteModels.PostMeta(1)).deleteMany({}),
+        (await SiteModels.PostRevision(1)).deleteMany({}),
+        (await SiteModels.PostTerm(1)).deleteMany({}),
+        (await SiteModels.MenuItemMeta(1)).deleteMany({}),
+      ]);
+      console.log('✅ Site 1 database cleared');
     }
 
     // Check if database is already initialized
@@ -196,8 +207,10 @@ async function initializeDatabase() {
 
     console.log('\n🏢 Creating default site...');
     
-    // Create default site
+    // Create default site with explicit ID
+    // The ID determines the database name: nextcms_site{id}
     const defaultSite = await Site.create({
+      id: 1, // This maps to database: nextcms_site1
       name: 'default',
       display_name: 'Default Site',
       description: 'The default site for Next CMS',
@@ -205,7 +218,7 @@ async function initializeDatabase() {
       is_active: true,
     });
 
-    console.log('✅ Created default site');
+    console.log(`✅ Created default site (ID: ${defaultSite.id}, Database: nextcms_site${defaultSite.id})`);
 
     console.log('\n👤 Creating super admin user...');
     
@@ -251,7 +264,7 @@ async function initializeDatabase() {
 
     // Assign site admin to default site (NOT the super admin)
     await SiteUser.create({
-      site_id: defaultSite._id,
+      site_id: defaultSite.id,
       user_id: siteAdmin._id,
       role_id: adminRole._id,
     });
@@ -269,6 +282,17 @@ async function initializeDatabase() {
     }
 
     console.log(`✅ Created ${globalSettings.length} global settings`);
+
+    // Get site-specific models for site 1
+    const Setting = await SiteModels.Setting(1);
+    const PostType = await SiteModels.PostType(1);
+    const Taxonomy = await SiteModels.Taxonomy(1);
+    const Term = await SiteModels.Term(1);
+    const Post = await SiteModels.Post(1);
+    const Menu = await SiteModels.Menu(1);
+    const MenuItem = await SiteModels.MenuItem(1);
+    const MenuLocation = await SiteModels.MenuLocation(1);
+    const MediaFolder = await SiteModels.MediaFolder(1);
 
     // Create default site settings
     console.log('\n📝 Creating default site settings...');
@@ -290,7 +314,6 @@ async function initializeDatabase() {
 
     for (const setting of defaultSettings) {
       await Setting.create({
-        site_id: defaultSite._id,
         ...setting,
       });
     }
@@ -300,7 +323,6 @@ async function initializeDatabase() {
     // Create default post types
     console.log('\n📝 Creating default post types...');
     const postPostType = await PostType.create({
-      site_id: defaultSite._id,
       name: 'post',
       slug: 'posts',
       labels: {
@@ -324,7 +346,6 @@ async function initializeDatabase() {
     });
 
     const pagePostType = await PostType.create({
-      site_id: defaultSite._id,
       name: 'page',
       slug: 'pages',
       labels: {
@@ -351,7 +372,6 @@ async function initializeDatabase() {
     // Create default taxonomies
     console.log('\n📝 Creating default taxonomies...');
     const categoryTaxonomy = await Taxonomy.create({
-      site_id: defaultSite._id,
       name: 'category',
       slug: 'category',
       labels: {
@@ -370,7 +390,6 @@ async function initializeDatabase() {
     });
 
     const tagTaxonomy = await Taxonomy.create({
-      site_id: defaultSite._id,
       name: 'tag',
       slug: 'tag',
       labels: {
@@ -393,7 +412,6 @@ async function initializeDatabase() {
     // Create default terms
     console.log('\n📝 Creating default terms...');
     const uncategorizedTerm = await Term.create({
-      site_id: defaultSite._id,
       taxonomy: 'category',
       name: 'Uncategorized',
       slug: 'uncategorized',
@@ -406,7 +424,6 @@ async function initializeDatabase() {
     console.log('\n📝 Creating default pages...');
     
     const homePage = await Post.create({
-      site_id: defaultSite._id,
       post_type: 'page',
       title: 'Home',
       slug: 'home',
@@ -419,7 +436,6 @@ async function initializeDatabase() {
     });
 
     const aboutPage = await Post.create({
-      site_id: defaultSite._id,
       post_type: 'page',
       title: 'About',
       slug: 'about',
@@ -432,7 +448,6 @@ async function initializeDatabase() {
     });
 
     const contactPage = await Post.create({
-      site_id: defaultSite._id,
       post_type: 'page',
       title: 'Contact',
       slug: 'contact',
@@ -450,7 +465,6 @@ async function initializeDatabase() {
     console.log('\n📝 Creating sample blog post...');
     
     const helloWorldPost = await Post.create({
-      site_id: defaultSite._id,
       post_type: 'post',
       title: 'Hello World!',
       slug: 'hello-world',
@@ -469,14 +483,12 @@ async function initializeDatabase() {
     console.log('\n📝 Creating default menus...');
     
     const mainMenu = await Menu.create({
-      site_id: defaultSite._id,
       name: 'main-menu',
       display_name: 'Main Menu',
       location: 'header',
     });
 
     const footerMenu = await Menu.create({
-      site_id: defaultSite._id,
       name: 'footer-menu',
       display_name: 'Footer Menu',
       location: 'footer',
@@ -488,7 +500,6 @@ async function initializeDatabase() {
     console.log('\n📝 Creating menu items...');
     
     const homeMenuItem = await MenuItem.create({
-      site_id: defaultSite._id,
       menu_id: mainMenu._id,
       custom_label: 'Home',
       type: 'post',
@@ -499,7 +510,6 @@ async function initializeDatabase() {
     });
 
     const aboutMenuItem = await MenuItem.create({
-      site_id: defaultSite._id,
       menu_id: mainMenu._id,
       custom_label: 'About',
       type: 'post',
@@ -510,7 +520,6 @@ async function initializeDatabase() {
     });
 
     const blogMenuItem = await MenuItem.create({
-      site_id: defaultSite._id,
       menu_id: mainMenu._id,
       custom_label: 'Blog',
       type: 'custom',
@@ -520,7 +529,6 @@ async function initializeDatabase() {
     });
 
     const contactMenuItem = await MenuItem.create({
-      site_id: defaultSite._id,
       menu_id: mainMenu._id,
       custom_label: 'Contact',
       type: 'post',
@@ -532,7 +540,6 @@ async function initializeDatabase() {
 
     // Footer menu items
     const privacyMenuItem = await MenuItem.create({
-      site_id: defaultSite._id,
       menu_id: footerMenu._id,
       custom_label: 'Privacy Policy',
       type: 'custom',
@@ -542,7 +549,6 @@ async function initializeDatabase() {
     });
 
     const termsMenuItem = await MenuItem.create({
-      site_id: defaultSite._id,
       menu_id: footerMenu._id,
       custom_label: 'Terms of Service',
       type: 'custom',
@@ -557,14 +563,12 @@ async function initializeDatabase() {
     console.log('\n📝 Creating menu locations...');
     
     await MenuLocation.create({
-      site_id: defaultSite._id,
       name: 'header',
       display_name: 'Header Menu',
       description: 'Primary header navigation',
     });
 
     await MenuLocation.create({
-      site_id: defaultSite._id,
       name: 'footer',
       display_name: 'Footer Menu',
       description: 'Footer navigation',
@@ -577,14 +581,14 @@ async function initializeDatabase() {
     
     await UserMeta.create({
       user_id: siteAdmin._id,
-      site_id: defaultSite._id,
+      site_id: defaultSite.id,
       meta_key: 'dashboard_layout',
       meta_value: 'grid',
     });
 
     await UserMeta.create({
       user_id: siteAdmin._id,
-      site_id: defaultSite._id,
+      site_id: defaultSite.id,
       meta_key: 'items_per_page',
       meta_value: '25',
     });
@@ -595,32 +599,37 @@ async function initializeDatabase() {
     console.log('\n📝 Creating sample media folder...');
     
     const imagesFolder = await MediaFolder.create({
-      site_id: defaultSite._id,
       name: 'Images',
       parent_id: null,
     });
 
     console.log('✅ Created sample media folder');
 
+    // Get activity log model for count
+    const ActivityLog = await SiteModels.ActivityLog(1);
+
     // Summary
     console.log('\n✨ Database initialization complete!');
     console.log('\n📋 Summary:');
-    console.log(`   Roles: ${await Role.countDocuments()}`);
-    console.log(`   Users: ${await User.countDocuments()}`);
-    console.log(`   Sites: ${await Site.countDocuments()}`);
-    console.log(`   Site Users: ${await SiteUser.countDocuments()}`);
-    console.log(`   Global Settings: ${await GlobalSetting.countDocuments()}`);
-    console.log(`   Site Settings: ${await Setting.countDocuments()}`);
-    console.log(`   User Meta: ${await UserMeta.countDocuments()}`);
-    console.log(`   Activity Log: ${await ActivityLog.countDocuments()} (empty on init)`);
-    console.log(`   Post Types: ${await PostType.countDocuments()}`);
-    console.log(`   Taxonomies: ${await Taxonomy.countDocuments()}`);
-    console.log(`   Terms: ${await Term.countDocuments()}`);
-    console.log(`   Posts/Pages: ${await Post.countDocuments()}`);
-    console.log(`   Menus: ${await Menu.countDocuments()}`);
-    console.log(`   Menu Items: ${await MenuItem.countDocuments()}`);
-    console.log(`   Menu Locations: ${await MenuLocation.countDocuments()}`);
-    console.log(`   Media Folders: ${await MediaFolder.countDocuments()}`);
+    console.log('\n  Global Database (nextcms_global):');
+    console.log(`    Roles: ${await Role.countDocuments()}`);
+    console.log(`    Users: ${await User.countDocuments()}`);
+    console.log(`    Sites: ${await Site.countDocuments()}`);
+    console.log(`    Site Users: ${await SiteUser.countDocuments()}`);
+    console.log(`    Global Settings: ${await GlobalSetting.countDocuments()}`);
+    console.log(`    User Meta: ${await UserMeta.countDocuments()}`);
+    console.log(`    Activity Log (Global): ${await GlobalActivityLog.countDocuments()} (empty on init)`);
+    console.log('\n  Site 1 Database (nextcms_site1):');
+    console.log(`    Site Settings: ${await Setting.countDocuments()}`);
+    console.log(`    Activity Log: ${await ActivityLog.countDocuments()} (empty on init)`);
+    console.log(`    Post Types: ${await PostType.countDocuments()}`);
+    console.log(`    Taxonomies: ${await Taxonomy.countDocuments()}`);
+    console.log(`    Terms: ${await Term.countDocuments()}`);
+    console.log(`    Posts/Pages: ${await Post.countDocuments()}`);
+    console.log(`    Menus: ${await Menu.countDocuments()}`);
+    console.log(`    Menu Items: ${await MenuItem.countDocuments()}`);
+    console.log(`    Menu Locations: ${await MenuLocation.countDocuments()}`);
+    console.log(`    Media Folders: ${await MediaFolder.countDocuments()}`);
     
     console.log('\n🎉 Your Next CMS installation is ready!');
     console.log('\n🚀 Next steps:');
@@ -646,8 +655,8 @@ async function initializeDatabase() {
     console.error('❌ Error initializing database:', error);
     process.exit(1);
   } finally {
-    await mongoose.disconnect();
-    console.log('\n🔌 Disconnected from MongoDB');
+    await disconnectDB();
+    console.log('\n🔌 Disconnected from all MongoDB databases');
   }
 }
 

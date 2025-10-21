@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import connectDB from '@/lib/mongodb';
-import { SiteUser, User, Role, Site } from '@/lib/models';
+import { GlobalModels } from '@/lib/model-factory';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function PUT(
@@ -10,7 +9,10 @@ export async function PUT(
   { params }: { params: { id: string; userId: string } }
 ) {
   try {
-    await connectDB();
+    const Site = await GlobalModels.Site();
+    const User = await GlobalModels.User();
+    const Role = await GlobalModels.Role();
+    const SiteUser = await GlobalModels.SiteUser();
     
     const session = await getServerSession(authOptions);
     if (!session?.user) {
@@ -29,18 +31,19 @@ export async function PUT(
     }
 
     // Validate IDs
-    if (!/^[0-9a-fA-F]{24}$/.test(params.id) || !/^[0-9a-fA-F]{24}$/.test(params.userId) || !/^[0-9a-fA-F]{24}$/.test(role_id)) {
+    const siteId = parseInt(params.id);
+    if (!siteId || isNaN(siteId) || !/^[0-9a-fA-F]{24}$/.test(params.userId) || !/^[0-9a-fA-F]{24}$/.test(role_id)) {
       return NextResponse.json({ error: 'Invalid ID format' }, { status: 400 });
     }
 
     // Get site and user info for logging
-    const site = await Site.findById(params.id);
+    const site = await Site.findOne({ id: siteId });
     const user = await User.findById(params.userId);
     
     const siteUser = await SiteUser.findOne({ 
-      site_id: params.id, 
+      site_id: siteId, 
       user_id: params.userId 
-    }).populate('role_id', 'label');
+    }).lean();
     
     const newRole = await Role.findById(role_id);
 
@@ -48,11 +51,15 @@ export async function PUT(
       return NextResponse.json({ error: 'Site, user, or role not found' }, { status: 404 });
     }
 
-    const oldRoleName = (siteUser.role_id as any)?.label || 'unknown';
+    // Manually fetch old role
+    const oldRole = await Role.findById(siteUser.role_id);
+    const oldRoleName = oldRole?.label || 'unknown';
 
     // Update user role for site
-    siteUser.role_id = role_id as any;
-    await siteUser.save();
+    await SiteUser.findOneAndUpdate(
+      { site_id: siteId, user_id: params.userId },
+      { role_id }
+    );
 
     // Log activity
     const userId = (session.user as any).id;
@@ -60,12 +67,12 @@ export async function PUT(
       userId,
       action: 'site_user_updated' as any,
       entityType: 'site' as any,
-      entityId: params.id,
+      entityId: siteId.toString(),
       entityName: site.display_name,
       details: `Changed role for ${user.username} from ${oldRoleName} to ${newRole.label}`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
-      siteId: params.id,
+      siteId: siteId,
     });
 
     return NextResponse.json({ 
@@ -83,7 +90,9 @@ export async function DELETE(
   { params }: { params: { id: string; userId: string } }
 ) {
   try {
-    await connectDB();
+    const Site = await GlobalModels.Site();
+    const User = await GlobalModels.User();
+    const SiteUser = await GlobalModels.SiteUser();
     
     const session = await getServerSession(authOptions);
     if (!session?.user) {
@@ -96,17 +105,18 @@ export async function DELETE(
     }
 
     // Validate IDs
-    if (!/^[0-9a-fA-F]{24}$/.test(params.id) || !/^[0-9a-fA-F]{24}$/.test(params.userId)) {
+    const siteId = parseInt(params.id);
+    if (!siteId || isNaN(siteId) || !/^[0-9a-fA-F]{24}$/.test(params.userId)) {
       return NextResponse.json({ error: 'Invalid ID format' }, { status: 400 });
     }
 
     // Get site and user info for logging
-    const site = await Site.findById(params.id);
+    const site = await Site.findOne({ id: siteId });
     const user = await User.findById(params.userId);
 
     // Remove user from site
     await SiteUser.deleteOne({ 
-      site_id: params.id, 
+      site_id: siteId, 
       user_id: params.userId 
     });
 
@@ -116,12 +126,12 @@ export async function DELETE(
       userId,
       action: 'site_user_removed' as any,
       entityType: 'site' as any,
-      entityId: params.id,
+      entityId: siteId.toString(),
       entityName: site?.display_name || 'Unknown Site',
       details: `Removed user ${user?.username || 'user'} from site`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
-      siteId: params.id,
+      siteId: siteId,
     });
 
     return NextResponse.json({ 

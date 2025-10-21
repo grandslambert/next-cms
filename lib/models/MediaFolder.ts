@@ -2,21 +2,14 @@ import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IMediaFolder extends Document {
   _id: mongoose.Types.ObjectId;
-  site_id: mongoose.Types.ObjectId;
   name: string;
   parent_id: mongoose.Types.ObjectId | null;
   created_at: Date;
   updated_at: Date;
 }
 
-const MediaFolderSchema: Schema = new Schema(
+export const MediaFolderSchema: Schema = new Schema(
   {
-    site_id: {
-      type: Schema.Types.ObjectId,
-      ref: 'Site',
-      required: true,
-      index: true,
-    },
     name: {
       type: String,
       required: true,

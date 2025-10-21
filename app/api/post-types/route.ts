@@ -1,23 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import connectDB from '@/lib/mongodb';
-import { PostType } from '@/lib/models';
+import { SiteModels } from '@/lib/model-factory';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
-import mongoose from 'mongoose';
 
 export async function GET() {
   try {
-    await connectDB();
-    
     const session = await getServerSession(authOptions);
-    const siteIdStr = (session?.user as any)?.currentSiteId;
+    const siteId = (session?.user as any)?.currentSiteId;
     
-    if (!siteIdStr || !mongoose.Types.ObjectId.isValid(siteIdStr)) {
+    if (!siteId) {
       return NextResponse.json({ error: 'Invalid site ID' }, { status: 400 });
     }
     
-    const postTypes = await PostType.find({ site_id: new mongoose.Types.ObjectId(siteIdStr) })
+    const PostType = await SiteModels.PostType(siteId);
+    const postTypes = await PostType.find({})
       .sort({ menu_position: 1, name: 1 })
       .lean();
 
@@ -56,20 +53,18 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    await connectDB();
-    
     const session = await getServerSession(authOptions);
     if (!session?.user || (session.user as any).role !== 'admin') {
       return NextResponse.json({ error: 'Unauthorized - Admin only' }, { status: 401 });
     }
 
-    const siteIdStr = (session.user as any).currentSiteId;
+    const siteId = (session.user as any).currentSiteId;
     
-    if (!siteIdStr || !mongoose.Types.ObjectId.isValid(siteIdStr)) {
+    if (!siteId) {
       return NextResponse.json({ error: 'Invalid site ID' }, { status: 400 });
     }
     
-    const siteId = new mongoose.Types.ObjectId(siteIdStr);
+    const PostType = await SiteModels.PostType(siteId);
     const body = await request.json();
     const { 
       name, 
@@ -98,14 +93,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if post type already exists
-    const existing = await PostType.findOne({ site_id: siteId, name });
+    const existing = await PostType.findOne({ name });
     if (existing) {
       return NextResponse.json({ error: 'Post type with this name already exists' }, { status: 400 });
     }
 
     // Create post type
     const postType = await PostType.create({
-      site_id: siteId,
       name,
       slug: slug || name,
       labels: {
@@ -137,7 +131,7 @@ export async function POST(request: NextRequest) {
       details: `Created post type: ${label} (${name})`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
-      siteId: siteIdStr,
+      siteId: siteId,
     });
 
     return NextResponse.json({ postType }, { status: 201 });

@@ -1,7 +1,6 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IPost extends Document {
-  site_id: mongoose.Schema.Types.ObjectId;
   post_type: string; // e.g., 'post', 'page', 'product'
   title: string;
   slug: string; // URL-friendly name
@@ -24,8 +23,7 @@ export interface IPost extends Document {
   updated_at: Date;
 }
 
-const PostSchema: Schema = new Schema({
-  site_id: { type: Schema.Types.ObjectId, ref: 'Site', required: true },
+export const PostSchema: Schema = new Schema({
   post_type: { type: String, required: true, trim: true },
   title: { type: String, required: true, trim: true },
   slug: { type: String, required: true, trim: true },
@@ -60,13 +58,13 @@ const PostSchema: Schema = new Schema({
   updated_at: { type: Date, default: Date.now },
 });
 
-// Indexes for performance
-PostSchema.index({ site_id: 1, post_type: 1, status: 1 });
-PostSchema.index({ site_id: 1, slug: 1 }, { unique: true });
-PostSchema.index({ site_id: 1, author_id: 1 });
-PostSchema.index({ site_id: 1, parent_id: 1 });
-PostSchema.index({ site_id: 1, published_at: -1 }); // For sorting by date
-PostSchema.index({ site_id: 1, post_type: 1, published_at: -1 }); // Common query
+// Indexes for performance  
+PostSchema.index({ post_type: 1, status: 1 });
+PostSchema.index({ slug: 1 }, { unique: true });
+PostSchema.index({ author_id: 1 });
+PostSchema.index({ parent_id: 1 });
+PostSchema.index({ published_at: -1 }); // For sorting by date
+PostSchema.index({ post_type: 1, published_at: -1 }); // Common query
 
 // Update timestamp on save
 PostSchema.pre('save', function (next) {

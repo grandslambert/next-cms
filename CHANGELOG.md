@@ -5,28 +5,48 @@ All notable changes to Next CMS will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.0.2] - 2025-10-21
+## [3.0.3] - 2025-01-21
 
 ### Fixed
 
-- **User Switching**
-  - JWT callback now properly handles `switchData` for session persistence
-  - Fixed all ID types from number to string for MongoDB ObjectIds
-  
-- **Media Library**
-  - Fixed field name mapping for frontend compatibility (mimetype, original_filename, filepath)
-  - Implemented complete image size generation with proper crop styles
-  - Fixed folder navigation to show correct subfolders
-  - Added folder counts (file_count, subfolder_count)
-  - Fixed permanent deletion to remove all size variants from server
-  - Added trash count badge with automatic updates
-  - Fixed bulk actions (405 error, parameter mismatch)
-  - Implemented hierarchical folder display in move modals
-  
-- **Image Regeneration**
-  - Fully implemented regenerate API with Sharp
-  - Added bulk regenerate option for selected images
-  - Deletes old variants before creating new ones
+- **Database Architecture Fixes**
+  - Fixed critical issues with multi-database architecture where Site ID references were inconsistent
+  - Changed Site references from `Site._id` (ObjectId) to `Site.id` (Number) throughout the codebase
+  - Fixed `SiteUser.site_id` and `UserMeta.site_id` to use Number instead of ObjectId
+  - Removed `site_id` filters from all site-specific models (they're in separate databases)
+
+- **SuperAdmin Functionality**
+  - Fixed user creation with proper role validation using `GlobalModels.Role()`
+  - Fixed site_id conversion from ObjectId to Number in site assignments
+  - Fixed user list queries to use numeric site IDs
+  - Fixed all site routes (GET, POST, PUT, DELETE) to use `Site.findOne({ id: siteId })`
+  - Fixed site creation to use numeric IDs for database initialization
+  - Fixed site user assignment routes to use numeric site_id
+  - Fixed site switching to use numeric site ID validation
+
+- **Activity Logging**
+  - Fixed activity log to correctly log to global database for SuperAdmin actions
+  - Fixed activity log viewer to query global database by default for SuperAdmin
+  - Removed site_id from global action logging (user creation, site creation, etc.)
+  - Fixed site lookup in activity logs to use numeric site.id
+
+- **API Routes**
+  - Post Types: Completely rewritten to use `SiteModels.PostType(siteId)` and removed site_id filters
+  - Settings: Removed site_id filters from site-specific settings queries
+  - User Metadata: Fixed to use numeric site_id in global UserMeta model
+  - Site Users: Fixed all routes to use numeric site_id for SiteUser queries
+  - Authentication: Fixed switch-site route to use numeric site ID
+
+- **Developer Experience**
+  - Added `dev:clean` script to kill node processes and clear build caches
+  - Separated dev startup from cache cleaning for better control
+  - Created comprehensive database structure documentation (`DATABASE_STRUCTURE_FINAL.md`)
+
+See [changelog/v3.0.3.md](changelog/v3.0.3.md) for details.
+
+---
+
+## [3.0.2] - 2025-10-21
 
 See [changelog/v3.0.2.md](changelog/v3.0.2.md) for details.
 

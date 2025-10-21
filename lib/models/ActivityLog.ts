@@ -15,7 +15,7 @@ export interface IActivityLog extends Document {
   created_at: Date;
 }
 
-const ActivityLogSchema: Schema = new Schema({
+export const ActivityLogSchema: Schema = new Schema({
   user_id: { type: Schema.Types.Mixed, required: true }, // Can be ObjectId or string for flexibility
   action: { type: String, required: true, index: true },
   entity_type: { type: String, required: true, index: true },
@@ -26,7 +26,7 @@ const ActivityLogSchema: Schema = new Schema({
   changes_after: { type: String },
   ip_address: { type: String },
   user_agent: { type: String },
-  site_id: { type: Schema.Types.Mixed }, // Can be ObjectId or string for flexibility
+  site_id: { type: Number, index: true }, // Optional: numeric site ID for global ActivityLog, unused in site-specific DBs
   created_at: { type: Date, default: Date.now, index: true },
 });
 

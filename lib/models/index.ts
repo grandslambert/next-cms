@@ -1,6 +1,10 @@
 /**
  * MongoDB Models Index
  * Central export point for all Mongoose models
+ * 
+ * ⚠️  NOTE: These exports are kept for backwards compatibility but use the old single-database approach.
+ * For the new multi-database architecture, use @/lib/model-factory instead.
+ * See Documentation/API_MIGRATION_GUIDE.md for migration instructions.
  */
 
 // Global Models (shared across all sites)

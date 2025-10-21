@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import connectDB from '@/lib/mongodb';
-import { Site, SiteUser } from '@/lib/models';
+import { GlobalModels } from '@/lib/model-factory';
 
 export async function GET(request: NextRequest) {
   try {
-    await connectDB();
+    const Site = await GlobalModels.Site();
+    const SiteUser = await GlobalModels.SiteUser();
     
     const session = await getServerSession(authOptions);
     if (!session?.user) {
@@ -26,23 +26,39 @@ export async function GET(request: NextRequest) {
         .lean();
     } else {
       // Regular users can only access sites they're assigned to
-      const siteAssignments = await SiteUser.find({ user_id: userId })
-        .populate('site_id')
-        .populate('role_id')
-        .lean();
+      const Role = await GlobalModels.Role();
+      const siteAssignments = await SiteUser.find({ user_id: userId }).lean();
+      
+      // Manually fetch related sites and roles
+      const siteIds = siteAssignments.map(a => a.site_id);
+      const roleIds = siteAssignments.map(a => a.role_id);
+      
+      const relatedSites = await Site.find({ id: { $in: siteIds }, is_active: true }).lean() as any[];
+      const relatedRoles = await Role.find({ _id: { $in: roleIds } }).lean() as any[];
+      
+      // Map roles by ID for quick lookup
+      const rolesById = new Map(relatedRoles.map(r => [r._id.toString(), r]));
       
       sites = siteAssignments
-        .filter(assignment => (assignment.site_id as any)?.is_active)
-        .map(assignment => ({
-          _id: (assignment.site_id as any)._id,
-          name: (assignment.site_id as any).name,
-          display_name: (assignment.site_id as any).display_name,
-          description: (assignment.site_id as any).description,
-          domain: (assignment.site_id as any).domain,
-          is_active: (assignment.site_id as any).is_active,
-          role_name: (assignment.role_id as any)?.label
-        }))
-        .sort((a, b) => a.display_name.localeCompare(b.display_name));
+        .map(assignment => {
+          const site = relatedSites.find(s => s.id === assignment.site_id);
+          if (!site) return null;
+          
+          const role = rolesById.get(assignment.role_id.toString());
+          
+          return {
+            _id: site._id,
+            id: site.id,
+            name: site.name,
+            display_name: site.display_name,
+            description: site.description,
+            domain: site.domain,
+            is_active: site.is_active,
+            role_name: role?.label || 'Unknown'
+          };
+        })
+        .filter(s => s !== null)
+        .sort((a, b) => a!.display_name.localeCompare(b!.display_name));
     }
 
     return NextResponse.json({ sites });

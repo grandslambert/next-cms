@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import { connectDB } from '@/lib/db';
-import { UserMeta } from '@/lib/models';
+import { GlobalModels } from '@/lib/model-factory';
 import mongoose from 'mongoose';
 
 export async function GET(request: NextRequest) {
@@ -12,10 +11,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    await connectDB();
+    const UserMeta = await GlobalModels.UserMeta();
 
     const userId = (session.user as any).id;
-    const siteId = (session.user as any).currentSiteId;
+    const siteId = (session.user as any).currentSiteId; // This is a Number
     const searchParams = request.nextUrl.searchParams;
     const metaKey = searchParams.get('key');
 
@@ -26,9 +25,9 @@ export async function GET(request: NextRequest) {
 
     const query: any = { user_id: new mongoose.Types.ObjectId(userId) };
 
-    // Add site_id to query if available
-    if (siteId && mongoose.Types.ObjectId.isValid(siteId)) {
-      query.site_id = new mongoose.Types.ObjectId(siteId);
+    // Add site_id to query if available (site_id is Number, not ObjectId)
+    if (siteId) {
+      query.site_id = parseInt(siteId);
     }
 
     // Add meta_key to query if provided
@@ -57,10 +56,10 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    await connectDB();
+    const UserMeta = await GlobalModels.UserMeta();
 
     const userId = (session.user as any).id;
-    const siteId = (session.user as any).currentSiteId;
+    const siteId = (session.user as any).currentSiteId; // Number
     const body = await request.json();
     const { meta_key, meta_value } = body;
 
@@ -73,7 +72,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid user ID' }, { status: 400 });
     }
 
-    if (!siteId || !mongoose.Types.ObjectId.isValid(siteId)) {
+    if (!siteId) {
       return NextResponse.json({ error: 'Invalid or missing site ID' }, { status: 400 });
     }
 
@@ -81,7 +80,7 @@ export async function PUT(request: NextRequest) {
     const updatedMeta = await UserMeta.findOneAndUpdate(
       {
         user_id: new mongoose.Types.ObjectId(userId),
-        site_id: new mongoose.Types.ObjectId(siteId),
+        site_id: parseInt(siteId), // Number, not ObjectId
         meta_key,
       },
       {

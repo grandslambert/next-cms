@@ -1,16 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import connectDB from '@/lib/mongodb';
-import { Site, SiteUser } from '@/lib/models';
+import { GlobalModels } from '@/lib/model-factory';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 import { initializeSiteDefaults } from '@/lib/init-site-defaults';
-import fs from 'fs/promises';
-import path from 'path';
 
 export async function GET(request: NextRequest) {
   try {
-    await connectDB();
+    // Get global models
+    const Site = await GlobalModels.Site();
+    const SiteUser = await GlobalModels.SiteUser();
     
     const session = await getServerSession(authOptions);
     if (!session?.user) {
@@ -26,30 +25,41 @@ export async function GET(request: NextRequest) {
     if (isSuperAdmin) {
       sites = await Site.find().sort({ created_at: -1 }).lean();
       
-      // Add user count and map _id to id for each site
+      // Add user count for each site
       for (const site of sites) {
-        const userCount = await SiteUser.countDocuments({ site_id: site._id });
+        const userCount = await SiteUser.countDocuments({ site_id: (site as any).id });
         (site as any).user_count = userCount;
-        (site as any).id = site._id.toString();
       }
     } else {
       // Get sites user is assigned to
-      const siteAssignments = await SiteUser.find({ user_id: userId })
-        .populate('site_id')
-        .populate('role_id')
-        .lean();
+      const Role = await GlobalModels.Role();
+      const siteAssignments = await SiteUser.find({ user_id: userId }).lean();
+      
+      // Manually fetch related sites and roles
+      const siteIds = siteAssignments.map(a => a.site_id);
+      const roleIds = siteAssignments.map(a => a.role_id);
+      
+      const relatedSites = await Site.find({ id: { $in: siteIds }, is_active: true }).lean();
+      const relatedRoles = await Role.find({ _id: { $in: roleIds } }).lean();
+      
+      // Map by ID for quick lookup
+      const sitesById = new Map(relatedSites.map((s: any) => [s.id.toString(), s]));
+      const rolesById = new Map(relatedRoles.map((r: any) => [r._id.toString(), r]));
       
       sites = siteAssignments
-        .filter(assignment => (assignment.site_id as any)?.is_active)
         .map(assignment => {
-          const siteData = assignment.site_id as any;
+          const site = sitesById.get(assignment.site_id.toString());
+          if (!site) return null;
+          
+          const role = rolesById.get(assignment.role_id.toString());
+          
           return {
-            ...siteData,
-            id: siteData._id.toString(),
+            ...site,
             user_role_id: assignment.role_id,
-            user_role_name: (assignment.role_id as any)?.name
+            user_role_name: role?.name || 'Unknown'
           };
-        });
+        })
+        .filter(s => s !== null);
     }
 
     return NextResponse.json({ sites });
@@ -61,7 +71,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    await connectDB();
+    // Get global model
+    const Site = await GlobalModels.Site();
     
     const session = await getServerSession(authOptions);
     const isSuperAdmin = (session?.user as any)?.isSuperAdmin;
@@ -91,8 +102,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Site name already exists' }, { status: 400 });
     }
 
-    // Create site in MongoDB
+    // Get the next available ID
+    const lastSite = await Site.findOne({}).sort({ id: -1 }).limit(1);
+    const nextId = lastSite ? lastSite.id + 1 : 1;
+
+    // Create site in MongoDB with explicit ID
     const newSite = await Site.create({
+      id: nextId,
       name,
       display_name,
       domain: domain || '',
@@ -100,18 +116,20 @@ export async function POST(request: NextRequest) {
       is_active: is_active !== false,
     });
 
-    console.log(`✓ Created site: ${display_name} (ID: ${newSite._id})`);
+    console.log(`✓ Created site: ${display_name} (ID: ${newSite.id}, Database: nextcms_site${newSite.id})`);
     
-    // Initialize default data for the new site
+    // Get user ID for default content
+    const userId = (session?.user as any)?.id;
+    
+    // Initialize default data for the new site database
     try {
-      await initializeSiteDefaults(newSite._id);
+      await initializeSiteDefaults(newSite.id, userId);
     } catch (initError) {
       console.error('Error initializing site defaults:', initError);
       // Continue even if initialization fails - site is created
     }
 
     // Log activity
-    const userId = (session?.user as any)?.id;
     await logActivity({
       userId,
       action: 'site_created',
@@ -127,7 +145,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ 
       success: true, 
       site: {
-        id: newSite._id.toString(),
+        id: newSite.id,
         name: newSite.name,
         display_name: newSite.display_name,
         domain: newSite.domain,

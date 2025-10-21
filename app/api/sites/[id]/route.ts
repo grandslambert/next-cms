@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import connectDB from '@/lib/mongodb';
-import { Site, SiteUser } from '@/lib/models';
+import { GlobalModels } from '@/lib/model-factory';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function GET(
@@ -10,23 +9,24 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    await connectDB();
+    const Site = await GlobalModels.Site();
+    const SiteUser = await GlobalModels.SiteUser();
     
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const site = await Site.findById(params.id).lean();
+    const siteId = parseInt(params.id);
+    const site = await Site.findOne({ id: siteId }).lean();
 
     if (!site) {
       return NextResponse.json({ error: 'Site not found' }, { status: 404 });
     }
 
-    // Add user count and id field
-    const userCount = await SiteUser.countDocuments({ site_id: site._id });
+    // Add user count
+    const userCount = await SiteUser.countDocuments({ site_id: (site as any).id });
     (site as any).user_count = userCount;
-    (site as any).id = site._id.toString();
 
     return NextResponse.json({ site });
   } catch (error) {
@@ -40,7 +40,7 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    await connectDB();
+    const Site = await GlobalModels.Site();
     
     const session = await getServerSession(authOptions);
     const isSuperAdmin = (session?.user as any)?.isSuperAdmin;
@@ -51,7 +51,8 @@ export async function PUT(
     }
 
     // Get site data before update
-    const site = await Site.findById(params.id);
+    const siteId = parseInt(params.id);
+    const site = await Site.findOne({ id: siteId });
 
     if (!site) {
       return NextResponse.json({ error: 'Site not found' }, { status: 404 });
@@ -82,7 +83,7 @@ export async function PUT(
       userId,
       action: 'site_updated',
       entityType: 'site',
-      entityId: site._id.toString(),
+      entityId: site.id.toString(),
       entityName: display_name,
       details: `Updated site: ${display_name} (${site.name})`,
       changesBefore: { 
@@ -125,7 +126,8 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    await connectDB();
+    const Site = await GlobalModels.Site();
+    const SiteUser = await GlobalModels.SiteUser();
     
     const session = await getServerSession(authOptions);
     const isSuperAdmin = (session?.user as any)?.isSuperAdmin;
@@ -136,27 +138,28 @@ export async function DELETE(
     }
 
     // Get site data before deletion
-    const site = await Site.findById(params.id);
+    const siteId = parseInt(params.id);
+    const site = await Site.findOne({ id: siteId });
 
     if (!site) {
       return NextResponse.json({ error: 'Site not found' }, { status: 404 });
     }
 
     // Prevent deletion of first/default site
-    const firstSite = await Site.findOne().sort({ created_at: 1 });
-    if (firstSite && site._id.equals(firstSite._id)) {
+    const firstSite = await Site.findOne().sort({ id: 1 });
+    if (firstSite && site.id === firstSite.id) {
       return NextResponse.json({ 
         error: 'Cannot delete the first/default site' 
       }, { status: 403 });
     }
 
     // Delete the site
-    await Site.findByIdAndDelete(params.id);
+    await Site.deleteOne({ id: siteId });
 
-    // Note: In MongoDB, collections with prefix site_<id>_ will remain
-    // They need to be manually dropped if desired
-    console.log(`✓ Deleted site: ${site.display_name} (ID: ${site._id})`);
-    console.log(`   Note: Collections with prefix site_${site._id}_ still exist and must be manually dropped`);
+    // Note: In MongoDB, database nextcms_site<id> will remain
+    // It needs to be manually dropped if desired
+    console.log(`✓ Deleted site: ${site.display_name} (ID: ${site.id})`);
+    console.log(`   Note: Database nextcms_site${site.id} still exists and must be manually dropped`);
 
     // Log activity
     const userId = (session?.user as any)?.id;
@@ -164,7 +167,7 @@ export async function DELETE(
       userId,
       action: 'site_deleted',
       entityType: 'site',
-      entityId: site._id.toString(),
+      entityId: site.id.toString(),
       entityName: site.display_name,
       details: `Deleted site: ${site.display_name} (${site.name})`,
       changesBefore: { 
@@ -178,7 +181,7 @@ export async function DELETE(
     return NextResponse.json({ 
       success: true,
       message: 'Site deleted successfully',
-      warning: `Note: Collections with prefix site_${site._id}_ must be manually dropped if needed`
+      warning: `Note: Database nextcms_site${site.id} must be manually dropped if needed`
     });
   } catch (error) {
     console.error('Error deleting site:', error);

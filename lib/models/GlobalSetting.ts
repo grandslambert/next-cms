@@ -9,7 +9,7 @@ export interface IGlobalSetting extends Document {
   updated_at: Date;
 }
 
-const GlobalSettingSchema: Schema = new Schema({
+export const GlobalSettingSchema: Schema = new Schema({
   key: { type: String, required: true, unique: true, trim: true },
   value: { type: Schema.Types.Mixed, required: true },
   type: { type: String, enum: ['string', 'number', 'boolean', 'json', 'text'], default: 'string' },

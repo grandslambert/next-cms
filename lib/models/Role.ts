@@ -10,7 +10,7 @@ export interface IRole extends Document {
   updated_at: Date;
 }
 
-const RoleSchema: Schema = new Schema(
+export const RoleSchema: Schema = new Schema(
   {
     name: {
       type: String,

@@ -10,7 +10,7 @@ export interface IPostRevision extends Document {
   created_at: Date;
 }
 
-const PostRevisionSchema: Schema = new Schema(
+export const PostRevisionSchema: Schema = new Schema(
   {
     post_id: {
       type: Schema.Types.ObjectId,

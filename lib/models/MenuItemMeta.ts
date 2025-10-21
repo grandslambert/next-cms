@@ -9,7 +9,7 @@ export interface IMenuItemMeta extends Document {
   updated_at: Date;
 }
 
-const MenuItemMetaSchema: Schema = new Schema(
+export const MenuItemMetaSchema: Schema = new Schema(
   {
     menu_item_id: {
       type: Schema.Types.ObjectId,

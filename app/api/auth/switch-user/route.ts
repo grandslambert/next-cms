@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import connectDB from '@/lib/mongodb';
-import { User, Role, SiteUser, Site } from '@/lib/models';
+import { GlobalModels } from '@/lib/model-factory';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 // Switch to another user
 export async function POST(request: NextRequest) {
   try {
-    await connectDB();
+    const User = await GlobalModels.User();
+    const Role = await GlobalModels.Role();
+    const SiteUser = await GlobalModels.SiteUser();
+    const Site = await GlobalModels.Site();
     
     const session = await getServerSession(authOptions);
     if (!session?.user) {
@@ -35,13 +37,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Get target user details
-    const targetUser = await User.findById(targetUserId).populate('role').lean();
+    const targetUser = await User.findById(targetUserId).lean();
 
     if (!targetUser) {
       return NextResponse.json({ error: 'Target user not found' }, { status: 404 });
     }
 
-    const targetRole = targetUser.role as any;
+    // Manually fetch role
+    const targetRole = await Role.findById(targetUser.role);
     const targetRoleName = targetRole?.name || 'author';
 
     // Prevent switching to another super admin (for security)
@@ -139,7 +142,9 @@ export async function POST(request: NextRequest) {
 // Switch back to original user
 export async function DELETE(request: NextRequest) {
   try {
-    await connectDB();
+    const User = await GlobalModels.User();
+    const Role = await GlobalModels.Role();
+    const SiteUser = await GlobalModels.SiteUser();
     
     const session = await getServerSession(authOptions);
     if (!session?.user) {
@@ -159,13 +164,14 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Get original user details
-    const originalUser = await User.findById(originalUserId).populate('role').lean();
+    const originalUser = await User.findById(originalUserId).lean();
 
     if (!originalUser) {
       return NextResponse.json({ error: 'Original user not found' }, { status: 404 });
     }
 
-    const originalRole = originalUser.role as any;
+    // Manually fetch role
+    const originalRole = await Role.findById(originalUser.role);
     const originalRoleName = originalRole?.name || 'author';
 
     // Parse permissions

@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import { connectDB } from '@/lib/db';
-import { Role, User } from '@/lib/models';
+import { GlobalModels } from '@/lib/model-factory';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 import mongoose from 'mongoose';
 
@@ -11,6 +10,8 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    const Role = await GlobalModels.Role();
+    
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -24,8 +25,6 @@ export async function GET(
     if (!mongoose.Types.ObjectId.isValid(params.id)) {
       return NextResponse.json({ error: 'Invalid role ID' }, { status: 400 });
     }
-
-    await connectDB();
 
     const role = await Role.findById(params.id);
 
@@ -53,6 +52,8 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
+    const Role = await GlobalModels.Role();
+    
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -73,8 +74,6 @@ export async function PUT(
     if (!display_name) {
       return NextResponse.json({ error: 'display_name is required' }, { status: 400 });
     }
-
-    await connectDB();
 
     // Get current role for logging
     const currentRole = await Role.findById(params.id).lean();
@@ -128,6 +127,9 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    const Role = await GlobalModels.Role();
+    const User = await GlobalModels.User();
+    
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -141,8 +143,6 @@ export async function DELETE(
     if (!mongoose.Types.ObjectId.isValid(params.id)) {
       return NextResponse.json({ error: 'Invalid role ID' }, { status: 400 });
     }
-
-    await connectDB();
 
     const role = await Role.findById(params.id).lean();
 

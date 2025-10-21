@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import connectDB from '@/lib/mongodb';
-import { ActivityLog, User, Site } from '@/lib/models';
+import { GlobalModels, SiteModels } from '@/lib/model-factory';
+import { getCurrentSiteId } from '@/lib/api-helpers';
 
 export async function GET(request: NextRequest) {
   try {
-    await connectDB();
-    
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -15,7 +13,7 @@ export async function GET(request: NextRequest) {
 
     const permissions = (session.user as any).permissions || {};
     const isSuperAdmin = (session.user as any)?.isSuperAdmin || false;
-    const siteIdStr = (session.user as any)?.currentSiteId;
+    const currentSiteId = (session.user as any)?.currentSiteId;
     
     // Only admins can view activity logs (or users with manage_users permission)
     if (!isSuperAdmin && !permissions.manage_users) {
@@ -32,23 +30,44 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search');
     const filterSiteId = searchParams.get('site_id'); // For super admin site filtering
 
-    // Build MongoDB query
-    const query: any = {};
+    const User = await GlobalModels.User();
+    const Site = await GlobalModels.Site();
 
-    // Filter by site
+    // Determine which database to query
+    let ActivityLog;
+    let query: any = {};
+
     if (!isSuperAdmin) {
-      // Non-super admins: only see their current site
-      query.site_id = siteIdStr;
-    } else if (filterSiteId) {
-      // Super admins: filter by specific site if selected
-      if (filterSiteId === 'all') {
-        // Show all activities (no site filter)
-      } else if (filterSiteId === 'global') {
-        // Show only global activities
-        query.site_id = { $exists: false };
+      // Non-super admins: only see their current site's activity log
+      if (!currentSiteId) {
+        return NextResponse.json({ logs: [], pagination: { total: 0, page, limit, totalPages: 0 } });
+      }
+      ActivityLog = await SiteModels.ActivityLog(currentSiteId);
+      // No site_id filter needed - we're in the site database
+    } else {
+      // Super admins: check filterSiteId to determine which database
+      if (!filterSiteId || filterSiteId === 'global') {
+        // Query global database (user/site creation, etc.)
+        ActivityLog = await GlobalModels.ActivityLog();
+        // Filter for null/undefined site_id
+        if (filterSiteId === 'global') {
+          query.$or = [
+            { site_id: null },
+            { site_id: { $exists: false } }
+          ];
+        }
+      } else if (filterSiteId === 'all') {
+        // Query global database but show all (including those with site_id)
+        ActivityLog = await GlobalModels.ActivityLog();
       } else {
-        // Show specific site activities
-        query.site_id = filterSiteId;
+        // Query specific site's database
+        const siteIdNum = parseInt(filterSiteId);
+        if (siteIdNum && !isNaN(siteIdNum)) {
+          ActivityLog = await SiteModels.ActivityLog(siteIdNum);
+        } else {
+          // Default to global if invalid
+          ActivityLog = await GlobalModels.ActivityLog();
+        }
       }
     }
 
@@ -84,7 +103,7 @@ export async function GET(request: NextRequest) {
     // Populate user and site information
     const logs = await Promise.all(activityLogs.map(async (log: any) => {
       const user = await User.findById(log.user_id).select('username first_name last_name').lean();
-      const site = log.site_id ? await Site.findById(log.site_id).select('display_name').lean() : null;
+      const site = log.site_id ? await Site.findOne({ id: log.site_id }).select('display_name').lean() : null;
       
       return {
         ...log,

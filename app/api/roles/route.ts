@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import connectDB from '@/lib/mongodb';
-import { Role } from '@/lib/models';
+import { GlobalModels } from '@/lib/model-factory';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 export async function GET() {
   try {
-    await connectDB();
+    const Role = await GlobalModels.Role();
     
     const session = await getServerSession(authOptions);
     if (!session) {
@@ -50,7 +49,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    await connectDB();
+    const Role = await GlobalModels.Role();
     
     const session = await getServerSession(authOptions);
     if (!session) {

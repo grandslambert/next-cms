@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
-import connectDB from '@/lib/mongodb';
-import { User, Role, SiteUser } from '@/lib/models';
+import { GlobalModels } from '@/lib/model-factory';
 import bcrypt from 'bcryptjs';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
@@ -11,7 +10,10 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    await connectDB();
+    const User = await GlobalModels.User();
+    const Role = await GlobalModels.Role();
+    const SiteUser = await GlobalModels.SiteUser();
+    const Site = await GlobalModels.Site();
     
     const session = await getServerSession(authOptions);
     if (!session?.user) {
@@ -19,7 +21,6 @@ export async function GET(
     }
 
     const user = await User.findById(params.id)
-      .populate('role', 'name label permissions')
       .select('-password')
       .lean();
 
@@ -27,25 +28,41 @@ export async function GET(
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
+    // Manually fetch role
+    const userRole = await Role.findById(user.role);
+
     // Get site assignments
-    const siteAssignments = await SiteUser.find({ user_id: params.id })
-      .populate('site_id', 'name display_name')
-      .populate('role_id', 'name label')
-      .lean();
+    const siteAssignments = await SiteUser.find({ user_id: params.id }).lean();
+    
+    // Fetch related sites and roles for assignments
+    const siteIds = siteAssignments.map(sa => sa.site_id);
+    const assignmentRoleIds = siteAssignments.map(sa => sa.role_id);
+    
+    const relatedSites = await Site.find({ id: { $in: siteIds } }).lean() as any[];
+    const assignmentRoles = await Role.find({ _id: { $in: assignmentRoleIds } }).lean() as any[];
+    
+    // Map by ID
+    const sitesById = new Map(relatedSites.map(s => [s.id.toString(), s]));
+    const assignmentRolesById = new Map(assignmentRoles.map(r => [r._id.toString(), r]));
     
     // Add id field and format response for compatibility
     const responseUser = {
       ...user,
       id: user._id.toString(),
-      role_name: (user.role as any)?.name,
-      role_display_name: (user.role as any)?.label,
-      sites: siteAssignments.map(sa => ({
-        id: (sa.site_id as any)?._id?.toString(),
-        name: (sa.site_id as any)?.name,
-        display_name: (sa.site_id as any)?.display_name,
-        role_id: (sa.role_id as any)?._id?.toString(),
-        role_display_name: (sa.role_id as any)?.label,
-      }))
+      role_name: userRole?.name || 'Unknown',
+      role_display_name: userRole?.label || 'Unknown',
+      sites: siteAssignments.map(sa => {
+        const site = sitesById.get(sa.site_id.toString());
+        const role = assignmentRolesById.get(sa.role_id.toString());
+        
+        return {
+          id: site?.id || '',
+          name: site?.name || 'Unknown',
+          display_name: site?.display_name || 'Unknown',
+          role_id: role?._id?.toString() || '',
+          role_display_name: role?.label || 'Unknown',
+        };
+      })
     };
 
     return NextResponse.json({ user: responseUser });
@@ -60,7 +77,9 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    await connectDB();
+    const User = await GlobalModels.User();
+    const Role = await GlobalModels.Role();
+    const SiteUser = await GlobalModels.SiteUser();
     
     const session = await getServerSession(authOptions);
     const isSuperAdmin = (session?.user as any)?.isSuperAdmin || false;
@@ -133,9 +152,11 @@ export async function PUT(
       updateData,
       { new: true }
     )
-      .populate('role', 'name label permissions')
       .select('-password')
       .lean();
+
+    // Manually fetch role
+    const updatedUserRole = await Role.findById(updatedUser?.role);
 
     // Update site assignments (only for admins, not self-edit)
     if (sites && !isSelfEdit && (isSuperAdmin || hasPermission)) {
@@ -182,8 +203,8 @@ export async function PUT(
     const responseUser = {
       ...updatedUser,
       id: updatedUser?._id.toString(),
-      role_name: (updatedUser?.role as any)?.name,
-      role_display_name: (updatedUser?.role as any)?.label,
+      role_name: updatedUserRole?.name || 'Unknown',
+      role_display_name: updatedUserRole?.label || 'Unknown',
     };
 
     return NextResponse.json({ user: responseUser });
@@ -198,7 +219,8 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    await connectDB();
+    const User = await GlobalModels.User();
+    const SiteUser = await GlobalModels.SiteUser();
     
     const session = await getServerSession(authOptions);
     const isSuperAdmin = (session?.user as any)?.isSuperAdmin || false;
