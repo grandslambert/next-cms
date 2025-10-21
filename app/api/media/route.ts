@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
 import { connectDB } from '@/lib/db';
-import { Media, Setting, User } from '@/lib/models';
+import { Media, Setting } from '@/lib/models';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 import sharp from 'sharp';
@@ -15,22 +15,27 @@ async function getImageSizes(siteId: string) {
     await connectDB();
     const setting = await Setting.findOne({
       site_id: new mongoose.Types.ObjectId(siteId),
-      setting_key: 'image_sizes',
+      key: 'image_sizes',
     }).lean();
     
-    if (setting && setting.setting_value) {
-      const sizes = JSON.parse(setting.setting_value);
+    console.log('📐 Loading image sizes for site:', siteId);
+    console.log('📐 Setting found:', setting);
+    
+    if (setting && (setting as any).value) {
+      const sizes = (setting as any).value;
+      console.log('📐 Using custom image sizes:', sizes);
       return { ...sizes, full: null }; // Always include full (original)
     }
   } catch (error) {
     console.error('Error loading image sizes from settings:', error);
   }
   
-  // Fallback to defaults
+  console.log('📐 Using default image sizes (no custom settings found)');
+  // Fallback to defaults (matching media settings page defaults)
   return {
-    thumbnail: { width: 150, height: 150 },
-    medium: { width: 300, height: 300 },
-    large: { width: 1024, height: 1024 },
+    thumbnail: { width: 150, height: 150, crop: 'cover' },
+    medium: { width: 300, height: 300, crop: 'inside' },
+    large: { width: 1024, height: 1024, crop: 'inside' },
     full: null,
   };
 }
@@ -81,9 +86,12 @@ export async function GET(request: NextRequest) {
     ]);
 
     // Format for UI compatibility
-    const formattedMedia = media.map((m) => ({
+    const formattedMedia = media.map((m: any) => ({
       ...m,
       id: m._id.toString(),
+      mime_type: m.mimetype, // Map mimetype to mime_type for frontend
+      original_name: m.original_filename, // Map original_filename to original_name for frontend
+      url: m.filepath, // Map filepath to url for frontend
       uploaded_by_name: (m.uploaded_by as any)?.username || 'Unknown',
     }));
 
@@ -140,6 +148,7 @@ export async function POST(request: NextRequest) {
 
     let width: number | null = null;
     let height: number | null = null;
+    let sizes: any = null;
 
     // Check if it's an image
     if (file.type.startsWith('image/')) {
@@ -151,7 +160,77 @@ export async function POST(request: NextRequest) {
       // Save original image
       await writeFile(filepath, buffer);
 
-      // TODO: Generate image sizes (thumbnail, medium, large) if needed
+      // Generate image sizes based on media settings
+      const imageSizes = await getImageSizes(siteId);
+      const generatedSizes: any = {};
+
+      for (const [sizeName, sizeConfig] of Object.entries(imageSizes)) {
+        if (sizeName === 'full' || !sizeConfig) {
+          // Skip 'full' - that's the original
+          continue;
+        }
+
+        const { width: maxWidth, height: maxHeight, crop } = sizeConfig as { 
+          width: number; 
+          height: number; 
+          crop?: 'cover' | 'contain' | 'fill' | 'inside';
+        };
+        
+        const cropStyle = crop || 'inside';
+        const resizedFilename = `${baseFilename}-${sizeName}${ext}`;
+        const resizedFilepath = path.join(uploadDir, resizedFilename);
+
+        // Configure Sharp resize options based on crop style
+        const resizeOptions: any = {
+          width: maxWidth,
+          height: maxHeight,
+        };
+
+        switch (cropStyle) {
+          case 'cover':
+            // Cover - fill entire area, crop excess
+            resizeOptions.fit = 'cover';
+            resizeOptions.position = 'centre';
+            break;
+          case 'contain':
+            // Contain - fit entire image with letterboxing
+            resizeOptions.fit = 'contain';
+            resizeOptions.background = { r: 255, g: 255, b: 255, alpha: 1 };
+            break;
+          case 'fill':
+            // Fill - stretch to exact dimensions
+            resizeOptions.fit = 'fill';
+            break;
+          case 'inside':
+          default:
+            // Inside - fit within dimensions, maintain aspect ratio
+            resizeOptions.fit = 'inside';
+            resizeOptions.withoutEnlargement = true;
+            break;
+        }
+
+        await sharp(buffer)
+          .resize(resizeOptions)
+          .toFile(resizedFilepath);
+
+        const resizedMetadata = await sharp(resizedFilepath).metadata();
+
+        generatedSizes[sizeName] = {
+          url: `/uploads/${folderPath}/${resizedFilename}`,
+          width: resizedMetadata.width,
+          height: resizedMetadata.height,
+          crop: cropStyle,
+        };
+      }
+
+      // Always include the full/original size
+      generatedSizes.full = {
+        url: `/uploads/${folderPath}/${filename}`,
+        width,
+        height,
+      };
+
+      sizes = generatedSizes;
     } else {
       // Non-image files - just save original
       await writeFile(filepath, buffer);
@@ -168,6 +247,7 @@ export async function POST(request: NextRequest) {
       filesize: file.size,
       width,
       height,
+      sizes: sizes ? JSON.stringify(sizes) : null,
       alt_text: altText,
       caption,
       uploaded_by: new mongoose.Types.ObjectId(userId),
@@ -188,10 +268,14 @@ export async function POST(request: NextRequest) {
       siteId,
     });
 
+    const mediaObj = newMedia.toObject();
     return NextResponse.json({ 
       media: {
-        ...newMedia.toObject(),
+        ...mediaObj,
         id: newMedia._id.toString(),
+        mime_type: mediaObj.mimetype, // Map mimetype to mime_type for frontend
+        original_name: mediaObj.original_filename, // Map original_filename to original_name for frontend
+        url: mediaObj.filepath, // Map filepath to url for frontend
       }
     }, { status: 201 });
   } catch (error) {

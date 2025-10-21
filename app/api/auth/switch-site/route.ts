@@ -46,11 +46,12 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Session will be updated on next request via JWT callback
+    // Return the site_id to be updated in the session by the client
     return NextResponse.json({ 
       success: true,
       site_id: site_id,
-      message: 'Site switched successfully. Please refresh the page.',
+      site_name: (site as any).display_name,
+      message: 'Site switched successfully',
     });
   } catch (error) {
     console.error('Error switching site:', error);

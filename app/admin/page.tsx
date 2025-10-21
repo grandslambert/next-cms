@@ -37,7 +37,7 @@ const PostTypeCount = ({ postType }: { postType: string }) => {
 };
 
 // Component to fetch and display count for a specific taxonomy
-const TaxonomyCount = ({ taxonomyId }: { taxonomyId: number }) => {
+const TaxonomyCount = ({ taxonomyId }: { taxonomyId: string }) => {
   const { data } = useQuery({
     queryKey: ['terms', taxonomyId, 'count'],
     queryFn: async () => {
@@ -46,7 +46,7 @@ const TaxonomyCount = ({ taxonomyId }: { taxonomyId: number }) => {
     },
   });
 
-  return <p className="text-2xl font-bold text-gray-900">{data?.terms?.length || 0}</p>;
+  return <p className="text-2xl font-bold text-gray-900">{data?.total || 0}</p>;
 };
 
 export default function AdminDashboard() {
@@ -119,17 +119,18 @@ export default function AdminDashboard() {
   // Filter post types to show in dashboard based on user permissions
   const dashboardPostTypes = postTypesData?.postTypes?.filter((pt: any) => {
     // Super admin can see all post types
-    if (isSuperAdmin) return pt.show_in_dashboard;
-    const hasPermission = permissions[`manage_posts_${pt.name}`];
-    return pt.show_in_dashboard && hasPermission;
+    if (isSuperAdmin) return pt.show_in_dashboard !== false;
+    // Check for manage_posts_all OR specific post type permission
+    const hasPermission = permissions.manage_posts_all || permissions[`manage_posts_${pt.name}`];
+    return (pt.show_in_dashboard !== false) && hasPermission;
   }) || [];
 
   // Filter taxonomies to show in dashboard based on user permissions
   const dashboardTaxonomies = taxonomiesData?.taxonomies?.filter((tax: any) => {
     // Super admin can see all taxonomies
-    if (isSuperAdmin) return tax.show_in_dashboard;
+    if (isSuperAdmin) return tax.show_in_dashboard !== false;
     const hasPermission = permissions.manage_taxonomies;
-    return tax.show_in_dashboard && hasPermission;
+    return (tax.show_in_dashboard !== false) && hasPermission;
   }) || [];
 
   const isContentLoading = postsLoading || mediaLoading || usersLoading || postTypesLoading || taxonomiesLoading;
@@ -165,7 +166,7 @@ export default function AdminDashboard() {
                 {dashboardPostTypes.map((postType: any) => (
                   <Link key={postType.name} href={`/admin/post-type/${postType.name}`} className="group">
                     <div className="text-center p-4 rounded-lg transition-colors hover:bg-gray-50">
-                      <div className="text-4xl mb-2">{postType.icon}</div>
+                      <div className="text-4xl mb-2">{postType.menu_icon || '📄'}</div>
                       <p className="text-sm font-medium text-gray-600 mb-1 group-hover:text-primary-600">{postType.label}</p>
                       <PostTypeCount postType={postType.name} />
                     </div>
@@ -252,7 +253,8 @@ export default function AdminDashboard() {
               const filteredPosts = postsData?.posts?.filter((post: any) => {
                 // Super admin can see all posts
                 if (isSuperAdmin) return true;
-                return permissions[`manage_posts_${post.post_type}`];
+                // Check for manage_posts_all OR specific post type permission
+                return permissions.manage_posts_all || permissions[`manage_posts_${post.post_type}`];
               }) || [];
 
               // Get post types with menu_order for sorting

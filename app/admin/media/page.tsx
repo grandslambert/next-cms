@@ -28,8 +28,8 @@ export default function MediaPage() {
   const [editTitle, setEditTitle] = useState('');
   const [editAltText, setEditAltText] = useState('');
   const [regenerating, setRegenerating] = useState(false);
-  const [currentFolderId, setCurrentFolderId] = useState<number | null>(null);
-  const [folderPath, setFolderPath] = useState<{ id: number | null; name: string }[]>([{ id: null, name: 'Media Library' }]);
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
+  const [folderPath, setFolderPath] = useState<{ id: string | null; name: string }[]>([{ id: null, name: 'Media Library' }]);
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
   const [showRenameFolderModal, setShowRenameFolderModal] = useState(false);
   const [editingFolder, setEditingFolder] = useState<any>(null);
@@ -37,7 +37,7 @@ export default function MediaPage() {
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [movingMedia, setMovingMedia] = useState<any>(null);
   const [showTrash, setShowTrash] = useState(false);
-  const [selectedMedia, setSelectedMedia] = useState<number[]>([]);
+  const [selectedMedia, setSelectedMedia] = useState<string[]>([]);
   const [bulkAction, setBulkAction] = useState<string>('');
   const [showBulkMoveModal, setShowBulkMoveModal] = useState(false);
   const [showDeleteFolderModal, setShowDeleteFolderModal] = useState(false);
@@ -45,7 +45,7 @@ export default function MediaPage() {
   const [folderMediaCount, setFolderMediaCount] = useState(0);
   const [folderSubfolderCount, setFolderSubfolderCount] = useState(0);
   const [deleteAction, setDeleteAction] = useState<'move' | 'delete'>('move');
-  const [moveToFolderId, setMoveToFolderId] = useState<number | null>(null);
+  const [moveToFolderId, setMoveToFolderId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
 
@@ -79,8 +79,17 @@ export default function MediaPage() {
     },
   });
 
+  // Fetch trash count
+  const { data: trashCountData } = useQuery({
+    queryKey: ['media-trash-count'],
+    queryFn: async () => {
+      const res = await axios.get('/api/media?trash=true&limit=0');
+      return res.data;
+    },
+  });
+
   const updateMutation = useMutation({
-    mutationFn: async ({ id, title, alt_text }: { id: number; title: string; alt_text: string }) => {
+    mutationFn: async ({ id, title, alt_text }: { id: string; title: string; alt_text: string }) => {
       const res = await axios.put(`/api/media/${id}`, { title, alt_text });
       return res.data;
     },
@@ -95,12 +104,13 @@ export default function MediaPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: number) => {
+    mutationFn: async (id: string) => {
       const res = await axios.delete(`/api/media/${id}`);
       return res.data;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['media'] });
+      queryClient.invalidateQueries({ queryKey: ['media-trash-count'] });
       
       // Invalidate related queries if image was used
       if (data.cleared_references && data.cleared_references.total > 0) {
@@ -142,7 +152,7 @@ export default function MediaPage() {
   });
 
   const renameFolderMutation = useMutation({
-    mutationFn: async ({ id, name }: { id: number; name: string }) => {
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
       const res = await axios.put(`/api/media/folders/${id}`, { name, parent_id: editingFolder?.parent_id });
       return res.data;
     },
@@ -160,7 +170,7 @@ export default function MediaPage() {
   });
 
   const deleteFolderMutation = useMutation({
-    mutationFn: async ({ id, action, targetFolderId }: { id: number; action?: string; targetFolderId?: number | null }) => {
+    mutationFn: async ({ id, action, targetFolderId }: { id: string; action?: string; targetFolderId?: string | null }) => {
       let url = `/api/media/folders/${id}`;
       if (action) {
         url += `?action=${action}`;
@@ -210,7 +220,7 @@ export default function MediaPage() {
   });
 
   const moveMediaMutation = useMutation({
-    mutationFn: async ({ id, folder_id }: { id: number; folder_id: number | null }) => {
+    mutationFn: async ({ id, folder_id }: { id: string; folder_id: string | null }) => {
       const res = await axios.put(`/api/media/${id}/move`, { folder_id });
       return res.data;
     },
@@ -228,7 +238,7 @@ export default function MediaPage() {
   });
 
   const bulkActionMutation = useMutation({
-    mutationFn: async ({ action, media_ids, folder_id }: { action: string; media_ids: number[]; folder_id?: number | null }) => {
+    mutationFn: async ({ action, media_ids, folder_id }: { action: string; media_ids: string[]; folder_id?: string | null }) => {
       const res = await axios.post('/api/media/bulk', { action, media_ids, folder_id });
       return res.data;
     },
@@ -236,6 +246,7 @@ export default function MediaPage() {
       queryClient.invalidateQueries({ queryKey: ['media'] });
       queryClient.invalidateQueries({ queryKey: ['media-folders'] });
       queryClient.invalidateQueries({ queryKey: ['all-media-folders'] });
+      queryClient.invalidateQueries({ queryKey: ['media-trash-count'] });
       toast.success(data.message);
       setSelectedMedia([]);
       setBulkAction('');
@@ -316,6 +327,7 @@ export default function MediaPage() {
     }
 
     queryClient.invalidateQueries({ queryKey: ['media'] });
+    queryClient.invalidateQueries({ queryKey: ['media-trash-count'] });
     
     if (errorCount === 0) {
       toast.success(`${successCount} file${successCount > 1 ? 's' : ''} uploaded successfully`);
@@ -336,7 +348,7 @@ export default function MediaPage() {
     }, 2000);
   };
 
-  const handleDelete = async (id: number, filename: string) => {
+  const handleDelete = async (id: string, filename: string) => {
     try {
       // Check where the image is used
       const usageRes = await axios.get(`/api/media/${id}/usage`);
@@ -513,6 +525,14 @@ export default function MediaPage() {
       return;
     }
 
+    if (bulkAction === 'regenerate') {
+      if (!confirm(`Regenerate image sizes for ${selectedMedia.length} selected item${selectedMedia.length !== 1 ? 's' : ''}?\n\nThis will recreate all size variants based on current settings.`)) {
+        return;
+      }
+      handleBulkRegenerate();
+      return;
+    }
+
     if (bulkAction === 'permanent-delete') {
       if (!confirm(`⚠️ PERMANENTLY delete ${selectedMedia.length} selected item${selectedMedia.length !== 1 ? 's' : ''}?\n\nThis action cannot be undone and will delete all files from the server.`)) {
         return;
@@ -522,7 +542,7 @@ export default function MediaPage() {
     bulkActionMutation.mutate({ action: bulkAction, media_ids: selectedMedia });
   };
 
-  const handleBulkMove = (folderId: number | null) => {
+  const handleBulkMove = (folderId: string | null) => {
     bulkActionMutation.mutate({ action: 'move', media_ids: selectedMedia, folder_id: folderId });
     setShowBulkMoveModal(false);
   };
@@ -543,7 +563,7 @@ export default function MediaPage() {
     }
   };
 
-  const handleRegenerateOne = async (id: number, name: string) => {
+  const handleRegenerateOne = async (id: string, name: string) => {
     if (!confirm(`Regenerate image sizes for "${name}"?\n\nThis will recreate all size variants based on current settings.`)) {
       return;
     }
@@ -559,6 +579,37 @@ export default function MediaPage() {
     } finally {
       setRegenerating(false);
     }
+  };
+
+  const handleBulkRegenerate = async () => {
+    setRegenerating(true);
+    const loadingToast = toast.loading(`Regenerating ${selectedMedia.length} image${selectedMedia.length > 1 ? 's' : ''}...`);
+
+    let successCount = 0;
+    let failedCount = 0;
+
+    for (const mediaId of selectedMedia) {
+      try {
+        await axios.post('/api/media/regenerate', { mediaId });
+        successCount++;
+      } catch (error) {
+        console.error(`Failed to regenerate media ${mediaId}:`, error);
+        failedCount++;
+      }
+    }
+
+    queryClient.invalidateQueries({ queryKey: ['media'] });
+    toast.dismiss(loadingToast);
+    setRegenerating(false);
+
+    if (failedCount === 0) {
+      toast.success(`Successfully regenerated ${successCount} image${successCount > 1 ? 's' : ''}!`);
+    } else {
+      toast.error(`Regenerated ${successCount}, failed ${failedCount}`);
+    }
+
+    setSelectedMedia([]);
+    setBulkAction('');
   };
 
   const handleRegenerateAll = async () => {
@@ -611,9 +662,14 @@ export default function MediaPage() {
         <div className="flex space-x-3">
           <button
             onClick={() => setShowTrash(true)}
-            className="px-4 py-2 border border-red-600 text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+            className="px-4 py-2 border border-red-600 text-red-600 rounded-lg hover:bg-red-50 transition-colors relative"
           >
             🗑️ Trash
+            {trashCountData?.total > 0 && (
+              <span className="ml-1.5 inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold leading-none text-white bg-red-600 rounded-full">
+                {trashCountData.total}
+              </span>
+            )}
           </button>
           <button
             onClick={handleRegenerateAll}
@@ -681,6 +737,7 @@ export default function MediaPage() {
           >
             <option value="">Bulk Actions</option>
             <option value="move">Move to Folder</option>
+            <option value="regenerate">Regenerate Sizes</option>
             <option value="trash">Move to Trash</option>
           </select>
           <button

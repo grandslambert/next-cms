@@ -5,7 +5,7 @@ import { connectDB } from '@/lib/db';
 import { Media } from '@/lib/models';
 import mongoose from 'mongoose';
 
-export async function PUT(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {
@@ -13,10 +13,10 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { ids, action, folder_id } = body;
+    const { media_ids, action, folder_id } = body;
 
-    if (!ids || !Array.isArray(ids) || ids.length === 0) {
-      return NextResponse.json({ error: 'ids array is required' }, { status: 400 });
+    if (!media_ids || !Array.isArray(media_ids) || media_ids.length === 0) {
+      return NextResponse.json({ error: 'media_ids array is required' }, { status: 400 });
     }
 
     if (!action) {
@@ -24,39 +24,52 @@ export async function PUT(request: NextRequest) {
     }
 
     // Validate all IDs
-    const invalidIds = ids.filter((id) => !mongoose.Types.ObjectId.isValid(id));
+    const invalidIds = media_ids.filter((id: string) => !mongoose.Types.ObjectId.isValid(id));
     if (invalidIds.length > 0) {
       return NextResponse.json({ error: 'Invalid media IDs found' }, { status: 400 });
     }
 
+    const siteId = (session.user as any).currentSiteId;
+
     await connectDB();
 
-    const objectIds = ids.map((id) => new mongoose.Types.ObjectId(id));
+    const objectIds = media_ids.map((id: string) => new mongoose.Types.ObjectId(id));
 
     let result;
+    let message = '';
+
     switch (action) {
+      case 'trash':
       case 'delete':
         result = await Media.updateMany(
-          { _id: { $in: objectIds } },
+          { 
+            _id: { $in: objectIds },
+            site_id: new mongoose.Types.ObjectId(siteId)
+          },
           { status: 'trash', deleted_at: new Date() }
         );
+        message = `Moved ${result.modifiedCount} item${result.modifiedCount !== 1 ? 's' : ''} to trash`;
         break;
 
       case 'move':
-        if (folder_id !== null && folder_id !== undefined && !mongoose.Types.ObjectId.isValid(folder_id)) {
+        if (folder_id !== null && folder_id !== undefined && folder_id !== '' && !mongoose.Types.ObjectId.isValid(folder_id)) {
           return NextResponse.json({ error: 'Invalid folder ID' }, { status: 400 });
         }
         result = await Media.updateMany(
-          { _id: { $in: objectIds } },
-          { folder_id: folder_id ? new mongoose.Types.ObjectId(folder_id) : null }
+          { 
+            _id: { $in: objectIds },
+            site_id: new mongoose.Types.ObjectId(siteId)
+          },
+          { folder_id: (folder_id && folder_id !== 'null') ? new mongoose.Types.ObjectId(folder_id) : null }
         );
+        message = `Moved ${result.modifiedCount} item${result.modifiedCount !== 1 ? 's' : ''}`;
         break;
 
       default:
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
 
-    return NextResponse.json({ success: true, modified: result.modifiedCount });
+    return NextResponse.json({ success: true, modified: result.modifiedCount, message });
   } catch (error) {
     console.error('Error performing bulk action:', error);
     return NextResponse.json({ error: 'Failed to perform bulk action' }, { status: 500 });

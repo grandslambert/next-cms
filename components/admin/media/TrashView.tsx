@@ -11,7 +11,7 @@ interface TrashViewProps {
 }
 
 export default function TrashView({ onClose }: TrashViewProps) {
-  const [selectedMedia, setSelectedMedia] = useState<number[]>([]);
+  const [selectedMedia, setSelectedMedia] = useState<string[]>([]);
   const [bulkAction, setBulkAction] = useState<string>('');
   const queryClient = useQueryClient();
 
@@ -25,12 +25,13 @@ export default function TrashView({ onClose }: TrashViewProps) {
   });
 
   const restoreMediaMutation = useMutation({
-    mutationFn: async (id: number) => {
+    mutationFn: async (id: string) => {
       const res = await axios.post(`/api/media/${id}/restore`);
       return res.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['media'] });
+      queryClient.invalidateQueries({ queryKey: ['media-trash-count'] });
       toast.success('Media restored successfully');
     },
     onError: () => {
@@ -39,12 +40,13 @@ export default function TrashView({ onClose }: TrashViewProps) {
   });
 
   const permanentDeleteMutation = useMutation({
-    mutationFn: async (id: number) => {
+    mutationFn: async (id: string) => {
       const res = await axios.delete(`/api/media/${id}/permanent-delete`);
       return res.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['media'] });
+      queryClient.invalidateQueries({ queryKey: ['media-trash-count'] });
       toast.success('Media permanently deleted');
     },
     onError: () => {
@@ -54,11 +56,12 @@ export default function TrashView({ onClose }: TrashViewProps) {
 
   const emptyTrashMutation = useMutation({
     mutationFn: async () => {
-      const res = await axios.delete('/api/media/trash/empty');
+      const res = await axios.post('/api/media/trash/empty');
       return res.data;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['media'] });
+      queryClient.invalidateQueries({ queryKey: ['media-trash-count'] });
       toast.success(data.message);
     },
     onError: () => {
@@ -67,12 +70,13 @@ export default function TrashView({ onClose }: TrashViewProps) {
   });
 
   const bulkActionMutation = useMutation({
-    mutationFn: async ({ action, media_ids }: { action: string; media_ids: number[] }) => {
+    mutationFn: async ({ action, media_ids }: { action: string; media_ids: string[] }) => {
       const res = await axios.post('/api/media/bulk', { action, media_ids });
       return res.data;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['media'] });
+      queryClient.invalidateQueries({ queryKey: ['media-trash-count'] });
       toast.success(data.message);
       setSelectedMedia([]);
       setBulkAction('');

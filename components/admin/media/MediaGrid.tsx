@@ -5,19 +5,19 @@ interface MediaGridProps {
   media: any[];
   isLoading: boolean;
   showTrash: boolean;
-  selectedMedia: number[];
+  selectedMedia: string[];
   onOpenFolder: (folder: any) => void;
   onEditFolder: (folder: any) => void;
   onDeleteFolder: (folder: any) => void;
   onEditMedia: (item: any) => void;
   onMoveMedia: (item: any) => void;
   onCopyUrl: (url: string) => void;
-  onDeleteMedia: (id: number, name: string) => void;
-  onDropMedia: (mediaId: number, folderId: number | null) => void;
-  onSelectMedia: (id: number) => void;
+  onDeleteMedia: (id: string, name: string) => void;
+  onDropMedia: (mediaId: string, folderId: string | null) => void;
+  onSelectMedia: (id: string) => void;
   onSelectAll: () => void;
-  onRestoreMedia?: (id: number, name: string) => void;
-  onPermanentDelete?: (id: number, name: string) => void;
+  onRestoreMedia?: (id: string, name: string) => void;
+  onPermanentDelete?: (id: string, name: string) => void;
 }
 
 export default function MediaGrid({
@@ -39,8 +39,8 @@ export default function MediaGrid({
   onRestoreMedia,
   onPermanentDelete,
 }: Readonly<MediaGridProps>) {
-  const [draggedItem, setDraggedItem] = useState<number | null>(null);
-  const [dropTarget, setDropTarget] = useState<number | null>(null);
+  const [draggedItem, setDraggedItem] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
 
   const allMediaSelected = media && media.length > 0 && selectedMedia.length === media.length;
   if (isLoading) {
@@ -63,10 +63,10 @@ export default function MediaGrid({
     );
   }
 
-  const handleDragStart = (e: React.DragEvent, mediaId: number) => {
+  const handleDragStart = (e: React.DragEvent, mediaId: string) => {
     setDraggedItem(mediaId);
     e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', mediaId.toString());
+    e.dataTransfer.setData('text/plain', mediaId);
   };
 
   const handleDragEnd = () => {
@@ -74,7 +74,7 @@ export default function MediaGrid({
     setDropTarget(null);
   };
 
-  const handleDragOver = (e: React.DragEvent, folderId: number | null) => {
+  const handleDragOver = (e: React.DragEvent, folderId: string | null) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     setDropTarget(folderId);
@@ -84,7 +84,7 @@ export default function MediaGrid({
     setDropTarget(null);
   };
 
-  const handleDrop = (e: React.DragEvent, folderId: number | null) => {
+  const handleDrop = (e: React.DragEvent, folderId: string | null) => {
     e.preventDefault();
     if (draggedItem !== null) {
       onDropMedia(draggedItem, folderId);

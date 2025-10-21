@@ -22,6 +22,7 @@ export default function UsersPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [roleId, setRoleId] = useState<string>(''); // Will be set when roles load
+  const [selectedSites, setSelectedSites] = useState<Array<{site_id: string, role_id: string}>>([]);
   const queryClient = useQueryClient();
 
   // Get user switching data
@@ -55,6 +56,16 @@ export default function UsersPage() {
       const res = await axios.get('/api/settings/authentication');
       return res.data;
     },
+  });
+
+  // Fetch sites for super admins
+  const { data: sitesData } = useQuery({
+    queryKey: ['sites'],
+    queryFn: async () => {
+      const res = await axios.get('/api/sites');
+      return res.data;
+    },
+    enabled: isSuperAdmin,
   });
 
   // Set default role when roles load
@@ -112,7 +123,7 @@ export default function UsersPage() {
   });
 
   const switchUserMutation = useMutation({
-    mutationFn: async (targetUserId: number) => {
+    mutationFn: async (targetUserId: string) => {
       const res = await axios.post('/api/auth/switch-user', { targetUserId });
       return res.data.switchData;
     },
@@ -121,7 +132,12 @@ export default function UsersPage() {
       toast.success(`Switched to ${switchData.name}`);
       queryClient.invalidateQueries();
       router.refresh();
-      router.push('/admin/sites'); // Redirect to sites after switching
+      // Redirect based on user type
+      if (switchData.isSuperAdmin) {
+        router.push('/admin/sites');
+      } else {
+        router.push('/admin');
+      }
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.error || 'Failed to switch user');
@@ -130,7 +146,15 @@ export default function UsersPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const formData = { username, first_name: firstName, last_name: lastName, email, password, role_id: roleId };
+    const formData = { 
+      username, 
+      first_name: firstName, 
+      last_name: lastName, 
+      email, 
+      password, 
+      role_id: roleId,
+      sites: selectedSites.length > 0 ? selectedSites : undefined
+    };
     
     if (editingId) {
       updateMutation.mutate({ id: editingId, data: formData });
@@ -156,7 +180,7 @@ export default function UsersPage() {
     }
   };
 
-  const handleSwitchUser = (userId: number, username: string) => {
+  const handleSwitchUser = (userId: string, username: string) => {
     if (confirm(`Switch to user "${username}"? You can switch back from the sidebar.`)) {
       switchUserMutation.mutate(userId);
     }
@@ -170,8 +194,27 @@ export default function UsersPage() {
     setPassword('');
     setShowPassword(false);
     setRoleId(''); // Will use first available role
+    setSelectedSites([]);
     setEditingId(null);
     setShowForm(false);
+  };
+
+  const handleAddSite = () => {
+    const firstSite = sitesData?.sites?.[0];
+    const firstRole = rolesData?.roles?.find((r: any) => r.name !== 'super_admin');
+    if (firstSite && firstRole) {
+      setSelectedSites([...selectedSites, { site_id: firstSite.id, role_id: firstRole.id }]);
+    }
+  };
+
+  const handleRemoveSite = (index: number) => {
+    setSelectedSites(selectedSites.filter((_, i) => i !== index));
+  };
+
+  const handleUpdateSiteAssignment = (index: number, field: 'site_id' | 'role_id', value: string) => {
+    const updated = [...selectedSites];
+    updated[index][field] = value;
+    setSelectedSites(updated);
   };
 
   // Check which password requirements are met
@@ -465,6 +508,68 @@ export default function UsersPage() {
                 </select>
               </div>
             </div>
+
+            {/* Site Assignments - Only for super admins */}
+            {isSuperAdmin && !editingId && (
+              <div className="border-t pt-4 mt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Site Assignments (Optional)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleAddSite}
+                    className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+                  >
+                    + Add Site
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mb-3">
+                  Leave empty if user should not be assigned to any sites. Super admins automatically have access to all sites.
+                </p>
+                {selectedSites.length > 0 ? (
+                  <div className="space-y-2">
+                    {selectedSites.map((assignment, index) => (
+                      <div key={index} className="flex gap-2 items-center">
+                        <select
+                          value={assignment.site_id}
+                          onChange={(e) => handleUpdateSiteAssignment(index, 'site_id', e.target.value)}
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                        >
+                          {sitesData?.sites?.map((site: any) => (
+                            <option key={site.id} value={site.id}>
+                              {site.display_name}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          value={assignment.role_id}
+                          onChange={(e) => handleUpdateSiteAssignment(index, 'role_id', e.target.value)}
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                        >
+                          {rolesData?.roles
+                            ?.filter((role: any) => role.name !== 'super_admin')
+                            .map((role: any) => (
+                              <option key={role.id} value={role.id}>
+                                {role.display_name}
+                              </option>
+                            ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveSite(index)}
+                          className="px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500 italic">No site assignments</p>
+                )}
+              </div>
+            )}
           </form>
         </div>
       )}

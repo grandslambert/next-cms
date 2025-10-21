@@ -13,6 +13,8 @@ export async function GET(request: NextRequest) {
     }
 
     const siteId = (session.user as any).currentSiteId;
+    const searchParams = request.nextUrl.searchParams;
+    const parentId = searchParams.get('parent_id');
 
     if (!siteId || !mongoose.Types.ObjectId.isValid(siteId)) {
       return NextResponse.json({ error: 'Invalid site ID' }, { status: 400 });
@@ -20,13 +22,47 @@ export async function GET(request: NextRequest) {
 
     await connectDB();
 
-    const folders = await MediaFolder.find({ site_id: new mongoose.Types.ObjectId(siteId) })
+    // Build query - filter by parent_id if provided
+    const query: any = { site_id: new mongoose.Types.ObjectId(siteId) };
+    
+    if (parentId === 'null' || parentId === null || parentId === '') {
+      // Root level - folders with no parent
+      query.parent_id = null;
+    } else if (mongoose.Types.ObjectId.isValid(parentId)) {
+      // Subfolders of a specific folder
+      query.parent_id = new mongoose.Types.ObjectId(parentId);
+    } else {
+      // Invalid parent_id
+      query.parent_id = null;
+    }
+
+    const folders = await MediaFolder.find(query)
       .sort({ name: 1 })
       .lean();
 
-    const formattedFolders = folders.map((f) => ({
-      ...f,
-      id: f._id.toString(),
+    // Calculate counts for each folder
+    const { Media } = await import('@/lib/models');
+    
+    const formattedFolders = await Promise.all(folders.map(async (f: any) => {
+      // Count media files in this folder
+      const fileCount = await Media.countDocuments({
+        site_id: new mongoose.Types.ObjectId(siteId),
+        folder_id: f._id,
+        status: 'active',
+      });
+
+      // Count subfolders
+      const subfolderCount = await MediaFolder.countDocuments({
+        site_id: new mongoose.Types.ObjectId(siteId),
+        parent_id: f._id,
+      });
+
+      return {
+        ...f,
+        id: f._id.toString(),
+        file_count: fileCount,
+        subfolder_count: subfolderCount,
+      };
     }));
 
     return NextResponse.json({ folders: formattedFolders });

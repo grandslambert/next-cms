@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth-mongo';
 import connectDB from '@/lib/mongodb';
 import { Site, SiteUser } from '@/lib/models';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import { initializeSiteDefaults } from '@/lib/init-site-defaults';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -100,7 +101,14 @@ export async function POST(request: NextRequest) {
     });
 
     console.log(`✓ Created site: ${display_name} (ID: ${newSite._id})`);
-    console.log(`   Note: MongoDB collections will be created automatically as site_${newSite._id}_*`);
+    
+    // Initialize default data for the new site
+    try {
+      await initializeSiteDefaults(newSite._id);
+    } catch (initError) {
+      console.error('Error initializing site defaults:', initError);
+      // Continue even if initialization fails - site is created
+    }
 
     // Log activity
     const userId = (session?.user as any)?.id;

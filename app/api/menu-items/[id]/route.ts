@@ -45,6 +45,17 @@ export async function PUT(
       return NextResponse.json({ error: 'Menu item not found' }, { status: 404 });
     }
 
+    // Verify menu belongs to current site
+    const Menu = (await import('@/lib/models')).Menu;
+    const menu = await Menu.findOne({
+      _id: currentItem.menu_id,
+      site_id: new mongoose.Types.ObjectId(siteId),
+    }).lean();
+
+    if (!menu) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    }
+
     const updatedItem = await MenuItem.findByIdAndUpdate(
       params.id,
       {
@@ -129,6 +140,17 @@ export async function DELETE(
 
     if (!item) {
       return NextResponse.json({ error: 'Menu item not found' }, { status: 404 });
+    }
+
+    // Verify menu belongs to current site
+    const Menu = (await import('@/lib/models')).Menu;
+    const menu = await Menu.findOne({
+      _id: item.menu_id,
+      site_id: new mongoose.Types.ObjectId(siteId),
+    }).lean();
+
+    if (!menu) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
     // Log activity before deleting

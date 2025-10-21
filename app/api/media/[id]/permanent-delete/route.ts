@@ -27,27 +27,59 @@ export async function DELETE(
 
     await connectDB();
 
-    const media = await Media.findById(params.id).lean();
+    const media = await Media.findOne({
+      _id: new mongoose.Types.ObjectId(params.id),
+      site_id: new mongoose.Types.ObjectId(siteId),
+    }).lean();
 
     if (!media) {
-      return NextResponse.json({ error: 'Media not found' }, { status: 404 });
+      return NextResponse.json({ error: 'Media not found or access denied' }, { status: 404 });
     }
 
-    if (media.status !== 'trash') {
+    if ((media as any).status !== 'trash') {
       return NextResponse.json({ error: 'Media must be in trash before permanent deletion' }, { status: 400 });
     }
 
-    // Delete physical file
+    // Delete physical files (original + all sizes)
     try {
-      const filepath = path.join(process.cwd(), 'public', media.filepath);
+      const filepath = path.join(process.cwd(), 'public', (media as any).filepath);
       await unlink(filepath);
+      console.log(`✓ Deleted original file: ${filepath}`);
     } catch (fileError) {
-      console.error('Error deleting physical file:', fileError);
-      // Continue with database deletion even if file deletion fails
+      console.error('Error deleting original file:', fileError);
+      // Continue with size deletion even if original fails
+    }
+
+    // Delete all size variants
+    if ((media as any).sizes) {
+      try {
+        const sizes = JSON.parse((media as any).sizes);
+        for (const [sizeName, sizeData] of Object.entries(sizes)) {
+          if (sizeName === 'full') continue; // Skip full, it's the original
+          
+          const sizeUrl = (sizeData as any).url;
+          if (sizeUrl) {
+            try {
+              const sizePath = path.join(process.cwd(), 'public', sizeUrl);
+              await unlink(sizePath);
+              console.log(`✓ Deleted ${sizeName} size: ${sizePath}`);
+            } catch (sizeError) {
+              console.error(`Error deleting ${sizeName} size:`, sizeError);
+              // Continue with other sizes
+            }
+          }
+        }
+      } catch (sizesError) {
+        console.error('Error parsing/deleting size variants:', sizesError);
+        // Continue with database deletion
+      }
     }
 
     // Delete from database
-    await Media.findByIdAndDelete(params.id);
+    await Media.findOneAndDelete({
+      _id: new mongoose.Types.ObjectId(params.id),
+      site_id: new mongoose.Types.ObjectId(siteId),
+    });
 
     // Log activity
     await logActivity({

@@ -10,6 +10,7 @@ export interface IMedia extends Document {
   filesize: number;
   width: number | null;
   height: number | null;
+  sizes: string | null; // JSON string of image sizes
   alt_text: string;
   caption: string;
   uploaded_by: mongoose.Types.ObjectId;
@@ -54,6 +55,10 @@ const MediaSchema: Schema = new Schema(
     },
     height: {
       type: Number,
+      default: null,
+    },
+    sizes: {
+      type: String,
       default: null,
     },
     alt_text: {

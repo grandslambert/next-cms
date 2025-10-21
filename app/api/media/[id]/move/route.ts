@@ -21,6 +21,7 @@ export async function PUT(
 
     const body = await request.json();
     const { folder_id } = body;
+    const siteId = (session.user as any).currentSiteId;
 
     if (folder_id && !mongoose.Types.ObjectId.isValid(folder_id)) {
       return NextResponse.json({ error: 'Invalid folder ID' }, { status: 400 });
@@ -28,8 +29,11 @@ export async function PUT(
 
     await connectDB();
 
-    const media = await Media.findByIdAndUpdate(
-      params.id,
+    const media = await Media.findOneAndUpdate(
+      {
+        _id: new mongoose.Types.ObjectId(params.id),
+        site_id: new mongoose.Types.ObjectId(siteId),
+      },
       {
         folder_id: folder_id ? new mongoose.Types.ObjectId(folder_id) : null,
       },
@@ -37,7 +41,7 @@ export async function PUT(
     );
 
     if (!media) {
-      return NextResponse.json({ error: 'Media not found' }, { status: 404 });
+      return NextResponse.json({ error: 'Media not found or access denied' }, { status: 404 });
     }
 
     return NextResponse.json({ 

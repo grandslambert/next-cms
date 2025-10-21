@@ -25,8 +25,11 @@ export async function POST(
 
     await connectDB();
 
-    const media = await Media.findByIdAndUpdate(
-      params.id,
+    const media = await Media.findOneAndUpdate(
+      {
+        _id: new mongoose.Types.ObjectId(params.id),
+        site_id: new mongoose.Types.ObjectId(siteId),
+      },
       {
         status: 'active',
         deleted_at: null,
@@ -35,7 +38,7 @@ export async function POST(
     );
 
     if (!media) {
-      return NextResponse.json({ error: 'Media not found' }, { status: 404 });
+      return NextResponse.json({ error: 'Media not found or access denied' }, { status: 404 });
     }
 
     // Log activity

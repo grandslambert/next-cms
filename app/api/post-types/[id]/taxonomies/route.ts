@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-mongo';
 import { connectDB } from '@/lib/db';
-import { Taxonomy } from '@/lib/models';
+import { Taxonomy, PostType } from '@/lib/models';
 import mongoose from 'mongoose';
 
 export async function GET(
@@ -21,15 +21,25 @@ export async function GET(
 
     await connectDB();
 
-    // Find taxonomies assigned to this post type
+    // First, get the post type to find its name
+    const postType = await PostType.findById(params.id).lean();
+    
+    if (!postType) {
+      return NextResponse.json({ error: 'Post type not found' }, { status: 404 });
+    }
+
+    // Find taxonomies that include this post type name in their post_types array
     const taxonomies = await Taxonomy.find({
-      post_types: new mongoose.Types.ObjectId(params.id),
+      site_id: (postType as any).site_id,
+      post_types: (postType as any).name,
     }).lean();
 
     // Format for UI compatibility
-    const formattedTaxonomies = taxonomies.map((tax) => ({
+    const formattedTaxonomies = taxonomies.map((tax: any) => ({
       ...tax,
       id: tax._id.toString(),
+      label: tax.labels?.plural_name || tax.name,
+      singular_label: tax.labels?.singular_name || tax.name,
     }));
 
     return NextResponse.json({ taxonomies: formattedTaxonomies });

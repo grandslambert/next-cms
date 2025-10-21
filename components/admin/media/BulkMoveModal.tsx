@@ -1,12 +1,12 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 
 interface BulkMoveModalProps {
   readonly isOpen: boolean;
   readonly selectedCount: number;
   readonly folders: any[];
-  readonly currentFolderId: number | null;
+  readonly currentFolderId: string | null;
   readonly onClose: () => void;
-  readonly onMove: (folderId: number | null) => void;
+  readonly onMove: (folderId: string | null) => void;
 }
 
 export default function BulkMoveModal({
@@ -17,6 +17,19 @@ export default function BulkMoveModal({
   onClose,
   onMove,
 }: BulkMoveModalProps) {
+  // Build hierarchical folder structure
+  const hierarchicalFolders = useMemo(() => {
+    const buildTree = (parentId: string | null, level: number = 0): any[] => {
+      return folders
+        .filter((f) => f.parent_id === parentId)
+        .flatMap((folder) => [
+          { ...folder, level },
+          ...buildTree(folder.id, level + 1)
+        ]);
+    };
+    return buildTree(null);
+  }, [folders]);
+
   // Handle ESC key to close modal
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -48,13 +61,15 @@ export default function BulkMoveModal({
           >
             📁 Root (Media Library) {currentFolderId === null && '(Current)'}
           </button>
-          {folders?.map((folder: any) => (
+          {hierarchicalFolders?.map((folder: any) => (
             <button
               key={folder.id}
               onClick={() => onMove(folder.id)}
               disabled={folder.id === currentFolderId}
               className="w-full text-left px-4 py-2 border border-gray-300 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ paddingLeft: `${1 + folder.level * 1.5}rem` }}
             >
+              {folder.level > 0 && <span className="text-gray-400 mr-1">{'└─ '.repeat(1)}</span>}
               📁 {folder.display_name || folder.name} {folder.id === currentFolderId && '(Current)'}
             </button>
           ))}

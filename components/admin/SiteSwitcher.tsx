@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react';
 import { toast } from 'react-hot-toast';
 
 interface Site {
-  id: number;
+  id: string;
   name: string;
   display_name: string;
   description?: string;
@@ -17,14 +17,14 @@ interface Site {
 export default function SiteSwitcher() {
   const { data: session, update } = useSession();
   const [sites, setSites] = useState<Site[]>([]);
-  const [currentSiteId, setCurrentSiteId] = useState<number>(1);
+  const [currentSiteId, setCurrentSiteId] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [switching, setSwitching] = useState(false);
 
   // Get current site ID from session
   useEffect(() => {
     if (session?.user) {
-      const siteId = (session.user as any).currentSiteId || 1;
+      const siteId = (session.user as any).currentSiteId || '';
       setCurrentSiteId(siteId);
     }
   }, [session]);
@@ -48,7 +48,7 @@ export default function SiteSwitcher() {
     fetchSites();
   }, []);
 
-  const handleSiteSwitch = async (siteId: number) => {
+  const handleSiteSwitch = async (siteId: string) => {
     if (siteId === currentSiteId) return;
 
     setSwitching(true);
@@ -58,7 +58,7 @@ export default function SiteSwitcher() {
       const response = await fetch('/api/auth/switch-site', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ siteId }),
+        body: JSON.stringify({ site_id: siteId }),
       });
 
       const data = await response.json();
@@ -73,7 +73,7 @@ export default function SiteSwitcher() {
       
       console.log('✅ Session updated with site', siteId);
       setCurrentSiteId(siteId);
-      toast.success(data.message || `Switched to ${data.siteName}`);
+      toast.success(data.message || `Switched to ${data.site_name}`);
       
       // Reload the page to refresh all data with new site context
       window.location.reload();
@@ -103,7 +103,7 @@ export default function SiteSwitcher() {
             <div className="relative">
               <select
                 value={currentSiteId}
-                onChange={(e) => handleSiteSwitch(Number(e.target.value))}
+                onChange={(e) => handleSiteSwitch(e.target.value)}
                 disabled={switching}
                 className="block w-full pl-2 pr-8 py-1 text-sm font-semibold border-0 bg-transparent text-white hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed appearance-none cursor-pointer rounded"
               >

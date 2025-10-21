@@ -21,6 +21,7 @@ export async function GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams;
     const menuId = searchParams.get('menu_id');
+    const siteId = (session.user as any).currentSiteId;
 
     if (!menuId) {
       return NextResponse.json({ error: 'menu_id is required' }, { status: 400 });
@@ -31,6 +32,17 @@ export async function GET(request: NextRequest) {
     }
 
     await connectDB();
+
+    // First verify the menu belongs to the current site
+    const Menu = (await import('@/lib/models')).Menu;
+    const menu = await Menu.findOne({
+      _id: new mongoose.Types.ObjectId(menuId),
+      site_id: new mongoose.Types.ObjectId(siteId),
+    }).lean();
+
+    if (!menu) {
+      return NextResponse.json({ error: 'Menu not found or access denied' }, { status: 404 });
+    }
 
     const items = await MenuItem.find({ menu_id: new mongoose.Types.ObjectId(menuId) })
       .sort({ menu_order: 1, _id: 1 })

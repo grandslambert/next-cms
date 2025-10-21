@@ -97,7 +97,7 @@ export const authOptions: NextAuthOptions = {
     })
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session: sessionUpdate }) {
       if (user) {
         token.id = user.id;
         token.username = (user as any).username;
@@ -108,6 +108,27 @@ export const authOptions: NextAuthOptions = {
         token.permissions = (user as any).permissions;
         token.currentSiteId = (user as any).currentSiteId;
       }
+      
+      // Handle site switching via session update
+      if (trigger === 'update' && sessionUpdate?.currentSiteId) {
+        token.currentSiteId = sessionUpdate.currentSiteId;
+      }
+      
+      // Handle user switching via session update
+      if (trigger === 'update' && sessionUpdate?.switchData) {
+        const switchData = sessionUpdate.switchData;
+        token.id = switchData.id;
+        token.email = switchData.email;
+        token.name = switchData.name;
+        token.role = switchData.role;
+        token.roleId = switchData.roleId;
+        token.permissions = switchData.permissions;
+        token.isSuperAdmin = switchData.isSuperAdmin;
+        token.currentSiteId = switchData.currentSiteId;
+        token.originalUserId = switchData.originalUserId;
+        token.isSwitched = switchData.isSwitched;
+      }
+      
       return token;
     },
     async session({ session, token }) {
@@ -117,9 +138,12 @@ export const authOptions: NextAuthOptions = {
         (session.user as any).first_name = token.first_name;
         (session.user as any).last_name = token.last_name;
         (session.user as any).role = token.role;
+        (session.user as any).roleId = token.roleId;
         (session.user as any).isSuperAdmin = token.isSuperAdmin;
         (session.user as any).permissions = token.permissions;
         (session.user as any).currentSiteId = token.currentSiteId;
+        (session.user as any).originalUserId = token.originalUserId;
+        (session.user as any).isSwitched = token.isSwitched;
       }
       return session;
     }

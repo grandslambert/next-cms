@@ -38,6 +38,7 @@ export async function POST(request: NextRequest) {
     // Get media files to delete
     const mediaFiles = await Media.find({ 
       _id: { $in: objectIds },
+      site_id: new mongoose.Types.ObjectId(siteId),
       status: 'trash',
     }).lean();
 
@@ -45,19 +46,49 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No media found in trash' }, { status: 404 });
     }
 
-    // Delete physical files
+    // Delete physical files (original + all sizes)
     for (const media of mediaFiles) {
+      // Delete original file
       try {
-        const filepath = path.join(process.cwd(), 'public', media.filepath);
+        const filepath = path.join(process.cwd(), 'public', (media as any).filepath);
         await unlink(filepath);
+        console.log(`✓ Deleted original file: ${filepath}`);
       } catch (fileError) {
-        console.error(`Error deleting file ${media.filepath}:`, fileError);
-        // Continue with next file
+        console.error(`Error deleting file ${(media as any).filepath}:`, fileError);
+        // Continue with size deletion
+      }
+
+      // Delete all size variants
+      if ((media as any).sizes) {
+        try {
+          const sizes = JSON.parse((media as any).sizes);
+          for (const [sizeName, sizeData] of Object.entries(sizes)) {
+            if (sizeName === 'full') continue; // Skip full, it's the original
+            
+            const sizeUrl = (sizeData as any).url;
+            if (sizeUrl) {
+              try {
+                const sizePath = path.join(process.cwd(), 'public', sizeUrl);
+                await unlink(sizePath);
+                console.log(`✓ Deleted ${sizeName} size: ${sizePath}`);
+              } catch (sizeError) {
+                console.error(`Error deleting ${sizeName} size:`, sizeError);
+                // Continue with other sizes
+              }
+            }
+          }
+        } catch (sizesError) {
+          console.error('Error parsing/deleting size variants:', sizesError);
+          // Continue with next media file
+        }
       }
     }
 
     // Delete from database
-    const result = await Media.deleteMany({ _id: { $in: objectIds } });
+    const result = await Media.deleteMany({ 
+      _id: { $in: objectIds },
+      site_id: new mongoose.Types.ObjectId(siteId)
+    });
 
     // Log activity
     await logActivity({

@@ -16,22 +16,30 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const siteId = (session.user as any).currentSiteId;
+
     if (!mongoose.Types.ObjectId.isValid(params.id)) {
       return NextResponse.json({ error: 'Invalid media ID' }, { status: 400 });
     }
 
     await connectDB();
 
-    const media = await Media.findById(params.id).populate('uploaded_by', 'username email').lean();
+    const media = await Media.findOne({
+      _id: new mongoose.Types.ObjectId(params.id),
+      site_id: new mongoose.Types.ObjectId(siteId),
+    }).populate('uploaded_by', 'username email').lean();
 
     if (!media) {
-      return NextResponse.json({ error: 'Media not found' }, { status: 404 });
+      return NextResponse.json({ error: 'Media not found or access denied' }, { status: 404 });
     }
 
     return NextResponse.json({ 
       media: {
         ...media,
         id: media._id.toString(),
+        mime_type: (media as any).mimetype, // Map mimetype to mime_type for frontend
+        original_name: (media as any).original_filename, // Map original_filename to original_name for frontend
+        url: (media as any).filepath, // Map filepath to url for frontend
         uploaded_by_name: (media.uploaded_by as any)?.username || 'Unknown',
       }
     });
@@ -63,8 +71,11 @@ export async function PUT(
 
     await connectDB();
 
-    const updatedMedia = await Media.findByIdAndUpdate(
-      params.id,
+    const updatedMedia = await Media.findOneAndUpdate(
+      {
+        _id: new mongoose.Types.ObjectId(params.id),
+        site_id: new mongoose.Types.ObjectId(siteId),
+      },
       {
         alt_text: alt_text || '',
         caption: caption || '',
@@ -74,7 +85,7 @@ export async function PUT(
     );
 
     if (!updatedMedia) {
-      return NextResponse.json({ error: 'Media not found' }, { status: 404 });
+      return NextResponse.json({ error: 'Media not found or access denied' }, { status: 404 });
     }
 
     // Log activity
@@ -90,10 +101,14 @@ export async function PUT(
       siteId,
     });
 
+    const mediaObj = updatedMedia.toObject();
     return NextResponse.json({ 
       media: {
-        ...updatedMedia.toObject(),
+        ...mediaObj,
         id: updatedMedia._id.toString(),
+        mime_type: mediaObj.mimetype, // Map mimetype to mime_type for frontend
+        original_name: mediaObj.original_filename, // Map original_filename to original_name for frontend
+        url: mediaObj.filepath, // Map filepath to url for frontend
       }
     });
   } catch (error) {
@@ -121,17 +136,26 @@ export async function DELETE(
 
     await connectDB();
 
-    const media = await Media.findById(params.id).lean();
+    const media = await Media.findOne({
+      _id: new mongoose.Types.ObjectId(params.id),
+      site_id: new mongoose.Types.ObjectId(siteId),
+    }).lean();
 
     if (!media) {
-      return NextResponse.json({ error: 'Media not found' }, { status: 404 });
+      return NextResponse.json({ error: 'Media not found or access denied' }, { status: 404 });
     }
 
     // Move to trash (soft delete)
-    await Media.findByIdAndUpdate(params.id, {
-      status: 'trash',
-      deleted_at: new Date(),
-    });
+    await Media.findOneAndUpdate(
+      {
+        _id: new mongoose.Types.ObjectId(params.id),
+        site_id: new mongoose.Types.ObjectId(siteId),
+      },
+      {
+        status: 'trash',
+        deleted_at: new Date(),
+      }
+    );
 
     // Log activity
     await logActivity({

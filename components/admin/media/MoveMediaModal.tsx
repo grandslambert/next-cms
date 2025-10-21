@@ -1,11 +1,11 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 
 interface MoveMediaModalProps {
   isOpen: boolean;
   media: any;
   folders: any[];
   onClose: () => void;
-  onMove: (folderId: number | null) => void;
+  onMove: (folderId: string | null) => void;
 }
 
 export default function MoveMediaModal({
@@ -15,6 +15,19 @@ export default function MoveMediaModal({
   onClose,
   onMove,
 }: MoveMediaModalProps) {
+  // Build hierarchical folder structure
+  const hierarchicalFolders = useMemo(() => {
+    const buildTree = (parentId: string | null, level: number = 0): any[] => {
+      return folders
+        .filter((f) => f.parent_id === parentId)
+        .flatMap((folder) => [
+          { ...folder, level },
+          ...buildTree(folder.id, level + 1)
+        ]);
+    };
+    return buildTree(null);
+  }, [folders]);
+
   // Handle ESC key to close modal
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -45,12 +58,14 @@ export default function MoveMediaModal({
           >
             📁 Root (Media Library)
           </button>
-          {folders && folders.map((folder: any) => (
+          {hierarchicalFolders && hierarchicalFolders.map((folder: any) => (
             <button
               key={folder.id}
               onClick={() => onMove(folder.id)}
               className="w-full text-left px-4 py-2 border border-gray-300 rounded-lg hover:bg-blue-50 transition-colors"
+              style={{ paddingLeft: `${1 + folder.level * 1.5}rem` }}
             >
+              {folder.level > 0 && <span className="text-gray-400 mr-1">{'└─ '.repeat(1)}</span>}
               📁 {folder.display_name || folder.name}
             </button>
           ))}

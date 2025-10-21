@@ -147,12 +147,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate role exists
-    const roleExists = await mongoose.model('Role').findById(role_id);
-    if (!roleExists) {
+    const role = await mongoose.model('Role').findById(role_id);
+    if (!role) {
       return NextResponse.json({ 
         error: 'Invalid role selected' 
       }, { status: 400 });
     }
+
+    // Check if this is a super admin role
+    const isSuperAdminRole = (role as any).name === 'super_admin';
 
     // Create user
     const newUser = await User.create({
@@ -162,28 +165,15 @@ export async function POST(request: NextRequest) {
       email,
       password: hashedPassword,
       role: mongoose.Types.ObjectId.createFromHexString(role_id),
-      is_super_admin: false,
+      is_super_admin: isSuperAdminRole,
       status: 'active',
     });
 
-    // Assign user to sites
-    const siteIdStr = (session.user as any).currentSiteId;
+    // Site assignment logic
+    // Users are ONLY assigned to sites if explicitly specified in the sites array
+    // NO automatic site assignments - not even for current site
+    const sitesToAssign: any[] = sites && sites.length > 0 ? sites : [];
     
-    console.log('Site assignment - siteIdStr:', siteIdStr, 'type:', typeof siteIdStr);
-    console.log('Sites from body:', sites);
-    
-    let siteId = null;
-    if (siteIdStr && typeof siteIdStr === 'string' && /^[0-9a-fA-F]{24}$/.test(siteIdStr)) {
-      siteId = mongoose.Types.ObjectId.createFromHexString(siteIdStr);
-    }
-    
-    if (!siteId) {
-      return NextResponse.json({ 
-        error: 'No site context available. Current site ID: ' + siteIdStr 
-      }, { status: 400 });
-    }
-    
-    const sitesToAssign = sites && sites.length > 0 ? sites : [{ site_id: siteId, role_id }];
     console.log('Sites to assign:', sitesToAssign);
 
     for (const siteAssignment of sitesToAssign) {
@@ -217,6 +207,7 @@ export async function POST(request: NextRequest) {
 
     // Log activity
     const userId = (session.user as any).id;
+    const currentSiteId = (session.user as any).currentSiteId;
     await logActivity({
       userId,
       action: 'user_created',
@@ -226,7 +217,7 @@ export async function POST(request: NextRequest) {
       details: `Created user: ${username} (${email})`,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
-      siteId: siteId.toString(),
+      siteId: currentSiteId || undefined,
     });
 
     // Return user without password

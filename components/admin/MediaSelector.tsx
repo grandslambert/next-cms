@@ -197,7 +197,7 @@ export default function MediaSelector({ isOpen, onClose, onSelect, currentMediaI
                     }`}
                   >
                     <div className="aspect-square">
-                      {item.mime_type.startsWith('image/') ? (
+                      {item.mime_type?.startsWith('image/') ? (
                         <img
                           src={item.sizes ? JSON.parse(item.sizes).thumbnail?.url || item.url : item.url}
                           alt={item.original_name}

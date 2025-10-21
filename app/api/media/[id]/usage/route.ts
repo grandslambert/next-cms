@@ -19,10 +19,13 @@ export async function GET(
       return NextResponse.json({ error: 'Invalid media ID' }, { status: 400 });
     }
 
+    const siteId = (session.user as any).currentSiteId;
+
     await connectDB();
 
     // Find posts using this media as featured image
     const posts = await Post.find({
+      site_id: new mongoose.Types.ObjectId(siteId),
       featured_image_id: new mongoose.Types.ObjectId(params.id),
     })
       .select('_id title post_type')

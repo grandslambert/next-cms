@@ -20,6 +20,7 @@ export async function GET() {
       ...tax,
       id: tax._id?.toString(),
       label: tax.labels?.plural_name,
+      hierarchical: tax.is_hierarchical,
     }));
 
     return NextResponse.json({ taxonomies: formattedTaxonomies });
